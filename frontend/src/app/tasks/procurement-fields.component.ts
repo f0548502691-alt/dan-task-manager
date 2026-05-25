@@ -11,6 +11,8 @@ import { TASK_STATUS } from './task.interfaces';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ProcurementFieldsComponent implements OnChanges {
+  readonly TASK_STATUS = TASK_STATUS;
+
   @Input({ required: true }) form!: FormGroup;
   @Input({ required: true }) status!: number;
 
