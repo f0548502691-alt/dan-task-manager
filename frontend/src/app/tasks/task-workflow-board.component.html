@@ -1,0 +1,73 @@
+<section class="workflow-layout">
+  <aside class="task-list-panel">
+    <h2>Your tasks</h2>
+
+    <p *ngIf="taskService.isLoading()">Loading tasks...</p>
+    <p *ngIf="!taskService.isLoading() && taskService.tasks().length === 0">No tasks assigned for this user.</p>
+
+    <button
+      *ngFor="let task of taskService.tasks(); trackBy: trackByTaskId"
+      type="button"
+      class="task-list-item"
+      [class.task-list-item--selected]="selectedTask()?.id === task.id"
+      (click)="selectTask(task)"
+    >
+      <span class="task-list-item__title">#{{ task.id }} - {{ task.description }}</span>
+      <span class="task-list-item__meta">{{ task.taskType }} | {{ taskStatusLabel(task.currentStatus) }}</span>
+    </button>
+  </aside>
+
+  <section class="editor-panel" *ngIf="selectedTask() as task; else chooseTaskTemplate">
+    <h3>Update task #{{ task.id }}</h3>
+    <p class="editor-panel__subtitle">
+      Type: <strong>{{ task.taskType }}</strong> | Current status:
+      <strong>{{ taskStatusLabel(task.currentStatus) }}</strong>
+    </p>
+
+    <form [formGroup]="form" (ngSubmit)="submitStatusUpdate()">
+      <label for="newStatus">New status</label>
+      <select id="newStatus" formControlName="newStatus">
+        <option [ngValue]="null" disabled>Select a status</option>
+        <option *ngFor="let option of statusOptions()" [ngValue]="option.value">
+          {{ option.label }}
+        </option>
+      </select>
+
+      <ng-container [ngSwitch]="task.taskType">
+        <app-procurement-fields
+          *ngSwitchCase="'Procurement'"
+          [form]="form"
+          [status]="selectedNextStatus"
+        ></app-procurement-fields>
+
+        <app-development-fields
+          *ngSwitchCase="'Development'"
+          [form]="form"
+          [status]="selectedNextStatus"
+        ></app-development-fields>
+
+        <ng-container *ngSwitchDefault>
+          <label for="fallbackJson">Workflow payload (JSON)</label>
+          <textarea id="fallbackJson" rows="6" formControlName="fallbackJson"></textarea>
+          <small *ngIf="form.controls['fallbackJson'].hasError('invalidJson')">
+            The JSON payload is invalid.
+          </small>
+        </ng-container>
+      </ng-container>
+
+      <p class="feedback feedback--error" *ngIf="taskService.error()">{{ taskService.error() }}</p>
+      <p class="feedback feedback--success" *ngIf="successMessage()">{{ successMessage() }}</p>
+
+      <button type="submit" [disabled]="submitInFlight() || form.invalid">
+        {{ submitInFlight() ? 'Updating...' : 'Update status' }}
+      </button>
+    </form>
+  </section>
+
+  <ng-template #chooseTaskTemplate>
+    <section class="editor-panel editor-panel--placeholder">
+      <h3>Select a task</h3>
+      <p>Choose a task from the list to open status update fields.</p>
+    </section>
+  </ng-template>
+</section>

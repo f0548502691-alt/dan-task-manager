@@ -1,5 +1,21 @@
 export const CLOSED_TASK_STATUS = 99;
 
+export const DEFAULT_STATUS_LABELS: Readonly<Record<number, string>> = {
+  0: 'Backlog',
+  1: 'In Progress',
+  2: 'Ready for Review',
+  3: 'Done',
+  4: 'Released',
+  [CLOSED_TASK_STATUS]: 'Closed'
+};
+
+export const TASK_FINAL_STATUS_BY_TYPE: Readonly<Record<string, number>> = {
+  Procurement: 3,
+  Development: 4
+};
+
+export type TaskCustomData = Record<string, unknown>;
+
 export interface AppUserDto {
   id: number;
   name: string;
