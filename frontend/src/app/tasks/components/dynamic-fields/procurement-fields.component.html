@@ -1,0 +1,39 @@
+<div [formGroup]="detailsGroup" class="dynamic-fields">
+  <h4>Procurement details</h4>
+
+  <label>
+    Supplier name
+    <input type="text" formControlName="supplierName" />
+  </label>
+
+  <label>
+    Requester name
+    <input type="text" formControlName="requesterName" />
+  </label>
+
+  <div *ngIf="newStatus >= 1" class="status-block">
+    <label>
+      Estimated cost
+      <input type="number" formControlName="estimatedCost" />
+    </label>
+
+    <label>
+      Quote number
+      <input type="text" formControlName="quoteNumber" />
+    </label>
+  </div>
+
+  <div *ngIf="newStatus >= 2" class="status-block">
+    <label>
+      Purchase order number
+      <input type="text" formControlName="purchaseOrderNumber" />
+    </label>
+  </div>
+
+  <div *ngIf="newStatus >= 3" class="status-block">
+    <label>
+      Delivery date
+      <input type="date" formControlName="deliveryDate" />
+    </label>
+  </div>
+</div>

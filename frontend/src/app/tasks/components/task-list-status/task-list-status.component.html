@@ -1,0 +1,54 @@
+<section class="task-board">
+  <aside class="task-list">
+    <h3>My Tasks</h3>
+
+    <p *ngIf="isLoading()">Loading tasks...</p>
+    <p *ngIf="serverError() as errorMessage" class="error-message">{{ errorMessage }}</p>
+
+    <button
+      *ngFor="let task of tasks(); trackBy: trackByTaskId"
+      type="button"
+      class="task-list-item"
+      [class.selected]="task.id === selectedTaskId()"
+      (click)="selectTask(task)"
+    >
+      <strong>{{ task.taskType }}</strong>
+      <span>#{{ task.id }} - Status {{ task.currentStatus }}</span>
+      <small>{{ task.description }}</small>
+    </button>
+  </aside>
+
+  <section *ngIf="selectedTask() as task; else noTaskSelected" class="task-editor">
+    <h3>Update Task #{{ task.id }}</h3>
+    <p>{{ task.description }}</p>
+
+    <form [formGroup]="updateForm()" (ngSubmit)="submitStatusUpdate()">
+      <label>
+        New status
+        <select formControlName="newStatus">
+          <option *ngFor="let status of getAvailableStatuses(task)" [ngValue]="status">Status {{ status }}</option>
+        </select>
+      </label>
+
+      <div formGroupName="details" class="details-wrapper">
+        <ng-container
+          *ngComponentOutlet="
+            dynamicFieldsComponent();
+            injector: dynamicFieldsInjector()
+          "
+        ></ng-container>
+      </div>
+
+      <button type="submit" [disabled]="isSubmitting() || updateForm().invalid">
+        {{ isSubmitting() ? 'Saving...' : 'Save update' }}
+      </button>
+    </form>
+  </section>
+</section>
+
+<ng-template #noTaskSelected>
+  <section class="task-editor empty-state">
+    <h3>Select a task</h3>
+    <p>Choose one task from the list to load the matching status update form.</p>
+  </section>
+</ng-template>

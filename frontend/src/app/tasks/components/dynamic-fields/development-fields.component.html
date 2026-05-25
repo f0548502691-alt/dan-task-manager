@@ -1,0 +1,29 @@
+<div [formGroup]="detailsGroup" class="dynamic-fields">
+  <h4>Development details</h4>
+
+  <label>
+    Feature branch
+    <input type="text" formControlName="featureBranch" />
+  </label>
+
+  <div *ngIf="newStatus >= 1" class="status-block">
+    <label>
+      Pull request URL
+      <input type="url" formControlName="pullRequestUrl" />
+    </label>
+  </div>
+
+  <div *ngIf="newStatus >= 2" class="status-block">
+    <label>
+      QA owner
+      <input type="text" formControlName="qaOwner" />
+    </label>
+  </div>
+
+  <div *ngIf="newStatus >= 3" class="status-block">
+    <label>
+      Release notes
+      <textarea formControlName="releaseNotes" rows="3"></textarea>
+    </label>
+  </div>
+</div>
