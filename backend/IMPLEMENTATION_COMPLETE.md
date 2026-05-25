@@ -9,71 +9,34 @@ All three phases successfully implemented with comprehensive documentation and 3
 ## 📦 Architecture Overview
 
 ```
-┌─────────────────────────────────────┐
-│       REST API (TasksController)    │
-├─────────────────────────────────────┤
-│                                     │
-│  - Create Task                      │
-│  - Get Tasks                        │
-│  - Change Status (Workflow)         │
-│  - Close Task                       │
-│  - Get User Tasks                   │
-│                                     │
-├─────────────────────────────────────┤
-│   Services Layer                    │
-├─────────────────────────────────────┤
-│                                     │
-│  ITaskWorkflowService               │
-│    └─ TaskWorkflowService           │
-│       ├─ Movement Validation        │
-│       ├─ Handler Integration        │
-│       └─ State Persistence          │
-│                                     │
-├─────────────────────────────────────┤
-│   Strategy Pattern (Handlers)       │
-├─────────────────────────────────────┤
-│                                     │
-│  ITaskHandler (Interface)           │
-│    ├─ ProcurementTaskHandler        │
-│    │   FinalStatus: 3               │
-│    │   Status 2: Requires prices[]  │
-│    │   Status 3: Requires receipt   │
-│    │                                │
-│    └─ DevelopmentTaskHandler        │
-│        FinalStatus: 4               │
-│        Status 2: Requires spec      │
-│        Status 3: Requires branch    │
-│        Status 4: Requires version   │
-│                                     │
-│  TaskHandlerFactory                 │
-│    └─ Handler Lookup (DI)           │
-│                                     │
-├─────────────────────────────────────┤
-│   Domain Models                     │
-├─────────────────────────────────────┤
-│                                     │
-│  AppUser (Id, Name, Email)          │
-│    └─ Tasks (1:M)                   │
-│                                     │
-│  BaseTask (Core Entity)             │
-│    ├─ TaskType (Strategy marker)    │
-│    ├─ CurrentStatus (0-99)          │
-│    └─ CustomDataJson (Flexible)     │
-│                                     │
-├─────────────────────────────────────┤
-│   Database (EF Core)                │
-├─────────────────────────────────────┤
-│                                     │
-│  ApplicationDbContext               │
-│    ├─ DbSet<AppUser> Users          │
-│    └─ DbSet<BaseTask> Tasks         │
-│                                     │
-│  Features:                          │
-│    - JSON Column Support (nvarchar) │
-│    - Seed Data (3 users, 3 tasks)   │
-│    - Indexes (Email, TaskType)      │
-│                                     │
-└─────────────────────────────────────┘
+REST API
+├─ TasksController
+│  └─ ITaskApplicationService / TaskApplicationService
+│     ├─ Task CRUD and read-only queries
+│     ├─ User existence checks for task assignment
+│     ├─ CustomDataJson normalization on create
+│     └─ ITaskWorkflowService / TaskWorkflowService
+│        ├─ JSON payload validation before status changes
+│        ├─ Forward/backward movement rules
+│        ├─ Handler validation through TaskHandlerFactory
+│        └─ State persistence and close-task handling
+│
+├─ UsersController
+│  └─ IUserApplicationService / UserApplicationService
+│     ├─ User CRUD/query operations
+│     └─ User task reads
+│
+├─ Strategy Pattern (Handlers)
+│  ├─ ITaskHandler
+│  ├─ StatusValidationTaskHandlerBase
+│  ├─ ProcurementTaskHandler (FinalStatus: 3)
+│  ├─ DevelopmentTaskHandler (FinalStatus: 4)
+│  └─ TaskHandlerFactory (case-insensitive lookup)
+│
+└─ EF Core
+   └─ ApplicationDbContext
+      ├─ DbSet<AppUser> Users
+      └─ DbSet<BaseTask> Tasks
 ```
 
 ---
@@ -109,6 +72,12 @@ All three phases successfully implemented with comprehensive documentation and 3
   - Property: `string TaskType`
   - Property: `int FinalStatus`
   - Method: `ValidationResult ValidateStatusChange(...)`
+
+### Shared Base Class
+- **StatusValidationTaskHandlerBase.cs**
+  - Maps `nextStatus` values to validator functions
+  - Returns success when a status has no dedicated validator
+  - Enforces the shared final-status guard
 
 ### Handler Implementations
 
@@ -146,6 +115,7 @@ All three phases successfully implemented with comprehensive documentation and 3
 
 ### Status: ✅ Complete
 - 1 interface
+- 1 shared base class
 - 2 handler implementations
 - 1 factory
 - Full validation logic
@@ -158,21 +128,35 @@ All three phases successfully implemented with comprehensive documentation and 3
 
 #### ITaskWorkflowService Interface
 ```csharp
-Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, string newDataJson);
-Task<WorkflowResult> CloseTaskAsync(int taskId, string finalNotes);
-Task<IEnumerable<BaseTask>> GetUserTasksAsync(int userId);
-Task<BaseTask?> GetTaskAsync(int taskId);
+Task<WorkflowResult> ChangeStatusAsync(
+    int taskId,
+    int newStatus,
+    string newDataJson,
+    CancellationToken cancellationToken = default);
+Task<WorkflowResult> CloseTaskAsync(
+    int taskId,
+    string finalNotes,
+    CancellationToken cancellationToken = default);
+Task<IEnumerable<BaseTask>> GetUserTasksAsync(
+    int userId,
+    CancellationToken cancellationToken = default);
+Task<BaseTask?> GetTaskAsync(
+    int taskId,
+    CancellationToken cancellationToken = default);
 ```
 
 #### TaskWorkflowService Implementation
 **Workflow Rules Enforced**:
 
 1. **Check Not Closed** - Status 99 is immutable
-2. **Forward Movement** - Must be exactly +1
-3. **Backward Movement** - Can go to any lower status
-4. **Handler Validation** - Delegates to handler for specific rules
-5. **Final Status** - Cannot exceed handler's FinalStatus
-6. **Persistence** - All changes saved to database
+2. **JSON Payload Validation** - `newDataJson` must be valid JSON
+3. **Forward Movement** - Must be exactly +1
+4. **Backward Movement** - Can go to any lower status
+5. **Handler Validation** - Delegates to handler for specific rules
+6. **Final Status** - Cannot exceed handler's FinalStatus
+7. **Persistence** - All changes saved to database
+
+Read methods pass `CancellationToken` through to EF Core and use `AsNoTracking()` for read-only queries.
 
 **Result Classes**:
 - `WorkflowResult` - Success, Message, NewStatus, UpdatedTask
@@ -202,16 +186,17 @@ Task<BaseTask?> GetTaskAsync(int taskId);
 ### Dependency Injection
 ```csharp
 // Program.cs
-services.AddTransient<ITaskHandler, ProcurementTaskHandler>();
-services.AddTransient<ITaskHandler, DevelopmentTaskHandler>();
+services.AddTaskHandlersFromAssembly(typeof(ITaskHandler).Assembly);
 services.AddSingleton(sp => new TaskHandlerFactory(...));
 services.AddScoped<ITaskWorkflowService, TaskWorkflowService>();
+services.AddScoped<ITaskApplicationService, TaskApplicationService>();
+services.AddScoped<IUserApplicationService, UserApplicationService>();
 ```
 
 ### Status: ✅ Complete
 - 1 interface
-- 1 service implementation
-- 1 controller (9 endpoints)
+- 3 service implementations (application, user, workflow)
+- 2 controllers
 - 4 request classes
 - DI configuration
 
@@ -414,10 +399,11 @@ Task workflow with discrete states
 
 ### Adding New Handler Type
 ```csharp
-1. Create class implementing ITaskHandler
+1. Create a concrete handler in DanTaskManager.Domain.Handlers
+   (usually by extending StatusValidationTaskHandlerBase)
 2. Define TaskType and FinalStatus
-3. Implement ValidateStatusChange()
-4. Register in Program.cs: AddTransient<ITaskHandler, MyHandler>()
+3. Map target statuses to validator functions
+4. No Program.cs change needed; AddTaskHandlersFromAssembly discovers it
 ```
 
 ### Adding New Validation Rule
@@ -429,9 +415,9 @@ Task workflow with discrete states
 
 ### Adding New Endpoint
 ```csharp
-1. Add method to ITaskWorkflowService
-2. Implement in TaskWorkflowService
-3. Add endpoint to TasksController
+1. Add method to ITaskApplicationService or IUserApplicationService
+2. Implement in TaskApplicationService or UserApplicationService
+3. Add thin endpoint to the controller
 4. Add request/response DTO
 ```
 

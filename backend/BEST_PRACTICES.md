@@ -19,21 +19,34 @@ public class TaskController
 // ✅ Good: Separated concerns
 public class TasksController
 {
-    private readonly ITaskWorkflowService _service;
+    private readonly ITaskApplicationService _taskService;
     
     public async Task<IActionResult> ChangeStatus(int id, ChangeStatusWorkflowRequest request)
     {
         // HTTP handling only
-        var result = await _service.ChangeStatusAsync(id, request.NewStatus, request.NewDataJson);
-        return result.Success ? Ok(result) : BadRequest(new { error = result.Message });
+        var result = await _taskService.ChangeStatusAsync(
+            id,
+            request.NewStatus,
+            request.NewDataJson,
+            HttpContext.RequestAborted);
+
+        if (!result.Success)
+            throw new WorkflowValidationException(result.Message);
+
+        return Ok(result);
     }
 }
 
 public class TaskWorkflowService : ITaskWorkflowService
 {
-    public async Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, string newDataJson)
+    public async Task<WorkflowResult> ChangeStatusAsync(
+        int taskId,
+        int newStatus,
+        string newDataJson,
+        CancellationToken cancellationToken = default)
     {
-        // Business logic only
+        // Workflow logic only
+        // JSON validation
         // Validation
         // Handler delegation
         // Database updates
@@ -72,6 +85,8 @@ public class TaskWorkflowService
 
 // Registered in Program.cs
 services.AddScoped<ITaskWorkflowService, TaskWorkflowService>();
+services.AddScoped<ITaskApplicationService, TaskApplicationService>();
+services.AddScoped<IUserApplicationService, UserApplicationService>();
 ```
 
 ### 3. Single Responsibility
@@ -90,15 +105,10 @@ public class TaskHandler
 }
 
 // ✅ Good: Single responsibility
-public class ProcurementTaskHandler : ITaskHandler
+public class ProcurementTaskHandler : StatusValidationTaskHandlerBase
 {
     // ONLY validates procurement-specific rules
-    public ValidationResult ValidateStatusChange(...)
-    {
-        // Validate prices
-        // Validate receipt
-        return ValidationResult.Success();
-    }
+    // StatusValidationTaskHandlerBase maps target statuses to validators.
 }
 ```
 
@@ -115,6 +125,8 @@ public class ProcurementTaskHandler
 public class DevelopmentTaskHandler
 
 // Services
+public class TaskApplicationService
+public class UserApplicationService
 public class TaskWorkflowService
 public class TaskStatusService
 
@@ -131,7 +143,7 @@ public class WorkflowResult
 #### Methods
 ```csharp
 // Async methods
-public async Task<TaskWorkflowResult> ChangeStatusAsync(...)
+public async Task<WorkflowResult> ChangeStatusAsync(..., CancellationToken cancellationToken = default)
 public async Task<IEnumerable<BaseTask>> GetUserTasksAsync(...)
 
 // Validation methods
@@ -171,48 +183,63 @@ public async Task<IActionResult> CreateTask(CreateTaskRequest request)
 {
     // Validate input
     if (string.IsNullOrWhiteSpace(request.TaskType))
-        return BadRequest(new { error = "TaskType cannot be empty" });
+        return BadRequest(new { error = "TaskType נדרש" });
     
     if (string.IsNullOrWhiteSpace(request.Description))
-        return BadRequest(new { error = "Description cannot be empty" });
+        return BadRequest(new { error = "Description נדרש" });
     
-    // Check if user exists
-    var user = await _context.Users.FindAsync(request.AssignedToUserId);
-    if (user == null)
-        return BadRequest(new { error = $"User {request.AssignedToUserId} not found" });
-    
-    // Check if handler exists
-    if (!_factory.HasHandler(request.TaskType))
-        return BadRequest(new { error = $"Unknown task type: {request.TaskType}" });
-    
-    // Proceed with creation
-    return CreatedAtAction(...);
+    // Application service checks user existence and normalizes CustomDataJson.
+    // Unknown task types are allowed, but logged when no handler is registered.
+    var result = await _taskService.CreateAsync(
+        new TaskCreateCommand(
+            request.TaskType,
+            request.Description,
+            request.AssignedToUserId,
+            request.CustomDataJson ?? "{}"),
+        HttpContext.RequestAborted);
+
+    return result.Success
+        ? CreatedAtAction(nameof(GetTask), new { id = result.CreatedTask!.Id }, result.CreatedTask)
+        : BadRequest(new { error = result.Message });
 }
 ```
 
 ### 2. State Validation
 ```csharp
 // ✅ Good: Validate state transitions
-public async Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, string newDataJson)
+public async Task<WorkflowResult> ChangeStatusAsync(
+    int taskId,
+    int newStatus,
+    string newDataJson,
+    CancellationToken cancellationToken = default)
 {
-    var task = await _context.Tasks.FindAsync(taskId);
+    var task = await _context.Tasks.FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
+    if (task == null)
+        return WorkflowResult.FailureResult("משימה לא קיימת");
     
     // Check if closed
     if (task.CurrentStatus == 99)
-        return WorkflowResult.Failure("Task is closed");
+        return WorkflowResult.FailureResult("משימה סגורה - לא ניתן לשנות סטטוס");
+
+    // Validate JSON before movement or handler-specific checks
+    if (!IsValidJsonPayload(newDataJson))
+        return WorkflowResult.FailureResult("NewDataJson חייב להיות JSON תקין");
     
     // Validate movement
     var movement = ValidateStatusMovement(task.CurrentStatus, newStatus);
     if (!movement.IsValid)
-        return WorkflowResult.Failure(movement.Message);
+        return WorkflowResult.FailureResult(movement.Message);
     
     // Delegate to handler
     var handler = _factory.GetHandler(task.TaskType);
-    var validation = handler.ValidateStatusChange(...);
-    if (!validation.IsValid)
-        return WorkflowResult.Failure(validation.Message);
+    if (handler != null)
+    {
+        var validation = handler.ValidateStatusChange(...);
+        if (!validation.IsValid)
+            return WorkflowResult.FailureResult(validation.Message);
+    }
     
-    return WorkflowResult.Success();
+    return WorkflowResult.SuccessResult(newStatus, task, $"סטטוס עודכן בהצלחה ל-{newStatus}");
 }
 ```
 
@@ -270,7 +297,7 @@ private StatusMovementValidation ValidateStatusMovement(int currentStatus, int n
             return new StatusMovementValidation 
             { 
                 IsValid = false, 
-                Message = $"Forward movement must be exactly +1. Current: {currentStatus}, Requested: {newStatus}"
+                Message = $"תנועה קדימה חייבת להיות בדיוק ב-1 סטטוס. סטטוס נוכחי: {currentStatus}, מבוקש: {newStatus}"
             };
         
         // Check final status
@@ -278,7 +305,7 @@ private StatusMovementValidation ValidateStatusMovement(int currentStatus, int n
             return new StatusMovementValidation 
             { 
                 IsValid = false, 
-                Message = $"Task reached final status: {finalStatus}"
+                Message = $"משימה כבר הגיעה לסטטוס סופי ({finalStatus})"
             };
     }
     
@@ -316,30 +343,16 @@ public class WorkflowResult
     public int? NewStatus { get; set; }
     public BaseTask? UpdatedTask { get; set; }
 
-    public static WorkflowResult Success(string message = "", int newStatus = 0, BaseTask? task = null)
-    {
-        return new WorkflowResult
-        {
-            Success = true,
-            Message = message,
-            NewStatus = newStatus,
-            UpdatedTask = task
-        };
-    }
+    public static WorkflowResult SuccessResult(int newStatus, BaseTask task, string message = "")
+        => new() { Success = true, NewStatus = newStatus, UpdatedTask = task, Message = message };
 
-    public static WorkflowResult Failure(string message)
-    {
-        return new WorkflowResult
-        {
-            Success = false,
-            Message = message
-        };
-    }
+    public static WorkflowResult FailureResult(string message)
+        => new() { Success = false, Message = message };
 }
 
 // Usage
-return WorkflowResult.Success("Status changed to 2", 2, updatedTask);
-return WorkflowResult.Failure("Invalid movement");
+return WorkflowResult.SuccessResult(2, updatedTask, "סטטוס עודכן בהצלחה ל-2");
+return WorkflowResult.FailureResult("Invalid movement");
 ```
 
 ### HTTP Endpoint Pattern
@@ -350,16 +363,17 @@ public async Task<IActionResult> ChangeStatusWorkflow(
     int id,
     [FromBody] ChangeStatusWorkflowRequest request)
 {
-    // Input validation
-    if (request.NewStatus < 0)
-        return BadRequest(new { error = "Invalid status" });
+    if (string.IsNullOrEmpty(request.NewDataJson))
+        return BadRequest(new { error = "NewDataJson נדרש" });
+
+    var result = await _taskService.ChangeStatusAsync(
+        id,
+        request.NewStatus,
+        request.NewDataJson,
+        HttpContext.RequestAborted);
     
-    // Call service
-    var result = await _workflowService.ChangeStatusAsync(id, request.NewStatus, request.NewDataJson);
-    
-    // Return appropriate response
     if (!result.Success)
-        return BadRequest(new { error = result.Message });
+        throw new WorkflowValidationException(result.Message);
     
     return Ok(new
     {
@@ -412,7 +426,7 @@ public async Task ChangeStatus_InvalidJump_ShouldFail()
 
     // Assert
     Assert.False(result.Success);
-    Assert.Contains("exactly +1", result.Message);
+    Assert.Contains("בדיוק ב-1", result.Message);
 }
 ```
 
@@ -423,28 +437,32 @@ public async Task ChangeStatus_InvalidJump_ShouldFail()
 ### Try-Catch Pattern
 ```csharp
 // ✅ Good: Specific error handling
-public async Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, string newDataJson)
+public async Task<WorkflowResult> ChangeStatusAsync(
+    int taskId,
+    int newStatus,
+    string newDataJson,
+    CancellationToken cancellationToken = default)
 {
     try
     {
-        var task = await _context.Tasks.FindAsync(taskId);
+        var task = await _context.Tasks.FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
         if (task == null)
-            return WorkflowResult.Failure($"Task {taskId} not found");
+            return WorkflowResult.FailureResult("משימה לא קיימת");
 
         // Business logic...
         
-        await _context.SaveChangesAsync();
-        return WorkflowResult.Success("Status changed", newStatus, task);
+        await _context.SaveChangesAsync(cancellationToken);
+        return WorkflowResult.SuccessResult(newStatus, task, $"סטטוס עודכן בהצלחה ל-{newStatus}");
     }
     catch (DbUpdateException ex)
     {
         _logger.LogError(ex, $"Database error updating task {taskId}");
-        return WorkflowResult.Failure("Database error - please try again");
+        return WorkflowResult.FailureResult("Database error - please try again");
     }
     catch (Exception ex)
     {
         _logger.LogError(ex, $"Unexpected error in ChangeStatusAsync for task {taskId}");
-        return WorkflowResult.Failure("An unexpected error occurred");
+        return WorkflowResult.FailureResult("An unexpected error occurred");
     }
 }
 ```
@@ -454,18 +472,24 @@ public async Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, s
 // ✅ Good: Structured logging
 public async Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, string newDataJson)
 {
-    _logger.LogInformation($"Attempting to change task {taskId} status from {task.CurrentStatus} to {newStatus}");
-    
     try
     {
         // Operation...
-        _logger.LogInformation($"Successfully changed task {taskId} status to {newStatus}");
-        return WorkflowResult.Success(...);
+        var oldStatus = task.CurrentStatus;
+        task.CurrentStatus = newStatus;
+
+        _logger.LogInformation(
+            "משימה {TaskId} עודכנה מסטטוס {OldStatus} ל-{NewStatus}",
+            taskId,
+            oldStatus,
+            newStatus);
+
+        return WorkflowResult.SuccessResult(newStatus, task);
     }
     catch (Exception ex)
     {
-        _logger.LogError(ex, $"Failed to change task {taskId} status");
-        return WorkflowResult.Failure("Operation failed");
+        _logger.LogError(ex, "Failed to change task {TaskId} status", taskId);
+        return WorkflowResult.FailureResult("Operation failed");
     }
 }
 ```
@@ -486,6 +510,7 @@ public async Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, s
 /// <remarks>
 /// Validates:
 /// - Task is not closed (Status 99)
+/// - newDataJson is valid JSON
 /// - Forward movement is exactly +1
 /// - Backward movement is to any lower status
 /// - Handler-specific validation passes
@@ -493,7 +518,8 @@ public async Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, s
 public async Task<WorkflowResult> ChangeStatusAsync(
     int taskId,
     int newStatus,
-    string newDataJson)
+    string newDataJson,
+    CancellationToken cancellationToken = default)
 {
     // Implementation
 }
@@ -514,7 +540,8 @@ public async Task<WorkflowResult> ChangeStatusAsync(
 /// - Backward movement: to any lower status
 /// - Closed tasks (99): cannot be changed
 /// 
-/// Returns 200 on success, 400 on validation error
+/// Returns 200 on success. Workflow validation failures are formatted as 400
+/// responses by GlobalExceptionMiddleware.
 /// </remarks>
 [HttpPost("{id}/change-status")]
 public async Task<IActionResult> ChangeStatusWorkflow(int id, ChangeStatusWorkflowRequest request)

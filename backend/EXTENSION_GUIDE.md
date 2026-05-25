@@ -16,7 +16,6 @@
 
 ```csharp
 // Domain/Handlers/QATaskHandler.cs
-using DanTaskManager.Domain;
 using System.Text.Json;
 
 namespace DanTaskManager.Domain.Handlers;
@@ -24,47 +23,30 @@ namespace DanTaskManager.Domain.Handlers;
 /// <summary>
 /// QA task handler with specific validation
 /// </summary>
-public class QATaskHandler : ITaskHandler
+public class QATaskHandler : StatusValidationTaskHandlerBase
 {
-    /// <summary>
-    /// Handler identifier
-    /// </summary>
+    public QATaskHandler()
+        : base(new Dictionary<int, Func<string, ValidationResult>>
+        {
+            [2] = ValidateStatusTwo,
+            [3] = ValidateStatusThree
+        })
+    {
+    }
+
     public string TaskType => "QA";
 
-    /// <summary>
-    /// Final status for QA tasks
-    /// </summary>
     public int FinalStatus => 3;
-
-    /// <summary>
-    /// Validate status transitions for QA tasks
-    /// </summary>
-    public ValidationResult ValidateStatusChange(
-        string currentDataJson,
-        int currentStatus,
-        int nextStatus,
-        string newDataJson)
-    {
-        // Status 1 → 2: Setup
-        if (nextStatus == 2)
-            return ValidateStatusTwo(newDataJson);
-
-        // Status 2 → 3: Testing
-        if (nextStatus == 3)
-            return ValidateStatusThree(newDataJson);
-
-        return ValidationResult.Success();
-    }
 
     /// <summary>
     /// Validate Status 2 (Setup)
     /// Requires: testEnvironment, testCases
     /// </summary>
-    private ValidationResult ValidateStatusTwo(string dataJson)
+    private static ValidationResult ValidateStatusTwo(string dataJson)
     {
         try
         {
-            var json = JsonDocument.Parse(dataJson);
+            using var json = JsonDocument.Parse(dataJson);
             var root = json.RootElement;
 
             // Check testEnvironment
@@ -97,11 +79,11 @@ public class QATaskHandler : ITaskHandler
     /// Validate Status 3 (Testing - Final)
     /// Requires: testResults, bugsFound
     /// </summary>
-    private ValidationResult ValidateStatusThree(string dataJson)
+    private static ValidationResult ValidateStatusThree(string dataJson)
     {
         try
         {
-            var json = JsonDocument.Parse(dataJson);
+            using var json = JsonDocument.Parse(dataJson);
             var root = json.RootElement;
 
             // Check testResults
@@ -132,17 +114,20 @@ public class QATaskHandler : ITaskHandler
 }
 ```
 
-### Step 2: Register Handler
+### Step 2: Let DI Discover the Handler
+
+Handlers are registered by convention from `Program.cs`:
 
 ```csharp
-// Program.cs
-builder.Services.AddTransient<ITaskHandler, QATaskHandler>();
-
-// Full example:
-services.AddTransient<ITaskHandler, ProcurementTaskHandler>();
-services.AddTransient<ITaskHandler, DevelopmentTaskHandler>();
-services.AddTransient<ITaskHandler, QATaskHandler>(); // NEW
+builder.Services.AddTaskHandlersFromAssembly(typeof(ITaskHandler).Assembly);
 ```
+
+Requirements for automatic registration:
+- The class must implement `ITaskHandler` (directly or via `StatusValidationTaskHandlerBase`).
+- The class must be concrete and non-abstract.
+- The class must be in the `DanTaskManager.Domain.Handlers` namespace.
+
+No `Program.cs` change is needed when a new handler follows those constraints.
 
 ### Step 3: Write Tests
 
@@ -252,18 +237,20 @@ curl -X POST http://localhost:5000/api/tasks \
 
 ### Example: Get Task Statistics
 
-#### Step 1: Add Method to Service Interface
+#### Step 1: Add Method to the Application Service Interface
 
 ```csharp
-// Services/ITaskWorkflowService.cs
-public interface ITaskWorkflowService
+// Services/ITaskApplicationService.cs
+public interface ITaskApplicationService
 {
     // ... existing methods ...
     
     /// <summary>
     /// Get task statistics for a user
     /// </summary>
-    Task<TaskStatistics> GetUserStatisticsAsync(int userId);
+    Task<TaskStatistics> GetUserStatisticsAsync(
+        int userId,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -279,15 +266,18 @@ public class TaskStatistics
 }
 ```
 
-#### Step 2: Implement in Service
+#### Step 2: Implement in the Application Service
 
 ```csharp
-// Services/TaskWorkflowService.cs
-public async Task<TaskStatistics> GetUserStatisticsAsync(int userId)
+// Services/TaskApplicationService.cs
+public async Task<TaskStatistics> GetUserStatisticsAsync(
+    int userId,
+    CancellationToken cancellationToken = default)
 {
     var tasks = await _context.Tasks
+        .AsNoTracking()
         .Where(t => t.AssignedToUserId == userId)
-        .ToListAsync();
+        .ToListAsync(cancellationToken);
 
     var stats = new TaskStatistics
     {
@@ -314,7 +304,7 @@ public async Task<TaskStatistics> GetUserStatisticsAsync(int userId)
 [HttpGet("user/{userId}/statistics")]
 public async Task<ActionResult<TaskStatistics>> GetUserStatistics(int userId)
 {
-    var stats = await _workflowService.GetUserStatisticsAsync(userId);
+    var stats = await _taskService.GetUserStatisticsAsync(userId, HttpContext.RequestAborted);
     
     if (stats == null || stats.TotalTasks == 0)
         return NotFound(new { error = "No tasks found for user" });
@@ -352,13 +342,18 @@ curl http://localhost:5000/api/tasks/user/1/statistics
 
 ```csharp
 // Services/TaskWorkflowService.cs
-private async Task<ValidationResult> ValidateUniqueTaskTypeAsync(int userId, string taskType)
+private async Task<ValidationResult> ValidateUniqueTaskTypeAsync(
+    int userId,
+    string taskType,
+    CancellationToken cancellationToken)
 {
     var existingTask = await _context.Tasks
+        .AsNoTracking()
         .FirstOrDefaultAsync(t =>
             t.AssignedToUserId == userId &&
             t.TaskType == taskType &&
-            t.CurrentStatus < 99); // Not closed
+            t.CurrentStatus < 99,
+            cancellationToken); // Not closed
 
     if (existingTask != null)
         return ValidationResult.Failure($"User already has an active {taskType} task");
@@ -371,14 +366,21 @@ private async Task<ValidationResult> ValidateUniqueTaskTypeAsync(int userId, str
 
 ```csharp
 // In ChangeStatusAsync or appropriate place
-public async Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, string newDataJson)
+public async Task<WorkflowResult> ChangeStatusAsync(
+    int taskId,
+    int newStatus,
+    string newDataJson,
+    CancellationToken cancellationToken = default)
 {
-    var task = await _context.Tasks.FindAsync(taskId);
+    var task = await _context.Tasks.FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
     
     // ... existing validations ...
     
     // New: Check unique constraint
-    var uniqueValidation = await ValidateUniqueTaskTypeAsync(task.AssignedToUserId, task.TaskType);
+    var uniqueValidation = await ValidateUniqueTaskTypeAsync(
+        task.AssignedToUserId,
+        task.TaskType,
+        cancellationToken);
     if (!uniqueValidation.IsValid)
         return WorkflowResult.FailureResult(uniqueValidation.Message);
     
@@ -513,7 +515,7 @@ public class ExtensionFeatureTests : IAsyncLifetime
 {
     private readonly DbContextOptions<ApplicationDbContext> _options;
     private ApplicationDbContext _context = null!;
-    private ITaskWorkflowService _service = null!;
+    private ITaskApplicationService _service = null!;
 
     public async Task InitializeAsync()
     {
@@ -525,8 +527,13 @@ public class ExtensionFeatureTests : IAsyncLifetime
         await _context.Database.EnsureCreatedAsync();
         
         var handlers = new ITaskHandler[] { new YourNewHandler() };
-        _service = new TaskWorkflowService(
+        var workflowService = new TaskWorkflowService(
             _context,
+            new TaskHandlerFactory(handlers),
+            new MockLogger());
+        _service = new TaskApplicationService(
+            _context,
+            workflowService,
             new TaskHandlerFactory(handlers),
             new MockLogger());
     }
@@ -613,8 +620,8 @@ public async Task FullWorkflow_WithNewFeature_ShouldPass()
 
 To extend the system:
 
-1. **New Handler**: Implement ITaskHandler, register in Program.cs
-2. **New Endpoint**: Add to interface, implement in service, add to controller
+1. **New Handler**: Extend `StatusValidationTaskHandlerBase` under `Domain/Handlers`
+2. **New Endpoint**: Add to an application-service interface, implement in service, add a thin controller action
 3. **New Validation**: Add validation method, integrate into workflow
 4. **New Datatype**: Add handler with appropriate validation
 

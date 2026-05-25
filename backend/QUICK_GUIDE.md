@@ -70,19 +70,21 @@ Domain/Handlers/TaskHandlerFactory.cs
 
 ### **Service Layer** - לוגיקה עסקית
 
-#### `ITaskStatusService` - ממשק לשרות
+#### `ITaskApplicationService` - שכבת Use Cases למשימות
 ```
-Services/ITaskStatusService.cs
-├─ ValidateAndChangeStatus(task, nextStatus, newDataJson)
-└─ GetFinalStatus(taskType)
+Services/ITaskApplicationService.cs
+├─ CreateAsync(...)
+├─ ChangeStatusAsync(taskId, newStatus, newDataJson)
+└─ CloseAsync(taskId, finalNotes)
 ```
 
-#### `TaskStatusService` - Implementation
+#### `TaskWorkflowService` - חוקי workflow
 ```
-Services/TaskStatusService.cs
+Services/TaskWorkflowService.cs
 ├─ משתמש ב-TaskHandlerFactory
+├─ בודק JSON תקין
 ├─ עורך וולידציה דרך Handler
-└─ מחזיר תוצאות עם הודעות
+└─ שומר שינויי סטטוס
 ```
 
 ### **Controller** - API Endpoint
@@ -90,7 +92,7 @@ Services/TaskStatusService.cs
 ```
 Controllers/TasksController.cs
 └─ POST /api/tasks/{id}/change-status
-   ├─ nextStatus
+   ├─ newStatus
    └─ newDataJson
 ```
 
@@ -119,29 +121,30 @@ var task = new BaseTask
 
 ### 2. **שינוי סטטוס עם וולידציה**
 ```csharp
-var result = taskStatusService.ValidateAndChangeStatus(
-    task,
-    nextStatus: 2,
-    newDataJson: "{\"prices\": [\"5000\", \"4800\"]}"
+var result = await taskApplicationService.ChangeStatusAsync(
+    task.Id,
+    newStatus: 2,
+    newDataJson: "{\"prices\": [\"5000\", \"4800\"]}",
+    cancellationToken
 );
 
 if (result.Success)
 {
-    task.CurrentStatus = result.NewStatus.Value;
-    task.CustomDataJson = newDataJson;
-    // save to db
+    Console.WriteLine(result.Message);
 }
 ```
 
 ### 3. **Flow פנימי**
 ```
-ValidateAndChangeStatus()
+TaskApplicationService.ChangeStatusAsync()
   ↓
-GetHandler("Procurement")  ← Factory
+TaskWorkflowService.ChangeStatusAsync()
+  ↓
+GetHandler("Procurement") ← Factory
   ↓
 handler.ValidateStatusChange()
   ↓
-ValidationResult (IsValid, Message)
+Save changes and return WorkflowResult
 ```
 
 ---
@@ -194,7 +197,7 @@ POST /api/tasks/1/change-status
 Content-Type: application/json
 
 {
-  "nextStatus": 2,
+  "newStatus": 2,
   "newDataJson": "{\"prices\": [\"5000 ₪\", \"4800 ₪\"]}"
 }
 ```
@@ -203,7 +206,8 @@ Content-Type: application/json
 ```json
 {
   "success": true,
-  "message": "סטטוס עודכן בהצלחה מ-1 ל-2",
+  "message": "סטטוס עודכן בהצלחה ל-2",
+  "newStatus": 2,
   "task": { ... }
 }
 ```
@@ -222,9 +226,8 @@ Content-Type: application/json
 ```csharp
 // Program.cs
 
-// הרשמה של Handlers
-builder.Services.AddTransient<ITaskHandler, ProcurementTaskHandler>();
-builder.Services.AddTransient<ITaskHandler, DevelopmentTaskHandler>();
+// רישום אוטומטי של Handlers תחת DanTaskManager.Domain.Handlers
+builder.Services.AddTaskHandlersFromAssembly(typeof(ITaskHandler).Assembly);
 
 // הרשמה של Factory (מזריק את כל ה-Handlers אוטומטי)
 builder.Services.AddSingleton(sp => 
@@ -232,6 +235,9 @@ builder.Services.AddSingleton(sp =>
 
 // הרשמה של Service
 builder.Services.AddScoped<ITaskStatusService, TaskStatusService>();
+builder.Services.AddScoped<ITaskWorkflowService, TaskWorkflowService>();
+builder.Services.AddScoped<ITaskApplicationService, TaskApplicationService>();
+builder.Services.AddScoped<IUserApplicationService, UserApplicationService>();
 ```
 
 ---
@@ -240,29 +246,28 @@ builder.Services.AddScoped<ITaskStatusService, TaskStatusService>();
 
 ### שלב 1: יצור Handler
 ```csharp
-public class TestingTaskHandler : ITaskHandler
+public class TestingTaskHandler : StatusValidationTaskHandlerBase
 {
+    public TestingTaskHandler()
+        : base(new Dictionary<int, Func<string, ValidationResult>>
+        {
+            [2] = ValidateTestResults
+        })
+    {
+    }
+
     public string TaskType => "Testing";
     public int FinalStatus => 2;
-    
-    public ValidationResult ValidateStatusChange(...)
-    {
-        if (nextStatus == 2)
-            return ValidateTestResults(newDataJson);
-        return ValidationResult.Success();
-    }
-    
-    private ValidationResult ValidateTestResults(string json)
+
+    private static ValidationResult ValidateTestResults(string json)
     {
         // וולידציה ספציפית...
     }
 }
 ```
 
-### שלב 2: הרשמה
-```csharp
-builder.Services.AddTransient<ITaskHandler, TestingTaskHandler>();
-```
+### שלב 2: שמור תחת `DanTaskManager.Domain.Handlers`
+אין צורך לעדכן את `Program.cs`; ה-Handler נרשם אוטומטית.
 
 ### שלב 3: סיום! ✅
 כל יתר הקוד עובד אוטומטי!

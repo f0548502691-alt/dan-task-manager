@@ -72,15 +72,20 @@ dan-task-manager/
 │   ├── BaseTask.cs                 # Task entity
 │   └── Handlers/                   # Strategy pattern
 │       ├── ITaskHandler.cs         # Handler interface
+│       ├── StatusValidationTaskHandlerBase.cs
 │       ├── ProcurementTaskHandler.cs
 │       ├── DevelopmentTaskHandler.cs
 │       └── TaskHandlerFactory.cs
 │
 ├── Services/                        # Business logic
-│   ├── ITaskWorkflowService.cs     # Workflow interface
-│   ├── TaskWorkflowService.cs      # Workflow implementation
+│   ├── ITaskApplicationService.cs  # Task API use cases
+│   ├── TaskApplicationService.cs
+│   ├── IUserApplicationService.cs  # User API use cases
+│   ├── UserApplicationService.cs
+│   ├── TaskWorkflowService.cs      # Includes ITaskWorkflowService
 │   ├── ITaskStatusService.cs
-│   └── TaskStatusService.cs
+│   ├── TaskStatusService.cs
+│   └── TaskHandlerRegistrationExtensions.cs
 │
 ├── Controllers/                     # REST API
 │   ├── TasksController.cs          # 9 endpoints
@@ -210,22 +215,30 @@ dotnet test --filter "HandlerTests"
 
 1. **Create handler class**
    ```csharp
-   public class MyTaskHandler : ITaskHandler
+   namespace DanTaskManager.Domain.Handlers;
+
+   public class MyTaskHandler : StatusValidationTaskHandlerBase
    {
+       public MyTaskHandler()
+           : base(new Dictionary<int, Func<string, ValidationResult>>
+           {
+               [2] = ValidateStatusTwo
+           })
+       {
+       }
+
        public string TaskType => "MyTask";
        public int FinalStatus => 3;
        
-       public ValidationResult ValidateStatusChange(...)
+       private static ValidationResult ValidateStatusTwo(string newDataJson)
        {
            // Your validation logic
        }
    }
    ```
 
-2. **Register in Program.cs**
-   ```csharp
-   services.AddTransient<ITaskHandler, MyTaskHandler>();
-   ```
+2. **No Program.cs change needed**
+   - `AddTaskHandlersFromAssembly(typeof(ITaskHandler).Assembly)` auto-discovers concrete handlers in `DanTaskManager.Domain.Handlers`.
 
 3. **Write tests**
    ```csharp
@@ -238,17 +251,17 @@ dotnet test --filter "HandlerTests"
 
 ### Add New Endpoint
 
-1. **Add method to service interface**
+1. **Add method to the application service interface**
    ```csharp
-   public interface ITaskWorkflowService
+   public interface ITaskApplicationService
    {
-       Task<MyResult> MyOperation(...);
+       Task<MyResult> MyOperationAsync(..., CancellationToken cancellationToken = default);
    }
    ```
 
-2. **Implement in service**
+2. **Implement in the application service**
    ```csharp
-   public async Task<MyResult> MyOperation(...)
+   public async Task<MyResult> MyOperationAsync(..., CancellationToken cancellationToken = default)
    {
        // Implementation
    }
@@ -282,25 +295,25 @@ A: Yes! Use `change-status` with a lower status number (e.g., 3 → 2).
 A: Store handler-specific data (prices, receipt, specification, etc.) as JSON.
 
 ### Q: How do I add a new task type?
-A: Create a new ITaskHandler implementation and register it in Program.cs.
+A: Add a concrete handler under `Domain/Handlers` (usually by extending `StatusValidationTaskHandlerBase`). It is auto-registered by `AddTaskHandlersFromAssembly`.
 
 ### Q: What if validation fails?
-A: The API returns 400 with an error message explaining what's wrong.
+A: Workflow validation returns 400 with `error` and `code: "workflow_validation_failed"`.
 
 ---
 
 ## 🔍 Troubleshooting
 
-### Issue: "Forward movement must be exactly +1"
+### Issue: "תנועה קדימה חייבת להיות בדיוק ב-1 סטטוס"
 **Solution**: Status movements must be sequential. Move 0→1→2, not 0→2.
 
 ### Issue: "'prices' must contain exactly 2 strings"
 **Solution**: For Procurement Status 2, provide JSON: `{"prices": ["5000", "4800"]}`
 
-### Issue: "Task not found"
+### Issue: "משימה לא קיימת"
 **Solution**: Verify the task ID exists. Check with GET /api/tasks/{id}.
 
-### Issue: "Task is closed"
+### Issue: "משימה סגורה"
 **Solution**: Closed tasks (Status 99) cannot be changed. Create a new task if needed.
 
 ### Issue: Database connection error

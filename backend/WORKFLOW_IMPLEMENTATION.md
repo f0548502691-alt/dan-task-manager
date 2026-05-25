@@ -17,7 +17,8 @@
 
 ### 3. **TasksController Updated** ✅
 - [Controllers/TasksController.cs](Controllers/TasksController.cs)
-- Dependency Injection של ITaskWorkflowService
+- Dependency Injection של `ITaskApplicationService`
+- פעולות workflow מועברות דרך `TaskApplicationService` אל `ITaskWorkflowService`
 - 9 Endpoints עם תיעוד מלא
 
 ### 4. **Request Classes** ✅
@@ -29,14 +30,17 @@
 ### 5. **Workflow Rules** ✅
 ```
 1. בדיקה שהמשימה לא סגורה (Status 99)
-2. תנועה קדימה: בדיוק +1 סטטוס
-3. תנועה אחורה: לכל סטטוס נמוך יותר
-4. וולידציה של Handler
-5. עדכון נתונים ושמירה
+2. בדיקה ש-`newDataJson` הוא JSON תקין
+3. תנועה קדימה: בדיוק +1 סטטוס
+4. תנועה אחורה: לכל סטטוס נמוך יותר
+5. וולידציה של Handler
+6. עדכון נתונים ושמירה
 ```
 
 ### 6. **Program.cs Updated** ✅
-- הרשמה של ITaskWorkflowService
+- הרשמה של `ITaskWorkflowService`
+- הרשמה של `ITaskApplicationService` ו-`IUserApplicationService`
+- רישום אוטומטי של Handlers באמצעות `AddTaskHandlersFromAssembly`
 - DI configuration
 
 ### 7. **Unit Tests** ✅

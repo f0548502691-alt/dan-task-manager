@@ -52,20 +52,21 @@
 ## ✅ Controllers
 
 - [x] **TasksController.cs Updated**
-  - Injected: `ITaskStatusService`
+  - Injected: `ITaskApplicationService`
   - New Endpoint: `POST /api/tasks/{id}/change-status`
-  - Request: `ChangeStatusRequest` (nextStatus, newDataJson)
-  - Response: Success or BadRequest with error message
+  - Request: `ChangeStatusWorkflowRequest` (newStatus, newDataJson)
+  - Response: Success or workflow validation error from middleware
 
 ## ✅ Dependency Injection
 
 - [x] **Program.cs Updated**
   - Added: `using DanTaskManager.Domain.Handlers;`
   - Added: `using DanTaskManager.Services;`
-  - Registered: `ProcurementTaskHandler` as `ITaskHandler`
-  - Registered: `DevelopmentTaskHandler` as `ITaskHandler`
+  - Registered handlers through `AddTaskHandlersFromAssembly`
   - Registered: `TaskHandlerFactory` (singleton with DI)
   - Registered: `ITaskStatusService` → `TaskStatusService`
+  - Registered: `ITaskWorkflowService` → `TaskWorkflowService`
+  - Registered: application services for tasks and users
 
 ## ✅ Unit Tests
 

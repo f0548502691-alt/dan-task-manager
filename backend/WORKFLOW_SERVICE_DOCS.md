@@ -11,12 +11,18 @@
 ```
 REST API (TasksController)
     ↓
+ITaskApplicationService
+    ↓
+TaskApplicationService
+    ├─ CRUD and read queries
+    └─ delegates workflow operations
+        ↓
 ITaskWorkflowService
     ↓
 TaskWorkflowService
     ├─ DbContext (EF Core)
     ├─ TaskHandlerFactory (Handlers)
-    └─ Validation Rules
+    └─ JSON + workflow validation rules
 ```
 
 ---
@@ -30,7 +36,16 @@ if (task.CurrentStatus == 99)  // ClosedStatus
     return Failure("משימה סגורה - לא ניתן לשנות סטטוס");
 ```
 
-### 2. **כללי תנועה בין סטטוסים**
+### 2. **בדיקת JSON לפני שינוי סטטוס**
+
+`ChangeStatusAsync` דוחה `newDataJson` ריק או לא תקין לפני בדיקת תנועה או Handler:
+
+```csharp
+if (!IsValidJsonPayload(newDataJson))
+    return Failure("NewDataJson חייב להיות JSON תקין");
+```
+
+### 3. **כללי תנועה בין סטטוסים**
 
 #### תנועה קדימה (Forward): **בדיוק +1 סטטוס**
 ```
@@ -51,7 +66,7 @@ if (task.CurrentStatus == 99)  // ClosedStatus
 2 → 2 ❌ (אותו סטטוס)
 ```
 
-### 3. **וולידציה ספציפית של Handler**
+### 4. **וולידציה ספציפית של Handler**
 לאחר שהתנועה אושרה, Handler בודק וולידציה ספציפית:
 ```csharp
 var handlerValidation = handler.ValidateStatusChange(
@@ -61,14 +76,14 @@ var handlerValidation = handler.ValidateStatusChange(
     newDataJson);
 ```
 
-### 4. **בדיקת סטטוס סופי**
+### 5. **בדיקת סטטוס סופי**
 ```csharp
 // אי אפשר להעבור את סטטוס סופי של Handler
 if (finalStatus.HasValue && currentStatus >= finalStatus && newStatus > currentStatus)
-    return Failure("משימה הגיעה לסטטוס סופי");
+    return Failure($"משימה כבר הגיעה לסטטוס סופי ({finalStatus.Value})");
 ```
 
-### 5. **עדכון נתונים**
+### 6. **עדכון נתונים**
 ```csharp
 task.CurrentStatus = newStatus;
 task.CustomDataJson = newDataJson;
@@ -133,18 +148,31 @@ Status 2 → Status 0 ← (rollback)
 public interface ITaskWorkflowService
 {
     // שינוי סטטוס עם כללי workflow
-    Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, string newDataJson);
+    Task<WorkflowResult> ChangeStatusAsync(
+        int taskId,
+        int newStatus,
+        string newDataJson,
+        CancellationToken cancellationToken = default);
     
     // סגירת משימה
-    Task<WorkflowResult> CloseTaskAsync(int taskId, string finalNotes);
+    Task<WorkflowResult> CloseTaskAsync(
+        int taskId,
+        string finalNotes,
+        CancellationToken cancellationToken = default);
     
     // קבלת משימות של משתמש (לא סגורות)
-    Task<IEnumerable<BaseTask>> GetUserTasksAsync(int userId);
+    Task<IEnumerable<BaseTask>> GetUserTasksAsync(
+        int userId,
+        CancellationToken cancellationToken = default);
     
     // קבלת משימה עם פרטים
-    Task<BaseTask?> GetTaskAsync(int taskId);
+    Task<BaseTask?> GetTaskAsync(
+        int taskId,
+        CancellationToken cancellationToken = default);
 }
 ```
+
+Controllers pass `HttpContext.RequestAborted` through the application service layer so abandoned HTTP requests can cancel EF Core queries. Read methods use `AsNoTracking()` and include the assigned user; `GetUserTasksAsync` filters out closed tasks (`CurrentStatus != 99`).
 
 ### WorkflowResult
 
@@ -216,16 +244,20 @@ Content-Type: application/json
 **Response (400) - Invalid Movement:**
 ```json
 {
-  "error": "תנועה קדימה חייבת להיות בדיוק ב-1 סטטוס. סטטוס נוכחי: 1, מבוקש: 3"
+  "error": "תנועה קדימה חייבת להיות בדיוק ב-1 סטטוס. סטטוס נוכחי: 1, מבוקש: 3",
+  "code": "workflow_validation_failed"
 }
 ```
 
 **Response (400) - Validation Failed:**
 ```json
 {
-  "error": "'prices' חייב להכיל בדיוק 2 מחרוזות, נמצאו 1"
+  "error": "'prices' חייב להכיל בדיוק 2 מחרוזות, נמצאו 1",
+  "code": "workflow_validation_failed"
 }
 ```
+
+Workflow failures are thrown as `WorkflowValidationException` by the controller and formatted by `GlobalExceptionMiddleware`.
 
 ---
 
@@ -478,7 +510,7 @@ POST /api/tasks/1/change-status
 # 7. Try to move beyond (should fail)
 POST /api/tasks/1/change-status
 {"newStatus": 4, "newDataJson": "{}"}
-→ Error: "משימה הגיעה לסטטוס סופי" ❌
+→ Error: "משימה כבר הגיעה לסטטוס סופי (3)" ❌
 
 # 8. Close task
 POST /api/tasks/1/close
@@ -498,7 +530,7 @@ POST /api/tasks/1/change-status
 | Code | Meaning | Example |
 |------|---------|---------|
 | 200 | ✅ Success | Status changed, task closed |
-| 400 | ❌ Validation Error | Invalid movement, validation failed, closed task |
+| 400 | ❌ Validation Error | Invalid movement, invalid JSON, validation failed, closed task |
 | 404 | ❌ Not Found | Task doesn't exist |
 | 500 | ❌ Server Error | Database error |
 
@@ -510,7 +542,8 @@ POST /api/tasks/1/change-status
 2. **Backward Movement**: Allowed to any lower status (rollback)
 3. **Closed Status**: 99 (permanent, cannot be changed)
 4. **Final Status**: Handler-specific status that cannot be exceeded
-5. **Workflow Validation**: Combines movement rules + handler validation
+5. **JSON Payload**: `newDataJson` must be valid JSON before workflow validation
+6. **Workflow Validation**: Combines movement rules + handler validation
 
 ---
 

@@ -109,7 +109,7 @@ POST /api/tasks/{id}/change-status
 Content-Type: application/json
 
 {
-  "nextStatus": 2,
+  "newStatus": 2,
   "newDataJson": "{\"prices\": [\"5000 ₪\", \"4800 ₪\"]}"
 }
 ```
@@ -248,21 +248,27 @@ dotnet test
 
 ```csharp
 // 1. Create Handler
-public class TestingTaskHandler : ITaskHandler
+public class TestingTaskHandler : StatusValidationTaskHandlerBase
 {
+    public TestingTaskHandler()
+        : base(new Dictionary<int, Func<string, ValidationResult>>
+        {
+            [2] = ValidateStatusTwo
+        })
+    {
+    }
+
     public string TaskType => "Testing";
     public int FinalStatus => 2;
-    
-    public ValidationResult ValidateStatusChange(...) { ... }
+    private static ValidationResult ValidateStatusTwo(string newDataJson) { ... }
 }
 
-// 2. Register in Program.cs
-builder.Services.AddTransient<ITaskHandler, TestingTaskHandler>();
+// 2. Place in DanTaskManager.Domain.Handlers for auto-registration
 
 // 3. Done! 🎉
 ```
 
-זהו! TaskHandlerFactory ילקח אותו אוטומטי.
+זהו! `AddTaskHandlersFromAssembly` ו-`TaskHandlerFactory` יזהו אותו אוטומטית.
 
 ---
 

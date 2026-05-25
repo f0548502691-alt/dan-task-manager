@@ -8,7 +8,10 @@
 dan-task-manager/
 ├── Domain/
 │   ├── AppUser.cs          # מחלקה המייצגת משתמש
-│   └── BaseTask.cs         # מחלקה למשימה בסיסית
+│   ├── BaseTask.cs         # מחלקה למשימה בסיסית
+│   └── Handlers/           # Strategy pattern לסוגי משימות
+├── Services/               # Application services ו-workflow
+├── Controllers/            # REST API
 ├── Data/
 │   └── ApplicationDbContext.cs  # DbContext עם הגדרות EF Core
 ├── DanTaskManager.csproj   # קובץ הפרויקט
@@ -29,7 +32,7 @@ dan-task-manager/
 ייצוג משימה עם תמיכה בנתונים משתנים:
 - `Id`: מזהה ייחודי
 - `TaskType`: סוג המשימה (Analysis, Development, Testing, וכו')
-- `CurrentStatus`: סטטוס כמספר (0=לא התחילה, 1=בתהליך, 2=הושלמה, 3=ביוטלה)
+- `CurrentStatus`: סטטוס מספרי לפי ה-workflow של סוג המשימה; `99` מייצג משימה סגורה
 - `AssignedToUserId`: מזהה המשתמש המופקד
 - `AssignedToUser`: קשר למשתמש
 - `Description`: תיאור המשימה
@@ -116,11 +119,10 @@ await context.SaveChangesAsync();
 
 ## 🚀 שלבים הבאים
 
-1. יצירת Controllers לקבלת בקשות API
-2. הוספת Business Logic שכבה
-3. מימוש סינון וחיפוש משימות לפי סוג וסטטוס
-4. הוספת Validation ל-CustomDataJson
-5. יצירת Migration ו-seed לנתונים נוספים
+1. להריץ את ה-API עם `dotnet run`
+2. לבדוק את נקודות הקצה תחת `/api/tasks` ו-`/api/users`
+3. להוסיף סוג משימה חדש על ידי Handler תחת `Domain/Handlers`
+4. לעיין ב-[GETTING_STARTED.md](GETTING_STARTED.md) וב-[EXTENSION_GUIDE.md](EXTENSION_GUIDE.md) להרחבות
 
 ---
 

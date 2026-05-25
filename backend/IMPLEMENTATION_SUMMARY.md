@@ -105,14 +105,14 @@ TaskHandlerFactory
 // בסטטוס 2 - צריך בדיוק 2 מחרוזות
 POST /api/tasks/1/change-status
 {
-  "nextStatus": 2,
+  "newStatus": 2,
   "newDataJson": "{\"prices\": [\"5000 ₪\", \"4800 ₪\"]}"
 }
 
 // בסטטוס 3 - צריך קבלה
 POST /api/tasks/1/change-status
 {
-  "nextStatus": 3,
+  "newStatus": 3,
   "newDataJson": "{\"prices\": [...], \"receipt\": \"REC-2026-001\"}"
 }
 ```
@@ -154,16 +154,22 @@ POST /api/tasks/1/change-status
 ### Open/Closed Principle ✅
 ```csharp
 // הוספת סוג משימה חדש - בלי לשנות קוד קיים
-public class TestingTaskHandler : ITaskHandler
+public class TestingTaskHandler : StatusValidationTaskHandlerBase
 {
+    public TestingTaskHandler()
+        : base(new Dictionary<int, Func<string, ValidationResult>>
+        {
+            [2] = ValidateStatusTwo
+        })
+    {
+    }
+
     public string TaskType => "Testing";
     public int FinalStatus => 2;
-    public ValidationResult ValidateStatusChange(...) { ... }
+    private static ValidationResult ValidateStatusTwo(string newDataJson) { ... }
 }
 
-// הרשמה
-builder.Services.AddTransient<ITaskHandler, TestingTaskHandler>();
-// זהו! TaskHandlerFactory יקח אותו אוטומטי
+// שמירה תחת DanTaskManager.Domain.Handlers מספיקה לרישום אוטומטי
 ```
 
 ### Single Responsibility Principle ✅
@@ -209,7 +215,7 @@ POST http://localhost:5000/api/tasks
 # Change status with validation
 POST http://localhost:5000/api/tasks/1/change-status
 {
-  "nextStatus": 2,
+  "newStatus": 2,
   "newDataJson": "{\"prices\": [\"5000\", \"4800\"]}"
 }
 ```
@@ -285,24 +291,20 @@ Documentation/
 
 ```csharp
 // 1. Create Handler
-public class TestingTaskHandler : ITaskHandler
+public class TestingTaskHandler : StatusValidationTaskHandlerBase
 {
+    public TestingTaskHandler()
+        : base(new Dictionary<int, Func<string, ValidationResult>>
+        {
+            [2] = ValidateTestPlan,
+            [3] = ValidateTestResults
+        })
+    {
+    }
+
     public string TaskType => "Testing";
     public int FinalStatus => 3;
-    
-    public ValidationResult ValidateStatusChange(
-        string currentDataJson,
-        int currentStatus,
-        int nextStatus,
-        string newDataJson)
-    {
-        if (nextStatus == 2)
-            return ValidateTestPlan(newDataJson);
-        if (nextStatus == 3)
-            return ValidateTestResults(newDataJson);
-        return ValidationResult.Success();
-    }
-    
+
     private static ValidationResult ValidateTestPlan(string json)
     {
         // Implementation...
@@ -314,8 +316,7 @@ public class TestingTaskHandler : ITaskHandler
     }
 }
 
-// 2. Register in Program.cs
-builder.Services.AddTransient<ITaskHandler, TestingTaskHandler>();
+// 2. Place in DanTaskManager.Domain.Handlers for auto-registration
 
 // 3. Done! ✅
 ```

@@ -2,7 +2,7 @@
 
 ## 📋 מבט כללי
 
-הפרויקט מנצל את **Strategy Pattern** עם **Factory** כדי לאפשר הרחבה של סוגי משימות חדשים ללא שינוי קוד קיים (**Open/Closed Principle**).
+הפרויקט מנצל את **Strategy Pattern** עם **Factory** כדי לאפשר הרחבה של סוגי משימות חדשים ללא שינוי קוד קיים (**Open/Closed Principle**). ה-API עובר דרך שכבת Application Services, ו-`TaskWorkflowService` משתמש ב-Factory כדי להפעיל את ה-Handler המתאים.
 
 ---
 
@@ -16,9 +16,10 @@
          │
          ▼
 ┌─────────────────────────────────────────────────────────┐
-│          ITaskStatusService                             │
-│  - ValidateAndChangeStatus()                           │
-│  - GetFinalStatus()                                    │
+│          TaskWorkflowService                            │
+│  - ChangeStatusAsync()                                 │
+│  - CloseTaskAsync()                                    │
+│  - JSON + movement validation                          │
 └────────┬────────────────────────────────────────────────┘
          │
          ▼
@@ -34,7 +35,7 @@
     │  ITaskHandler      │◄────┐
     └────────────────────┘     │
          ▲                      │
-         │      יורשים         │
+         │      יורשים דרך StatusValidationTaskHandlerBase
          ├──────────────────────┘
          │
     ┌────┴───────┬──────────────────────┐
@@ -75,7 +76,29 @@ public interface ITaskHandler
 
 ---
 
-### 2. **ProcurementTaskHandler**
+### 2. **StatusValidationTaskHandlerBase**
+
+`ProcurementTaskHandler` ו-`DevelopmentTaskHandler` יורשים מ-`StatusValidationTaskHandlerBase` במקום לשכפל `if` לכל סטטוס.
+
+```csharp
+public abstract class StatusValidationTaskHandlerBase : ITaskHandler
+{
+    protected StatusValidationTaskHandlerBase(
+        IReadOnlyDictionary<int, Func<string, ValidationResult>> statusValidators);
+
+    public abstract string TaskType { get; }
+    public abstract int FinalStatus { get; }
+}
+```
+
+המחלקה:
+- מפעילה Validator לפי `nextStatus`
+- מחזירה הצלחה כאשר אין Validator ייעודי לסטטוס
+- מונעת מעבר קדימה אחרי `FinalStatus`
+
+---
+
+### 3. **ProcurementTaskHandler**
 
 **סטטוס סופי:** 3
 
@@ -92,7 +115,7 @@ public interface ITaskHandler
 
 ---
 
-### 3. **DevelopmentTaskHandler**
+### 4. **DevelopmentTaskHandler**
 
 **סטטוס סופי:** 4
 
@@ -111,7 +134,7 @@ public interface ITaskHandler
 
 ---
 
-### 4. **TaskHandlerFactory**
+### 5. **TaskHandlerFactory**
 
 ```csharp
 public class TaskHandlerFactory
@@ -131,25 +154,25 @@ public class TaskHandlerFactory
 
 ---
 
-### 5. **ITaskStatusService**
+### 6. **TaskWorkflowService Integration**
 
 ```csharp
-public interface ITaskStatusService
+public interface ITaskWorkflowService
 {
-    TaskStatusChangeResult ValidateAndChangeStatus(
-        BaseTask task,
-        int nextStatus,
-        string newDataJson);
-        
-    int? GetFinalStatus(string taskType);
+    Task<WorkflowResult> ChangeStatusAsync(
+        int taskId,
+        int newStatus,
+        string newDataJson,
+        CancellationToken cancellationToken = default);
 }
 ```
 
 **עבודה:**
-1. קובל משימה, סטטוס בא, JSON חדש
-2. מוצא את ה-Handler לפי `task.TaskType`
-3. קורא ל-`ValidateStatusChange` דרך Handler
-4. מחזיר תוצאה (הצלחה/כישלון)
+1. `TasksController` קורא ל-`ITaskApplicationService`
+2. `TaskApplicationService` מעביר פעולות Workflow ל-`ITaskWorkflowService`
+3. `TaskWorkflowService` בודק JSON תקין, כללי תנועה וסטטוס סופי
+4. אם קיים Handler עבור `task.TaskType`, השירות קורא ל-`ValidateStatusChange`
+5. התוצאה חוזרת ל-Controller דרך שכבת ה-Application Service
 
 ---
 
@@ -164,24 +187,31 @@ public interface ITaskStatusService
 
 סגור לשינוי:
   - TaskHandlerFactory לא משתנה
-  - ITaskStatusService לא משתנה
+  - TaskWorkflowService לא משתנה
   - BaseTask לא משתנה
 ```
 
 **דוגמה - הוספת Handler חדש:**
 ```csharp
 // 1. יצירת Handler חדש
-public class TestingTaskHandler : ITaskHandler
+public class TestingTaskHandler : StatusValidationTaskHandlerBase
 {
+    public TestingTaskHandler()
+        : base(new Dictionary<int, Func<string, ValidationResult>>
+        {
+            [2] = ValidateStatusTwo
+        })
+    {
+    }
+
     public string TaskType => "Testing";
     public int FinalStatus => 2;
-    public ValidationResult ValidateStatusChange(...) { ... }
+    private static ValidationResult ValidateStatusTwo(string newDataJson) { ... }
 }
 
-// 2. הרשמה בـ Program.cs
-builder.Services.AddTransient<ITaskHandler, TestingTaskHandler>();
+// 2. מקם ב-namespace DanTaskManager.Domain.Handlers
 
-// 3. זהו! TaskHandlerFactory ילקח אותו אוטומטי
+// 3. זהו! AddTaskHandlersFromAssembly ירשום אותו אוטומטית
 ```
 
 ---
@@ -190,13 +220,14 @@ builder.Services.AddTransient<ITaskHandler, TestingTaskHandler>();
 
 - **ITaskHandler**: אחראי רק לוולידציה ספציפית של סוג משימה
 - **TaskHandlerFactory**: אחראי רק ליצור את ה-Handler הנכון
-- **ITaskStatusService**: אחראי רק לתנסיק השינוי
+- **TaskWorkflowService**: אחראי לכללי תנועה, JSON תקין ושמירת שינויי workflow
+- **Application Services**: אחראים לתיאום בין HTTP, EF ו-workflow
 
 ---
 
 ### 3. **Dependency Inversion Principle** ✅
 
-- התוכנה תלויה בממשקים (`ITaskHandler`, `ITaskStatusService`)
+- התוכנה תלויה בממשקים (`ITaskHandler`, `ITaskWorkflowService`, `ITaskApplicationService`)
 - לא בממשקים (`ProcurementTaskHandler`, `DevelopmentTaskHandler`)
 
 ---
@@ -204,17 +235,21 @@ builder.Services.AddTransient<ITaskHandler, TestingTaskHandler>();
 ## 💾 Dependency Injection - Program.cs
 
 ```csharp
-// הרשמה של כל ה-Handlers
-builder.Services.AddTransient<ITaskHandler, ProcurementTaskHandler>();
-builder.Services.AddTransient<ITaskHandler, DevelopmentTaskHandler>();
+// הרשמה אוטומטית של כל ה-Handlers תחת DanTaskManager.Domain.Handlers
+builder.Services.AddTaskHandlersFromAssembly(typeof(ITaskHandler).Assembly);
 
 // הרשמה של Factory (אוטומטי מזריק את כל ה-Handlers)
 builder.Services.AddSingleton(sp => 
     new TaskHandlerFactory(sp.GetRequiredService<IEnumerable<ITaskHandler>>()));
 
-// הרשמה של Service
+// הרשמה של Services
 builder.Services.AddScoped<ITaskStatusService, TaskStatusService>();
+builder.Services.AddScoped<ITaskWorkflowService, TaskWorkflowService>();
+builder.Services.AddScoped<ITaskApplicationService, TaskApplicationService>();
+builder.Services.AddScoped<IUserApplicationService, UserApplicationService>();
 ```
+
+`AddTaskHandlersFromAssembly` מגלה מחלקות לא-abstract שמממשות `ITaskHandler` ונמצאות ב-namespace `DanTaskManager.Domain.Handlers`.
 
 ---
 
@@ -227,7 +262,7 @@ POST /api/tasks/{id}/change-status
 Content-Type: application/json
 
 {
-  "nextStatus": 2,
+  "newStatus": 2,
   "newDataJson": "{\"prices\": [\"5000 ₪\", \"4800 ₪\"]}"
 }
 ```
@@ -236,7 +271,7 @@ Content-Type: application/json
 ```json
 {
   "success": true,
-  "message": "סטטוס עודכן בהצלחה מ-1 ל-2",
+  "message": "סטטוס עודכן בהצלחה ל-2",
   "task": { ... }
 }
 ```
@@ -292,16 +327,23 @@ Domain/
 ├── AppUser.cs
 └── Handlers/
     ├── ITaskHandler.cs                  // ממשק
+    ├── StatusValidationTaskHandlerBase.cs // Base class לוולידציה לפי סטטוס
     ├── ProcurementTaskHandler.cs       // Implementation
     ├── DevelopmentTaskHandler.cs       // Implementation
     └── TaskHandlerFactory.cs           // Factory
 
 Services/
 ├── ITaskStatusService.cs               // ממשק
-└── TaskStatusService.cs                // Implementation
+├── TaskStatusService.cs                // Implementation
+├── TaskWorkflowService.cs              // Workflow orchestration
+├── ITaskApplicationService.cs          // API-facing task operations
+├── TaskApplicationService.cs           // Task application layer
+├── IUserApplicationService.cs          // API-facing user operations
+├── UserApplicationService.cs           // User application layer
+└── TaskHandlerRegistrationExtensions.cs // Auto-registration
 
 Controllers/
-├── TasksController.cs                  // חדש: change-status endpoint
+├── TasksController.cs                  // Thin HTTP layer
 └── UsersController.cs
 ```
 
@@ -313,7 +355,7 @@ Controllers/
 1. שימוש ישיר ב-Handlers
 2. Procurement flow
 3. Development flow
-4. TaskStatusService
+4. TaskWorkflowService
 5. Factory pattern
 6. API endpoints
 
@@ -323,20 +365,19 @@ Controllers/
 
 1. **יצור מחלקה חדשה עבור TestingTaskHandler**
    ```csharp
-   public class TestingTaskHandler : ITaskHandler
+   public class TestingTaskHandler : StatusValidationTaskHandlerBase
    ```
 
 2. **הטמע את ITaskHandler**
    - `TaskType` (לדוגמה: "Testing")
    - `FinalStatus` (לדוגמה: 2)
-   - `ValidateStatusChange()` עם לוגיקה ספציפית
+   - העבר Dictionary של `status -> validator` ל-base constructor
 
-3. **הוסף הרשמה ב-Program.cs**
-   ```csharp
-   builder.Services.AddTransient<ITaskHandler, TestingTaskHandler>();
-   ```
+3. **מקם תחת `DanTaskManager.Domain.Handlers`**
+   - אין צורך להוסיף `AddTransient` ב-`Program.cs`
+   - `AddTaskHandlersFromAssembly` ירשום אותו אוטומטית
 
-4. **סיום!** TaskHandlerFactory וITaskStatusService יעבדו אוטומטי
+4. **סיום!** `TaskHandlerFactory` ו-`TaskWorkflowService` יעבדו עם ה-Handler החדש
 
 ---
 

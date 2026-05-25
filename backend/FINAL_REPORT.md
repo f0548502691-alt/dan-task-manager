@@ -31,13 +31,15 @@
 
 ### Phase 2: Strategy Pattern ✅
 - **ITaskHandler.cs** - Handler interface
+- **StatusValidationTaskHandlerBase.cs** - Shared status validator mapping
 - **ProcurementTaskHandler.cs** - Procurement logic (FinalStatus: 3)
 - **DevelopmentTaskHandler.cs** - Development logic (FinalStatus: 4)
 - **TaskHandlerFactory.cs** - Factory with DI integration
 
 ### Phase 3: Workflow Service ✅
-- **ITaskWorkflowService.cs** - Workflow interface
+- **TaskApplicationService.cs / UserApplicationService.cs** - Application service layer
 - **TaskWorkflowService.cs** - Complete implementation with validation
+- **TaskHandlerRegistrationExtensions.cs** - Convention-based handler registration
 - **TasksController.cs** - 9 REST endpoints
 - **Request/Response DTOs** - Type-safe communication
 

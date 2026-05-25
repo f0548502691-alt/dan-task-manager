@@ -264,14 +264,19 @@ Project Root
 │   │   ├── BaseTask.cs
 │   │   └── Handlers/
 │   │       ├── ITaskHandler.cs
+│   │       ├── StatusValidationTaskHandlerBase.cs
 │   │       ├── ProcurementTaskHandler.cs
 │   │       ├── DevelopmentTaskHandler.cs
 │   │       └── TaskHandlerFactory.cs
 │   ├── Services/
-│   │   ├── ITaskWorkflowService.cs
-│   │   ├── TaskWorkflowService.cs
+│   │   ├── ITaskApplicationService.cs
+│   │   ├── TaskApplicationService.cs
+│   │   ├── IUserApplicationService.cs
+│   │   ├── UserApplicationService.cs
+│   │   ├── TaskWorkflowService.cs (includes ITaskWorkflowService)
 │   │   ├── ITaskStatusService.cs
-│   │   └── TaskStatusService.cs
+│   │   ├── TaskStatusService.cs
+│   │   └── TaskHandlerRegistrationExtensions.cs
 │   ├── Controllers/
 │   │   ├── TasksController.cs
 │   │   └── UsersController.cs
@@ -293,8 +298,9 @@ Project Root
 
 ### Core Features
 - [x] Domain models (AppUser, BaseTask)
-- [x] Handler system (ITaskHandler, 2 implementations)
+- [x] Handler system (ITaskHandler, shared base class, 2 implementations)
 - [x] Factory pattern (TaskHandlerFactory)
+- [x] Application service layer (task and user use cases)
 - [x] Workflow service (ITaskWorkflowService)
 - [x] State machine (Forward/Backward/Closed)
 - [x] REST API (9 endpoints)

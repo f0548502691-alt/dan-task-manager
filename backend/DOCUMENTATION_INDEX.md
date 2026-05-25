@@ -85,6 +85,8 @@
 3. [BEST_PRACTICES.md](BEST_PRACTICES.md) - Conventions
 4. [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs) - Examples
 
+> Current backend flow: controllers delegate to application services (`ITaskApplicationService`, `IUserApplicationService`); task workflow changes are then delegated to `ITaskWorkflowService`.
+
 #### **QA / Tester**
 1. [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) - Workflows
 2. [API_ERROR_CODES.md](API_ERROR_CODES.md) - Error cases
@@ -142,14 +144,19 @@ Implementation:
 │   ├── BaseTask.cs
 │   └── Handlers/
 │       ├── ITaskHandler.cs
+│       ├── StatusValidationTaskHandlerBase.cs
 │       ├── ProcurementTaskHandler.cs
 │       ├── DevelopmentTaskHandler.cs
 │       └── TaskHandlerFactory.cs
 ├── Services/
-│   ├── ITaskWorkflowService.cs
-│   ├── TaskWorkflowService.cs
+│   ├── ITaskApplicationService.cs
+│   ├── TaskApplicationService.cs
+│   ├── IUserApplicationService.cs
+│   ├── UserApplicationService.cs
+│   ├── TaskWorkflowService.cs        (includes ITaskWorkflowService)
 │   ├── ITaskStatusService.cs
-│   └── TaskStatusService.cs
+│   ├── TaskStatusService.cs
+│   └── TaskHandlerRegistrationExtensions.cs
 ├── Controllers/
 │   ├── TasksController.cs
 │   └── UsersController.cs
