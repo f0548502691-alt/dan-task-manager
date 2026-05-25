@@ -1,4 +1,3 @@
-using DanTaskManager.Domain;
 using DanTaskManager.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -26,9 +25,12 @@ public class UsersController : ControllerBase
     /// קבלת כל המשתמשים
     /// </summary>
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<AppUser>>> GetUsers()
+    public async Task<ActionResult<PagedResult<UserSummaryDto>>> GetUsers(
+        [FromQuery] PaginationQuery pagination)
     {
-        var users = await _userService.GetAllAsync(HttpContext.RequestAborted);
+        var users = await _userService.GetAllAsync(
+            pagination.ToPageRequest(),
+            HttpContext.RequestAborted);
         return Ok(users);
     }
 
@@ -36,7 +38,7 @@ public class UsersController : ControllerBase
     /// קבלת משתמש לפי ID
     /// </summary>
     [HttpGet("{id}")]
-    public async Task<ActionResult<AppUser>> GetUser(int id)
+    public async Task<ActionResult<UserDetailsDto>> GetUser(int id)
     {
         var user = await _userService.GetByIdAsync(id, HttpContext.RequestAborted);
 
@@ -52,7 +54,7 @@ public class UsersController : ControllerBase
     /// יצירת משתמש חדש
     /// </summary>
     [HttpPost]
-    public async Task<ActionResult<AppUser>> CreateUser(CreateUserRequest request)
+    public async Task<ActionResult<UserDetailsDto>> CreateUser(CreateUserRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
         {
@@ -84,7 +86,9 @@ public class UsersController : ControllerBase
     /// קבלת משימות של משתמש מסוים
     /// </summary>
     [HttpGet("{id}/tasks")]
-    public async Task<ActionResult<IEnumerable<BaseTask>>> GetUserTasks(int id)
+    public async Task<ActionResult<PagedResult<TaskSummaryDto>>> GetUserTasks(
+        int id,
+        [FromQuery] PaginationQuery pagination)
     {
         var userExists = await _userService.ExistsAsync(id, HttpContext.RequestAborted);
         if (!userExists)
@@ -92,7 +96,10 @@ public class UsersController : ControllerBase
             return NotFound("משתמש לא קיים");
         }
 
-        var tasks = await _userService.GetUserTasksAsync(id, HttpContext.RequestAborted);
+        var tasks = await _userService.GetUserTasksAsync(
+            id,
+            pagination.ToPageRequest(),
+            HttpContext.RequestAborted);
 
         return Ok(tasks);
     }

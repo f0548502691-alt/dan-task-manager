@@ -1,6 +1,7 @@
 using DanTaskManager.Data;
 using DanTaskManager.Domain;
 using Microsoft.EntityFrameworkCore;
+using System.Linq.Expressions;
 
 namespace DanTaskManager.Services;
 
@@ -13,21 +14,34 @@ public class UserApplicationService : IUserApplicationService
         _context = context;
     }
 
-    public async Task<IReadOnlyList<AppUser>> GetAllAsync(CancellationToken cancellationToken = default)
+    public async Task<PagedResult<UserSummaryDto>> GetAllAsync(
+        PageRequest pageRequest,
+        CancellationToken cancellationToken = default)
     {
-        return await _context.Users
-            .AsNoTracking()
-            .Include(u => u.Tasks)
+        var page = pageRequest.NormalizedPage;
+        var pageSize = pageRequest.NormalizedPageSize;
+
+        var query = _context.Users
+            .AsNoTracking();
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        var users = await query
             .OrderBy(u => u.Name)
+            .Skip(pageRequest.Skip)
+            .Take(pageSize)
+            .Select(MapToUserSummary())
             .ToListAsync(cancellationToken);
+
+        return PagedResult<UserSummaryDto>.Create(users, totalCount, page, pageSize);
     }
 
-    public Task<AppUser?> GetByIdAsync(int userId, CancellationToken cancellationToken = default)
+    public Task<UserDetailsDto?> GetByIdAsync(int userId, CancellationToken cancellationToken = default)
     {
         return _context.Users
             .AsNoTracking()
-            .Include(u => u.Tasks)
-            .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+            .Where(u => u.Id == userId)
+            .Select(MapToUserDetails())
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     public async Task<UserCreationResult> CreateAsync(
@@ -53,18 +67,36 @@ public class UserApplicationService : IUserApplicationService
         _context.Users.Add(user);
         await _context.SaveChangesAsync(cancellationToken);
 
-        return UserCreationResult.SuccessResult(user);
+        var createdUser = await GetByIdAsync(user.Id, cancellationToken);
+        if (createdUser == null)
+        {
+            return UserCreationResult.FailureResult("המשתמש נוצר אך לא ניתן היה לטעון אותו מחדש");
+        }
+
+        return UserCreationResult.SuccessResult(createdUser);
     }
 
-    public async Task<IReadOnlyList<BaseTask>> GetUserTasksAsync(
+    public async Task<PagedResult<TaskSummaryDto>> GetUserTasksAsync(
         int userId,
+        PageRequest pageRequest,
         CancellationToken cancellationToken = default)
     {
-        return await _context.Tasks
+        var page = pageRequest.NormalizedPage;
+        var pageSize = pageRequest.NormalizedPageSize;
+
+        var query = _context.Tasks
             .AsNoTracking()
-            .Where(t => t.AssignedToUserId == userId)
+            .Where(t => t.AssignedToUserId == userId);
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        var tasks = await query
             .OrderByDescending(t => t.CreatedAt)
+            .Skip(pageRequest.Skip)
+            .Take(pageSize)
+            .Select(MapToTaskSummary())
             .ToListAsync(cancellationToken);
+
+        return PagedResult<TaskSummaryDto>.Create(tasks, totalCount, page, pageSize);
     }
 
     public Task<bool> ExistsAsync(int userId, CancellationToken cancellationToken = default)
@@ -72,5 +104,53 @@ public class UserApplicationService : IUserApplicationService
         return _context.Users
             .AsNoTracking()
             .AnyAsync(u => u.Id == userId, cancellationToken);
+    }
+
+    private static Expression<Func<AppUser, UserSummaryDto>> MapToUserSummary()
+    {
+        return user => new UserSummaryDto
+        {
+            Id = user.Id,
+            Name = user.Name,
+            Email = user.Email,
+            CreatedAt = user.CreatedAt,
+            TasksCount = user.Tasks.Count,
+            OpenTasksCount = user.Tasks.Count(t => t.CurrentStatus != WorkflowConstants.ClosedStatus)
+        };
+    }
+
+    private static Expression<Func<AppUser, UserDetailsDto>> MapToUserDetails()
+    {
+        return user => new UserDetailsDto
+        {
+            Id = user.Id,
+            Name = user.Name,
+            Email = user.Email,
+            CreatedAt = user.CreatedAt,
+            TasksCount = user.Tasks.Count,
+            OpenTasksCount = user.Tasks.Count(t => t.CurrentStatus != WorkflowConstants.ClosedStatus)
+        };
+    }
+
+    private static Expression<Func<BaseTask, TaskSummaryDto>> MapToTaskSummary()
+    {
+        return task => new TaskSummaryDto
+        {
+            Id = task.Id,
+            TaskType = task.TaskType,
+            CurrentStatus = task.CurrentStatus,
+            AssignedToUserId = task.AssignedToUserId,
+            Description = task.Description,
+            CreatedAt = task.CreatedAt,
+            UpdatedAt = task.UpdatedAt,
+            AssignedToUser = task.AssignedToUser == null
+                ? null
+                : new UserBriefDto
+                {
+                    Id = task.AssignedToUser.Id,
+                    Name = task.AssignedToUser.Name,
+                    Email = task.AssignedToUser.Email
+                }
+        };
     }
 }

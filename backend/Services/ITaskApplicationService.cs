@@ -1,13 +1,19 @@
-using DanTaskManager.Domain;
-
 namespace DanTaskManager.Services;
 
 public interface ITaskApplicationService
 {
-    Task<IReadOnlyList<BaseTask>> GetAllAsync(CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<BaseTask>> GetByTypeAsync(string taskType, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<BaseTask>> GetOpenByUserAsync(int userId, CancellationToken cancellationToken = default);
-    Task<BaseTask?> GetByIdAsync(int taskId, CancellationToken cancellationToken = default);
+    Task<PagedResult<TaskSummaryDto>> GetAllAsync(
+        PageRequest pageRequest,
+        CancellationToken cancellationToken = default);
+    Task<PagedResult<TaskSummaryDto>> GetByTypeAsync(
+        string taskType,
+        PageRequest pageRequest,
+        CancellationToken cancellationToken = default);
+    Task<PagedResult<TaskSummaryDto>> GetOpenByUserAsync(
+        int userId,
+        PageRequest pageRequest,
+        CancellationToken cancellationToken = default);
+    Task<TaskDetailsDto?> GetByIdAsync(int taskId, CancellationToken cancellationToken = default);
     Task<bool> UserExistsAsync(int userId, CancellationToken cancellationToken = default);
     Task<TaskCreationResult> CreateAsync(TaskCreateCommand command, CancellationToken cancellationToken = default);
     Task<bool> UpdateDescriptionAsync(int taskId, string? description, CancellationToken cancellationToken = default);
@@ -33,9 +39,9 @@ public class TaskCreationResult
 {
     public bool Success { get; init; }
     public string Message { get; init; } = string.Empty;
-    public BaseTask? CreatedTask { get; init; }
+    public TaskDetailsDto? CreatedTask { get; init; }
 
-    public static TaskCreationResult SuccessResult(BaseTask task)
+    public static TaskCreationResult SuccessResult(TaskDetailsDto task)
         => new() { Success = true, CreatedTask = task };
 
     public static TaskCreationResult FailureResult(string message)

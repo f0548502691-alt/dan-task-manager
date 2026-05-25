@@ -1,13 +1,16 @@
-using DanTaskManager.Domain;
-
 namespace DanTaskManager.Services;
 
 public interface IUserApplicationService
 {
-    Task<IReadOnlyList<AppUser>> GetAllAsync(CancellationToken cancellationToken = default);
-    Task<AppUser?> GetByIdAsync(int userId, CancellationToken cancellationToken = default);
+    Task<PagedResult<UserSummaryDto>> GetAllAsync(
+        PageRequest pageRequest,
+        CancellationToken cancellationToken = default);
+    Task<UserDetailsDto?> GetByIdAsync(int userId, CancellationToken cancellationToken = default);
     Task<UserCreationResult> CreateAsync(UserCreateCommand command, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<BaseTask>> GetUserTasksAsync(int userId, CancellationToken cancellationToken = default);
+    Task<PagedResult<TaskSummaryDto>> GetUserTasksAsync(
+        int userId,
+        PageRequest pageRequest,
+        CancellationToken cancellationToken = default);
     Task<bool> ExistsAsync(int userId, CancellationToken cancellationToken = default);
 }
 
@@ -17,9 +20,9 @@ public class UserCreationResult
 {
     public bool Success { get; init; }
     public string Message { get; init; } = string.Empty;
-    public AppUser? CreatedUser { get; init; }
+    public UserDetailsDto? CreatedUser { get; init; }
 
-    public static UserCreationResult SuccessResult(AppUser user)
+    public static UserCreationResult SuccessResult(UserDetailsDto user)
         => new() { Success = true, CreatedUser = user };
 
     public static UserCreationResult FailureResult(string message)

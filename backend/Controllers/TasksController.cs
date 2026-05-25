@@ -26,9 +26,12 @@ public class TasksController : ControllerBase
     /// קבלת כל המשימות
     /// </summary>
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<BaseTask>>> GetTasks()
+    public async Task<ActionResult<PagedResult<TaskSummaryDto>>> GetTasks(
+        [FromQuery] PaginationQuery pagination)
     {
-        var tasks = await _taskService.GetAllAsync(HttpContext.RequestAborted);
+        var tasks = await _taskService.GetAllAsync(
+            pagination.ToPageRequest(),
+            HttpContext.RequestAborted);
         return Ok(tasks);
     }
 
@@ -36,7 +39,7 @@ public class TasksController : ControllerBase
     /// קבלת משימה לפי ID
     /// </summary>
     [HttpGet("{id}")]
-    public async Task<ActionResult<BaseTask>> GetTask(int id)
+    public async Task<ActionResult<TaskDetailsDto>> GetTask(int id)
     {
         var task = await _taskService.GetByIdAsync(id, HttpContext.RequestAborted);
         if (task == null)
@@ -51,9 +54,14 @@ public class TasksController : ControllerBase
     /// קבלת משימות לפי סוג
     /// </summary>
     [HttpGet("byType/{taskType}")]
-    public async Task<ActionResult<IEnumerable<BaseTask>>> GetTasksByType(string taskType)
+    public async Task<ActionResult<PagedResult<TaskSummaryDto>>> GetTasksByType(
+        string taskType,
+        [FromQuery] PaginationQuery pagination)
     {
-        var tasks = await _taskService.GetByTypeAsync(taskType, HttpContext.RequestAborted);
+        var tasks = await _taskService.GetByTypeAsync(
+            taskType,
+            pagination.ToPageRequest(),
+            HttpContext.RequestAborted);
 
         return Ok(tasks);
     }
@@ -62,7 +70,9 @@ public class TasksController : ControllerBase
     /// קבלת משימות של משתמש מסוים (לא סגורות)
     /// </summary>
     [HttpGet("user/{userId}")]
-    public async Task<ActionResult<IEnumerable<BaseTask>>> GetUserTasks(int userId)
+    public async Task<ActionResult<PagedResult<TaskSummaryDto>>> GetUserTasks(
+        int userId,
+        [FromQuery] PaginationQuery pagination)
     {
         var userExists = await _taskService.UserExistsAsync(userId, HttpContext.RequestAborted);
         if (!userExists)
@@ -70,7 +80,10 @@ public class TasksController : ControllerBase
             return NotFound("משתמש לא קיים");
         }
 
-        var tasks = await _taskService.GetOpenByUserAsync(userId, HttpContext.RequestAborted);
+        var tasks = await _taskService.GetOpenByUserAsync(
+            userId,
+            pagination.ToPageRequest(),
+            HttpContext.RequestAborted);
         return Ok(tasks);
     }
 
@@ -78,7 +91,7 @@ public class TasksController : ControllerBase
     /// יצירת משימה חדשה
     /// </summary>
     [HttpPost]
-    public async Task<ActionResult<BaseTask>> CreateTask(CreateTaskRequest request)
+    public async Task<ActionResult<TaskDetailsDto>> CreateTask(CreateTaskRequest request)
     {
         // וולידציה בסיסית
         if (string.IsNullOrWhiteSpace(request.TaskType))
@@ -144,12 +157,14 @@ public class TasksController : ControllerBase
             id,
             result.NewStatus);
 
+        var updatedTask = await _taskService.GetByIdAsync(id, HttpContext.RequestAborted);
+
         return Ok(new
         {
             success = true,
             message = result.Message,
             newStatus = result.NewStatus,
-            task = result.UpdatedTask
+            task = updatedTask
         });
     }
 
@@ -177,11 +192,13 @@ public class TasksController : ControllerBase
             id,
             request.FinalNotes);
 
+        var updatedTask = await _taskService.GetByIdAsync(id, HttpContext.RequestAborted);
+
         return Ok(new
         {
             success = true,
             message = result.Message,
-            task = result.UpdatedTask
+            task = updatedTask
         });
     }
 

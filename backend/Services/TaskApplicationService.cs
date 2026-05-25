@@ -2,6 +2,7 @@ using DanTaskManager.Data;
 using DanTaskManager.Domain;
 using DanTaskManager.Domain.Handlers;
 using Microsoft.EntityFrameworkCore;
+using System.Linq.Expressions;
 using System.Text.Json;
 
 namespace DanTaskManager.Services;
@@ -25,37 +26,48 @@ public class TaskApplicationService : ITaskApplicationService
         _logger = logger;
     }
 
-    public async Task<IReadOnlyList<BaseTask>> GetAllAsync(CancellationToken cancellationToken = default)
+    public Task<PagedResult<TaskSummaryDto>> GetAllAsync(
+        PageRequest pageRequest,
+        CancellationToken cancellationToken = default)
     {
-        return await _context.Tasks
-            .AsNoTracking()
-            .Include(t => t.AssignedToUser)
-            .OrderByDescending(t => t.CreatedAt)
-            .ToListAsync(cancellationToken);
+        return QueryTaskSummariesAsync(
+            _context.Tasks.AsNoTracking(),
+            pageRequest,
+            cancellationToken);
     }
 
-    public async Task<IReadOnlyList<BaseTask>> GetByTypeAsync(
+    public Task<PagedResult<TaskSummaryDto>> GetByTypeAsync(
         string taskType,
+        PageRequest pageRequest,
         CancellationToken cancellationToken = default)
     {
-        return await _context.Tasks
+        var query = _context.Tasks
             .AsNoTracking()
-            .Where(t => t.TaskType == taskType)
-            .Include(t => t.AssignedToUser)
-            .OrderByDescending(t => t.CreatedAt)
-            .ToListAsync(cancellationToken);
+            .Where(t => t.TaskType == taskType);
+
+        return QueryTaskSummariesAsync(query, pageRequest, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<BaseTask>> GetOpenByUserAsync(
+    public Task<PagedResult<TaskSummaryDto>> GetOpenByUserAsync(
         int userId,
+        PageRequest pageRequest,
         CancellationToken cancellationToken = default)
     {
-        var tasks = await _workflowService.GetUserTasksAsync(userId, cancellationToken);
-        return tasks.ToList();
+        var query = _context.Tasks
+            .AsNoTracking()
+            .Where(t => t.AssignedToUserId == userId && t.CurrentStatus != WorkflowConstants.ClosedStatus);
+
+        return QueryTaskSummariesAsync(query, pageRequest, cancellationToken);
     }
 
-    public Task<BaseTask?> GetByIdAsync(int taskId, CancellationToken cancellationToken = default)
-        => _workflowService.GetTaskAsync(taskId, cancellationToken);
+    public Task<TaskDetailsDto?> GetByIdAsync(int taskId, CancellationToken cancellationToken = default)
+    {
+        return _context.Tasks
+            .AsNoTracking()
+            .Where(t => t.Id == taskId)
+            .Select(MapToTaskDetails())
+            .FirstOrDefaultAsync(cancellationToken);
+    }
 
     public Task<bool> UserExistsAsync(int userId, CancellationToken cancellationToken = default)
     {
@@ -105,7 +117,13 @@ public class TaskApplicationService : ITaskApplicationService
             task.TaskType,
             task.AssignedToUserId);
 
-        return TaskCreationResult.SuccessResult(task);
+        var createdTask = await GetByIdAsync(task.Id, cancellationToken);
+        if (createdTask == null)
+        {
+            return TaskCreationResult.FailureResult("המשימה נוצרה אך לא ניתן היה לטעון אותה מחדש");
+        }
+
+        return TaskCreationResult.SuccessResult(createdTask);
     }
 
     public async Task<bool> UpdateDescriptionAsync(
@@ -159,6 +177,71 @@ public class TaskApplicationService : ITaskApplicationService
         return _workflowService.CloseTaskAsync(taskId, finalNotes, cancellationToken);
     }
 
+    private async Task<PagedResult<TaskSummaryDto>> QueryTaskSummariesAsync(
+        IQueryable<BaseTask> query,
+        PageRequest pageRequest,
+        CancellationToken cancellationToken)
+    {
+        var page = pageRequest.NormalizedPage;
+        var pageSize = pageRequest.NormalizedPageSize;
+
+        var orderedQuery = query.OrderByDescending(t => t.CreatedAt);
+        var totalCount = await orderedQuery.CountAsync(cancellationToken);
+
+        var items = await orderedQuery
+            .Skip(pageRequest.Skip)
+            .Take(pageSize)
+            .Select(MapToTaskSummary())
+            .ToListAsync(cancellationToken);
+
+        return PagedResult<TaskSummaryDto>.Create(items, totalCount, page, pageSize);
+    }
+
+    private static Expression<Func<BaseTask, TaskSummaryDto>> MapToTaskSummary()
+    {
+        return task => new TaskSummaryDto
+        {
+            Id = task.Id,
+            TaskType = task.TaskType,
+            CurrentStatus = task.CurrentStatus,
+            AssignedToUserId = task.AssignedToUserId,
+            Description = task.Description,
+            CreatedAt = task.CreatedAt,
+            UpdatedAt = task.UpdatedAt,
+            AssignedToUser = task.AssignedToUser == null
+                ? null
+                : new UserBriefDto
+                {
+                    Id = task.AssignedToUser.Id,
+                    Name = task.AssignedToUser.Name,
+                    Email = task.AssignedToUser.Email
+                }
+        };
+    }
+
+    private static Expression<Func<BaseTask, TaskDetailsDto>> MapToTaskDetails()
+    {
+        return task => new TaskDetailsDto
+        {
+            Id = task.Id,
+            TaskType = task.TaskType,
+            CurrentStatus = task.CurrentStatus,
+            AssignedToUserId = task.AssignedToUserId,
+            Description = task.Description,
+            CreatedAt = task.CreatedAt,
+            UpdatedAt = task.UpdatedAt,
+            CustomDataJson = task.CustomDataJson,
+            AssignedToUser = task.AssignedToUser == null
+                ? null
+                : new UserBriefDto
+                {
+                    Id = task.AssignedToUser.Id,
+                    Name = task.AssignedToUser.Name,
+                    Email = task.AssignedToUser.Email
+                }
+        };
+    }
+
     private static bool TryNormalizeJson(
         string? rawJson,
         out string normalizedJson,
@@ -180,4 +263,9 @@ public class TaskApplicationService : ITaskApplicationService
             return false;
         }
     }
+}
+
+internal static class WorkflowConstants
+{
+    public const int ClosedStatus = 99;
 }
