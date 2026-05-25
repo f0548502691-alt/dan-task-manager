@@ -1,4 +1,6 @@
 using DanTaskManager.Domain.Handlers;
+using DanTaskManager.Services;
+using Microsoft.Extensions.DependencyInjection;
 using System.Text.Json;
 
 namespace DanTaskManager.Tests;
@@ -126,7 +128,7 @@ public class ProcurementTaskHandlerTests
 
         // Assert
         Assert.False(result.IsValid);
-        Assert.Contains("סטטוס סופי", result.Message);
+        Assert.Contains("מעבר לסטטוס 3", result.Message);
     }
 
     [Fact]
@@ -407,5 +409,28 @@ public class TaskHandlerFactoryTests
         Assert.Contains("Procurement", types);
         Assert.Contains("Development", types);
         Assert.Equal(2, types.Count());
+    }
+}
+
+public class TaskHandlerRegistrationExtensionsTests
+{
+    [Fact]
+    public void AddTaskHandlersFromAssembly_RegistersDomainHandlersAsTransientImplementations()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        services.AddTaskHandlersFromAssembly(typeof(ITaskHandler).Assembly);
+
+        // Assert
+        var descriptors = services
+            .Where(descriptor => descriptor.ServiceType == typeof(ITaskHandler))
+            .ToList();
+
+        Assert.Contains(descriptors, descriptor => descriptor.ImplementationType == typeof(ProcurementTaskHandler));
+        Assert.Contains(descriptors, descriptor => descriptor.ImplementationType == typeof(DevelopmentTaskHandler));
+        Assert.All(descriptors, descriptor => Assert.Equal(ServiceLifetime.Transient, descriptor.Lifetime));
+        Assert.DoesNotContain(descriptors, descriptor => descriptor.ImplementationType?.IsAbstract == true);
     }
 }

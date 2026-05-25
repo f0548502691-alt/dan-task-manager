@@ -159,6 +159,27 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         Assert.Equal(2, result.NewStatus);
     }
 
+    [Fact]
+    public async Task ChangeStatus_WithInvalidNewDataJson_ShouldFailBeforeChangingTask()
+    {
+        // Arrange
+        var task = await _context.Tasks.FindAsync(1);
+        task!.CurrentStatus = 1;
+        _context.Tasks.Update(task);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.ChangeStatusAsync(1, 2, "{not valid json");
+
+        // Assert
+        Assert.False(result.Success);
+        Assert.Contains("JSON תקין", result.Message);
+
+        var unchangedTask = await _context.Tasks.FindAsync(1);
+        Assert.Equal(1, unchangedTask!.CurrentStatus);
+        Assert.Equal("{}", unchangedTask.CustomDataJson);
+    }
+
     // === Closed Status Tests ===
 
     [Fact]
