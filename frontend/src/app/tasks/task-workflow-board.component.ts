@@ -6,6 +6,7 @@ import {
   BaseTaskDto,
   ChangeStatusWorkflowRequest,
   DEFAULT_STATUS_LABELS,
+  TASK_STATUS,
   TASK_FINAL_STATUS_BY_TYPE,
   TaskCustomData
 } from './task.interfaces';
@@ -198,13 +199,13 @@ export class TaskWorkflowBoardComponent {
 
   private buildPayload(taskType: string, status: number): TaskCustomData {
     if (taskType === 'Procurement') {
-      if (status === 2) {
+      if (status === TASK_STATUS.READY_FOR_REVIEW) {
         return {
           prices: [this.form.controls['priceA'].value, this.form.controls['priceB'].value]
         };
       }
 
-      if (status === 3) {
+      if (status === TASK_STATUS.DONE) {
         return {
           receipt: this.form.controls['receipt'].value
         };
@@ -214,19 +215,19 @@ export class TaskWorkflowBoardComponent {
     }
 
     if (taskType === 'Development') {
-      if (status === 2) {
+      if (status === TASK_STATUS.READY_FOR_REVIEW) {
         return {
           specification: this.form.controls['specification'].value
         };
       }
 
-      if (status === 3) {
+      if (status === TASK_STATUS.DONE) {
         return {
           branchName: this.form.controls['branchName'].value
         };
       }
 
-      if (status === 4) {
+      if (status === TASK_STATUS.RELEASED) {
         return {
           versionNumber: this.form.controls['versionNumber'].value
         };

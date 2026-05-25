@@ -8,7 +8,7 @@ import {
   ChangeStatusWorkflowResponse,
   CloseTaskRequest,
   CloseTaskResponse,
-  CLOSED_TASK_STATUS,
+  TASK_STATUS,
   CreateTaskRequest,
   UpdateTaskRequest
 } from './task.interfaces';
@@ -125,7 +125,7 @@ export class TaskService {
 
   private syncTaskWithState(task: BaseTaskDto): void {
     const currentUserId = this._currentUserId();
-    if (currentUserId === null || task.assignedToUserId !== currentUserId || task.currentStatus === CLOSED_TASK_STATUS) {
+    if (currentUserId === null || task.assignedToUserId !== currentUserId || task.currentStatus === TASK_STATUS.CLOSED) {
       this.removeTaskFromState(task.id);
       return;
     }
