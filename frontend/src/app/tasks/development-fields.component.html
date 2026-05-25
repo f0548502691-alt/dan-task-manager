@@ -1,0 +1,19 @@
+<div [formGroup]="form" [ngSwitch]="status">
+  <ng-container *ngSwitchCase="2">
+    <label for="specification">Specification</label>
+    <textarea id="specification" rows="4" formControlName="specification"></textarea>
+    <small *ngIf="isInvalid('specification')">Specification must contain at least 10 characters.</small>
+  </ng-container>
+
+  <ng-container *ngSwitchCase="3">
+    <label for="branchName">Branch name</label>
+    <input id="branchName" type="text" formControlName="branchName" />
+    <small *ngIf="isInvalid('branchName')">Branch name is required and must not contain spaces.</small>
+  </ng-container>
+
+  <ng-container *ngSwitchCase="4">
+    <label for="versionNumber">Version number</label>
+    <input id="versionNumber" type="text" formControlName="versionNumber" />
+    <small *ngIf="isInvalid('versionNumber')">Version number is required.</small>
+  </ng-container>
+</div>
