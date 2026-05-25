@@ -8,40 +8,20 @@ namespace DanTaskManager.Domain.Handlers;
 /// סטטוס 2: דורש מערך של 2 מחרוזות (מחירים)
 /// סטטוס 3: דורש קבלה (מחרוזת)
 /// </summary>
-public class ProcurementTaskHandler : ITaskHandler
+public class ProcurementTaskHandler : StatusValidationTaskHandlerBase
 {
+    public ProcurementTaskHandler()
+        : base(new Dictionary<int, Func<string, ValidationResult>>
+        {
+            [2] = ValidateStatusTwo,
+            [3] = ValidateStatusThree
+        })
+    {
+    }
+
     public string TaskType => "Procurement";
 
     public int FinalStatus => 3;
-
-    public ValidationResult ValidateStatusChange(
-        string currentDataJson,
-        int currentStatus,
-        int nextStatus,
-        string newDataJson)
-    {
-        // לא יכול להעבור את הסטטוס הסופי
-        if (currentStatus >= FinalStatus && nextStatus > currentStatus)
-        {
-            return ValidationResult.Failure(
-                $"לא ניתן להעביר משימת Procurement מעבר לסטטוס {FinalStatus}");
-        }
-
-        // וולידציה ספציפית לסטטוס 2
-        if (nextStatus == 2)
-        {
-            return ValidateStatusTwo(newDataJson);
-        }
-
-        // וולידציה ספציפית לסטטוס 3
-        if (nextStatus == 3)
-        {
-            return ValidateStatusThree(newDataJson);
-        }
-
-        // סטטוסים אחרים לא דורשים וולידציה
-        return ValidationResult.Success();
-    }
 
     /// <summary>
     /// וולידציה לסטטוס 2: בדיקת מערך מחירים (2 מחרוזות)

@@ -1,7 +1,6 @@
-using DanTaskManager.Data;
 using DanTaskManager.Domain;
+using DanTaskManager.Services;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace DanTaskManager.Controllers;
 
@@ -12,12 +11,14 @@ namespace DanTaskManager.Controllers;
 [Route("api/[controller]")]
 public class UsersController : ControllerBase
 {
-    private readonly ApplicationDbContext _context;
+    private readonly IUserApplicationService _userService;
     private readonly ILogger<UsersController> _logger;
 
-    public UsersController(ApplicationDbContext context, ILogger<UsersController> logger)
+    public UsersController(
+        IUserApplicationService userService,
+        ILogger<UsersController> logger)
     {
-        _context = context;
+        _userService = userService;
         _logger = logger;
     }
 
@@ -27,10 +28,7 @@ public class UsersController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<IEnumerable<AppUser>>> GetUsers()
     {
-        var users = await _context.Users
-            .Include(u => u.Tasks)
-            .ToListAsync();
-        
+        var users = await _userService.GetAllAsync(HttpContext.RequestAborted);
         return Ok(users);
     }
 
@@ -40,9 +38,7 @@ public class UsersController : ControllerBase
     [HttpGet("{id}")]
     public async Task<ActionResult<AppUser>> GetUser(int id)
     {
-        var user = await _context.Users
-            .Include(u => u.Tasks)
-            .FirstOrDefaultAsync(u => u.Id == id);
+        var user = await _userService.GetByIdAsync(id, HttpContext.RequestAborted);
 
         if (user == null)
         {
@@ -58,14 +54,28 @@ public class UsersController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<AppUser>> CreateUser(CreateUserRequest request)
     {
-        var user = new AppUser
+        if (string.IsNullOrWhiteSpace(request.Name))
         {
-            Name = request.Name,
-            Email = request.Email
-        };
+            return BadRequest(new { error = "Name נדרש" });
+        }
 
-        _context.Users.Add(user);
-        await _context.SaveChangesAsync();
+        if (string.IsNullOrWhiteSpace(request.Email))
+        {
+            return BadRequest(new { error = "Email נדרש" });
+        }
+
+        var result = await _userService.CreateAsync(
+            new UserCreateCommand(request.Name, request.Email),
+            HttpContext.RequestAborted);
+
+        if (!result.Success)
+        {
+            return BadRequest(new { error = result.Message });
+        }
+
+        var user = result.CreatedUser!;
+
+        _logger.LogInformation("משתמש חדש נוצר: {UserId} ({Email})", user.Id, user.Email);
 
         return CreatedAtAction(nameof(GetUser), new { id = user.Id }, user);
     }
@@ -76,15 +86,13 @@ public class UsersController : ControllerBase
     [HttpGet("{id}/tasks")]
     public async Task<ActionResult<IEnumerable<BaseTask>>> GetUserTasks(int id)
     {
-        var user = await _context.Users.FindAsync(id);
-        if (user == null)
+        var userExists = await _userService.ExistsAsync(id, HttpContext.RequestAborted);
+        if (!userExists)
         {
             return NotFound("משתמש לא קיים");
         }
 
-        var tasks = await _context.Tasks
-            .Where(t => t.AssignedToUserId == id)
-            .ToListAsync();
+        var tasks = await _userService.GetUserTasksAsync(id, HttpContext.RequestAborted);
 
         return Ok(tasks);
     }

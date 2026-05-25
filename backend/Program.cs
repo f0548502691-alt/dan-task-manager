@@ -12,8 +12,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 );
 
 // ✅ הרשמה של Task Handlers
-builder.Services.AddTransient<ITaskHandler, ProcurementTaskHandler>();
-builder.Services.AddTransient<ITaskHandler, DevelopmentTaskHandler>();
+builder.Services.AddTaskHandlersFromAssembly(typeof(ITaskHandler).Assembly);
 
 // ✅ הרשמה של TaskHandlerFactory
 builder.Services.AddSingleton(sp => new TaskHandlerFactory(sp.GetRequiredService<IEnumerable<ITaskHandler>>()));
@@ -23,6 +22,10 @@ builder.Services.AddScoped<ITaskStatusService, TaskStatusService>();
 
 // ✅ הרשמה של Task Workflow Service
 builder.Services.AddScoped<ITaskWorkflowService, TaskWorkflowService>();
+
+// ✅ הרשמה של Application Services
+builder.Services.AddScoped<ITaskApplicationService, TaskApplicationService>();
+builder.Services.AddScoped<IUserApplicationService, UserApplicationService>();
 
 // הוספת Swagger/OpenAPI (אופציונלי)
 builder.Services.AddEndpointsApiExplorer();

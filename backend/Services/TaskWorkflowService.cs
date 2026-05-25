@@ -13,22 +13,31 @@ public interface ITaskWorkflowService
     /// <summary>
     /// שינוי סטטוס של משימה עם כללי workflow
     /// </summary>
-    Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, string newDataJson);
+    Task<WorkflowResult> ChangeStatusAsync(
+        int taskId,
+        int newStatus,
+        string newDataJson,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// סגירת משימה (סטטוס סופי)
     /// </summary>
-    Task<WorkflowResult> CloseTaskAsync(int taskId, string finalNotes);
+    Task<WorkflowResult> CloseTaskAsync(
+        int taskId,
+        string finalNotes,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// קבלת משימות של משתמש מסוים
     /// </summary>
-    Task<IEnumerable<BaseTask>> GetUserTasksAsync(int userId);
+    Task<IEnumerable<BaseTask>> GetUserTasksAsync(
+        int userId,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// קבלת משימה עם פרטיה מלאים
     /// </summary>
-    Task<BaseTask?> GetTaskAsync(int taskId);
+    Task<BaseTask?> GetTaskAsync(int taskId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -71,10 +80,14 @@ public class TaskWorkflowService : ITaskWorkflowService
         _logger = logger;
     }
 
-    public async Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, string newDataJson)
+    public async Task<WorkflowResult> ChangeStatusAsync(
+        int taskId,
+        int newStatus,
+        string newDataJson,
+        CancellationToken cancellationToken = default)
     {
         // 1. קבלת המשימה
-        var task = await _context.Tasks.FindAsync(taskId);
+        var task = await _context.Tasks.FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
         if (task == null)
         {
             return WorkflowResult.FailureResult("משימה לא קיימת");
@@ -112,17 +125,17 @@ public class TaskWorkflowService : ITaskWorkflowService
         }
 
         // 6. עדכון המשימה
+        var oldStatus = task.CurrentStatus;
         task.CurrentStatus = newStatus;
         task.CustomDataJson = newDataJson;
         task.UpdatedAt = DateTime.UtcNow;
 
-        _context.Tasks.Update(task);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
             "משימה {TaskId} עודכנה מסטטוס {OldStatus} ל-{NewStatus}",
             taskId,
-            task.CurrentStatus,
+            oldStatus,
             newStatus);
 
         return WorkflowResult.SuccessResult(
@@ -131,9 +144,12 @@ public class TaskWorkflowService : ITaskWorkflowService
             $"סטטוס עודכן בהצלחה ל-{newStatus}");
     }
 
-    public async Task<WorkflowResult> CloseTaskAsync(int taskId, string finalNotes)
+    public async Task<WorkflowResult> CloseTaskAsync(
+        int taskId,
+        string finalNotes,
+        CancellationToken cancellationToken = default)
     {
-        var task = await _context.Tasks.FindAsync(taskId);
+        var task = await _context.Tasks.FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
         if (task == null)
         {
             return WorkflowResult.FailureResult("משימה לא קיימת");
@@ -148,8 +164,6 @@ public class TaskWorkflowService : ITaskWorkflowService
         var updatedJson = task.CustomDataJson;
         try
         {
-            var jsonDoc = System.Text.Json.JsonDocument.Parse(updatedJson);
-            var json = System.Text.Json.JsonSerializer.Deserialize<dynamic>(updatedJson) ?? new();
             var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(updatedJson) ?? new();
             dict["finalNotes"] = finalNotes;
             dict["closedAt"] = DateTime.UtcNow.ToString("o");
@@ -168,8 +182,7 @@ public class TaskWorkflowService : ITaskWorkflowService
         task.CustomDataJson = updatedJson;
         task.UpdatedAt = DateTime.UtcNow;
 
-        _context.Tasks.Update(task);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
             "משימה {TaskId} סגורה עם הערות: {Notes}",
@@ -182,20 +195,24 @@ public class TaskWorkflowService : ITaskWorkflowService
             "משימה סגורה בהצלחה");
     }
 
-    public async Task<IEnumerable<BaseTask>> GetUserTasksAsync(int userId)
+    public async Task<IEnumerable<BaseTask>> GetUserTasksAsync(
+        int userId,
+        CancellationToken cancellationToken = default)
     {
         return await _context.Tasks
+            .AsNoTracking()
             .Where(t => t.AssignedToUserId == userId && t.CurrentStatus != ClosedStatus)
             .Include(t => t.AssignedToUser)
             .OrderByDescending(t => t.CreatedAt)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
     }
 
-    public async Task<BaseTask?> GetTaskAsync(int taskId)
+    public async Task<BaseTask?> GetTaskAsync(int taskId, CancellationToken cancellationToken = default)
     {
         return await _context.Tasks
+            .AsNoTracking()
             .Include(t => t.AssignedToUser)
-            .FirstOrDefaultAsync(t => t.Id == taskId);
+            .FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
     }
 
     /// <summary>

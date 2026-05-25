@@ -9,46 +9,21 @@ namespace DanTaskManager.Domain.Handlers;
 /// סטטוס 3: דורש שם בראנץ' (branch name)
 /// סטטוס 4: דורש מספר גרסה (version number)
 /// </summary>
-public class DevelopmentTaskHandler : ITaskHandler
+public class DevelopmentTaskHandler : StatusValidationTaskHandlerBase
 {
+    public DevelopmentTaskHandler()
+        : base(new Dictionary<int, Func<string, ValidationResult>>
+        {
+            [2] = ValidateStatusTwo,
+            [3] = ValidateStatusThree,
+            [4] = ValidateStatusFour
+        })
+    {
+    }
+
     public string TaskType => "Development";
 
     public int FinalStatus => 4;
-
-    public ValidationResult ValidateStatusChange(
-        string currentDataJson,
-        int currentStatus,
-        int nextStatus,
-        string newDataJson)
-    {
-        // לא יכול להעבור את הסטטוס הסופי
-        if (currentStatus >= FinalStatus && nextStatus > currentStatus)
-        {
-            return ValidationResult.Failure(
-                $"לא ניתן להעביר משימת Development מעבר לסטטוס {FinalStatus}");
-        }
-
-        // וולידציה ספציפית לסטטוס 2
-        if (nextStatus == 2)
-        {
-            return ValidateStatusTwo(newDataJson);
-        }
-
-        // וולידציה ספציפית לסטטוס 3
-        if (nextStatus == 3)
-        {
-            return ValidateStatusThree(newDataJson);
-        }
-
-        // וולידציה ספציפית לסטטוס 4
-        if (nextStatus == 4)
-        {
-            return ValidateStatusFour(newDataJson);
-        }
-
-        // סטטוסים אחרים לא דורשים וולידציה
-        return ValidationResult.Success();
-    }
 
     /// <summary>
     /// וולידציה לסטטוס 2: בדיקת טקסט אפיון

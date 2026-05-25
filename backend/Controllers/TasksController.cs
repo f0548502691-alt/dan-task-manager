@@ -1,9 +1,6 @@
-using DanTaskManager.Data;
 using DanTaskManager.Domain;
 using DanTaskManager.Services;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using System.Text.Json;
 
 namespace DanTaskManager.Controllers;
 
@@ -14,20 +11,14 @@ namespace DanTaskManager.Controllers;
 [Route("api/[controller]")]
 public class TasksController : ControllerBase
 {
-    private readonly ApplicationDbContext _context;
-    private readonly ITaskStatusService _taskStatusService;
-    private readonly ITaskWorkflowService _workflowService;
+    private readonly ITaskApplicationService _taskService;
     private readonly ILogger<TasksController> _logger;
 
     public TasksController(
-        ApplicationDbContext context,
-        ITaskStatusService taskStatusService,
-        ITaskWorkflowService workflowService,
+        ITaskApplicationService taskService,
         ILogger<TasksController> logger)
     {
-        _context = context;
-        _taskStatusService = taskStatusService;
-        _workflowService = workflowService;
+        _taskService = taskService;
         _logger = logger;
     }
 
@@ -37,10 +28,7 @@ public class TasksController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<IEnumerable<BaseTask>>> GetTasks()
     {
-        var tasks = await _context.Tasks
-            .Include(t => t.AssignedToUser)
-            .ToListAsync();
-        
+        var tasks = await _taskService.GetAllAsync(HttpContext.RequestAborted);
         return Ok(tasks);
     }
 
@@ -50,7 +38,7 @@ public class TasksController : ControllerBase
     [HttpGet("{id}")]
     public async Task<ActionResult<BaseTask>> GetTask(int id)
     {
-        var task = await _workflowService.GetTaskAsync(id);
+        var task = await _taskService.GetByIdAsync(id, HttpContext.RequestAborted);
         if (task == null)
         {
             return NotFound();
@@ -65,10 +53,7 @@ public class TasksController : ControllerBase
     [HttpGet("byType/{taskType}")]
     public async Task<ActionResult<IEnumerable<BaseTask>>> GetTasksByType(string taskType)
     {
-        var tasks = await _context.Tasks
-            .Include(t => t.AssignedToUser)
-            .Where(t => t.TaskType == taskType)
-            .ToListAsync();
+        var tasks = await _taskService.GetByTypeAsync(taskType, HttpContext.RequestAborted);
 
         return Ok(tasks);
     }
@@ -79,13 +64,13 @@ public class TasksController : ControllerBase
     [HttpGet("user/{userId}")]
     public async Task<ActionResult<IEnumerable<BaseTask>>> GetUserTasks(int userId)
     {
-        var user = await _context.Users.FindAsync(userId);
-        if (user == null)
+        var userExists = await _taskService.UserExistsAsync(userId, HttpContext.RequestAborted);
+        if (!userExists)
         {
             return NotFound("משתמש לא קיים");
         }
 
-        var tasks = await _workflowService.GetUserTasksAsync(userId);
+        var tasks = await _taskService.GetOpenByUserAsync(userId, HttpContext.RequestAborted);
         return Ok(tasks);
     }
 
@@ -106,24 +91,20 @@ public class TasksController : ControllerBase
             return BadRequest(new { error = "Description נדרש" });
         }
 
-        // בדיקה שהמשתמש קיים
-        var user = await _context.Users.FindAsync(request.AssignedToUserId);
-        if (user == null)
+        var result = await _taskService.CreateAsync(
+            new TaskCreateCommand(
+                request.TaskType,
+                request.Description,
+                request.AssignedToUserId,
+                request.CustomDataJson ?? "{}"),
+            HttpContext.RequestAborted);
+
+        if (!result.Success)
         {
-            return BadRequest(new { error = "משתמש לא קיים" });
+            return BadRequest(new { error = result.Message });
         }
 
-        var task = new BaseTask
-        {
-            TaskType = request.TaskType,
-            Description = request.Description,
-            AssignedToUserId = request.AssignedToUserId,
-            CurrentStatus = 0, // תמיד מתחיל בסטטוס 0
-            CustomDataJson = request.CustomDataJson ?? "{}"
-        };
-
-        _context.Tasks.Add(task);
-        await _context.SaveChangesAsync();
+        var task = result.CreatedTask!;
 
         _logger.LogInformation(
             "משימה חדשה יצרה: {TaskId}, סוג: {TaskType}, משתמש: {UserId}",
@@ -147,10 +128,11 @@ public class TasksController : ControllerBase
             return BadRequest(new { error = "NewDataJson נדרש" });
         }
 
-        var result = await _workflowService.ChangeStatusAsync(
+        var result = await _taskService.ChangeStatusAsync(
             id,
             request.NewStatus,
-            request.NewDataJson);
+            request.NewDataJson,
+            HttpContext.RequestAborted);
 
         if (!result.Success)
         {
@@ -183,7 +165,7 @@ public class TasksController : ControllerBase
             return BadRequest(new { error = "FinalNotes נדרש" });
         }
 
-        var result = await _workflowService.CloseTaskAsync(id, request.FinalNotes);
+        var result = await _taskService.CloseAsync(id, request.FinalNotes, HttpContext.RequestAborted);
 
         if (!result.Success)
         {
@@ -209,20 +191,14 @@ public class TasksController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateTask(int id, UpdateTaskRequest request)
     {
-        var task = await _context.Tasks.FindAsync(id);
-
-        if (task == null)
+        var updated = await _taskService.UpdateDescriptionAsync(
+            id,
+            request.Description,
+            HttpContext.RequestAborted);
+        if (!updated)
         {
             return NotFound();
         }
-
-        if (!string.IsNullOrEmpty(request.Description))
-            task.Description = request.Description;
-
-        task.UpdatedAt = DateTime.UtcNow;
-
-        _context.Tasks.Update(task);
-        await _context.SaveChangesAsync();
 
         return NoContent();
     }
@@ -233,15 +209,11 @@ public class TasksController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteTask(int id)
     {
-        var task = await _context.Tasks.FindAsync(id);
-
-        if (task == null)
+        var deleted = await _taskService.DeleteAsync(id, HttpContext.RequestAborted);
+        if (!deleted)
         {
             return NotFound();
         }
-
-        _context.Tasks.Remove(task);
-        await _context.SaveChangesAsync();
 
         _logger.LogInformation("משימה {TaskId} נמחקה", id);
 
