@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges } from '@angular/core';
-import { FormControl, FormGroup, ReactiveFormsModule, ValidatorFn, Validators } from '@angular/forms';
+import { FormGroup, ReactiveFormsModule, ValidatorFn, Validators } from '@angular/forms';
+import { TASK_STATUS } from './task.interfaces';
 
 @Component({
   selector: 'app-development-fields',
@@ -15,7 +16,6 @@ export class DevelopmentFieldsComponent implements OnChanges {
 
   ngOnChanges(changes: SimpleChanges): void {
     if ('form' in changes || 'status' in changes) {
-      this.ensureControls();
       this.syncValidators();
     }
   }
@@ -25,22 +25,16 @@ export class DevelopmentFieldsComponent implements OnChanges {
     return !!control && control.invalid && (control.touched || control.dirty);
   }
 
-  private ensureControls(): void {
-    this.addControlIfMissing('specification');
-    this.addControlIfMissing('branchName');
-    this.addControlIfMissing('versionNumber');
-  }
-
   private syncValidators(): void {
-    this.setControlState('specification', this.status === 2, [Validators.required, Validators.minLength(10)]);
-    this.setControlState('branchName', this.status === 3, [Validators.required, Validators.pattern(/^\S+$/)]);
-    this.setControlState('versionNumber', this.status === 4, [Validators.required]);
-  }
-
-  private addControlIfMissing(controlName: string): void {
-    if (!this.form.contains(controlName)) {
-      this.form.addControl(controlName, new FormControl<string>(''));
-    }
+    this.setControlState('specification', this.status === TASK_STATUS.READY_FOR_REVIEW, [
+      Validators.required,
+      Validators.minLength(10)
+    ]);
+    this.setControlState('branchName', this.status === TASK_STATUS.DONE, [
+      Validators.required,
+      Validators.pattern(/^\S+$/)
+    ]);
+    this.setControlState('versionNumber', this.status === TASK_STATUS.RELEASED, [Validators.required]);
   }
 
   private setControlState(controlName: string, enabled: boolean, validators: ValidatorFn[]): void {

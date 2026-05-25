@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges } from '@angular/core';
-import { FormControl, FormGroup, ReactiveFormsModule, ValidatorFn, Validators } from '@angular/forms';
+import { FormGroup, ReactiveFormsModule, ValidatorFn, Validators } from '@angular/forms';
+import { TASK_STATUS } from './task.interfaces';
 
 @Component({
   selector: 'app-procurement-fields',
@@ -15,7 +16,6 @@ export class ProcurementFieldsComponent implements OnChanges {
 
   ngOnChanges(changes: SimpleChanges): void {
     if ('form' in changes || 'status' in changes) {
-      this.ensureControls();
       this.syncValidators();
     }
   }
@@ -25,22 +25,10 @@ export class ProcurementFieldsComponent implements OnChanges {
     return !!control && control.invalid && (control.touched || control.dirty);
   }
 
-  private ensureControls(): void {
-    this.addControlIfMissing('priceA');
-    this.addControlIfMissing('priceB');
-    this.addControlIfMissing('receipt');
-  }
-
   private syncValidators(): void {
-    this.setControlState('priceA', this.status === 2, [Validators.required]);
-    this.setControlState('priceB', this.status === 2, [Validators.required]);
-    this.setControlState('receipt', this.status === 3, [Validators.required]);
-  }
-
-  private addControlIfMissing(controlName: string): void {
-    if (!this.form.contains(controlName)) {
-      this.form.addControl(controlName, new FormControl<string>(''));
-    }
+    this.setControlState('priceA', this.status === TASK_STATUS.READY_FOR_REVIEW, [Validators.required]);
+    this.setControlState('priceB', this.status === TASK_STATUS.READY_FOR_REVIEW, [Validators.required]);
+    this.setControlState('receipt', this.status === TASK_STATUS.DONE, [Validators.required]);
   }
 
   private setControlState(controlName: string, enabled: boolean, validators: ValidatorFn[]): void {
