@@ -99,6 +99,11 @@ public class TaskWorkflowService : ITaskWorkflowService
             return WorkflowResult.FailureResult("משימה סגורה - לא ניתן לשנות סטטוס");
         }
 
+        if (!IsValidJsonPayload(newDataJson))
+        {
+            return WorkflowResult.FailureResult("NewDataJson חייב להיות JSON תקין");
+        }
+
         // 3. קבלת ה-Handler לבדיקת הוולידציה
         var handler = _handlerFactory.GetHandler(task.TaskType);
 
@@ -270,5 +275,23 @@ public class TaskWorkflowService : ITaskWorkflowService
     {
         public bool IsValid { get; set; }
         public string Message { get; set; } = string.Empty;
+    }
+
+    private static bool IsValidJsonPayload(string payload)
+    {
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var _ = System.Text.Json.JsonDocument.Parse(payload);
+            return true;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return false;
+        }
     }
 }
