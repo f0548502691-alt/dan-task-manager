@@ -1,5 +1,6 @@
 using DanTaskManager.Data;
 using DanTaskManager.Domain.Handlers;
+using DanTaskManager.Middleware;
 using DanTaskManager.Services;
 using Microsoft.EntityFrameworkCore;
 
@@ -46,6 +47,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+// Global API error handling with consistent JSON responses.
+app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseHttpsRedirection();
 app.MapControllers();
 
