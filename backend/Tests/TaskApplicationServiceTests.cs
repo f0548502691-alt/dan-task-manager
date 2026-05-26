@@ -17,7 +17,6 @@ public class TaskApplicationServiceTests
             .Options;
 
         await using var context = new ApplicationDbContext(options);
-        await context.Database.EnsureCreatedAsync();
 
         context.Users.Add(new AppUser
         {
