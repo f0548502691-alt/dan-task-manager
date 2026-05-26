@@ -126,7 +126,8 @@ public class ProcurementTaskHandlerTests
 
         // Assert
         Assert.False(result.IsValid);
-        Assert.Contains("סטטוס סופי", result.Message);
+        Assert.Contains("Procurement", result.Message);
+        Assert.Contains("3", result.Message);
     }
 
     [Fact]

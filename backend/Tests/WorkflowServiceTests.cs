@@ -20,14 +20,14 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
     public TaskWorkflowServiceTests()
     {
         _options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase("WorkflowServiceTestDb")
+            .UseInMemoryDatabase($"{nameof(TaskWorkflowServiceTests)}-{Guid.NewGuid()}")
             .Options;
     }
 
     public async Task InitializeAsync()
     {
         _context = new ApplicationDbContext(_options);
-        await _context.Database.EnsureCreatedAsync();
+        await _context.Database.EnsureDeletedAsync();
 
         // Setup handlers
         var handlers = new ITaskHandler[]
@@ -417,14 +417,14 @@ public class TaskWorkflowIntegrationTests : IAsyncLifetime
     public TaskWorkflowIntegrationTests()
     {
         _options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase("WorkflowIntegrationTestDb")
+            .UseInMemoryDatabase($"{nameof(TaskWorkflowIntegrationTests)}-{Guid.NewGuid()}")
             .Options;
     }
 
     public async Task InitializeAsync()
     {
         _context = new ApplicationDbContext(_options);
-        await _context.Database.EnsureCreatedAsync();
+        await _context.Database.EnsureDeletedAsync();
 
         var handlers = new ITaskHandler[]
         {
