@@ -1,7 +1,6 @@
 export const CLOSED_TASK_STATUS = 99;
 
 export const TASK_STATUS = {
-  BACKLOG: 0,
   IN_PROGRESS: 1,
   READY_FOR_REVIEW: 2,
   DONE: 3,
@@ -10,7 +9,6 @@ export const TASK_STATUS = {
 } as const;
 
 export const DEFAULT_STATUS_LABELS: Readonly<Record<number, string>> = {
-  [TASK_STATUS.BACKLOG]: 'Backlog',
   [TASK_STATUS.IN_PROGRESS]: 'In Progress',
   [TASK_STATUS.READY_FOR_REVIEW]: 'Ready for Review',
   [TASK_STATUS.DONE]: 'Done',
@@ -70,6 +68,7 @@ export interface ChangeStatusWorkflowRequest {
 }
 
 export interface CloseTaskRequest {
+  nextAssignedToUserId: number;
   finalNotes: string;
 }
 

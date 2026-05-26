@@ -80,7 +80,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
     const maxStatus = Math.max(finalStatus, task.currentStatus);
     const options: StatusOption[] = [];
 
-    for (let status = 0; status <= maxStatus; status += 1) {
+    for (let status = TASK_STATUS.IN_PROGRESS; status <= maxStatus; status += 1) {
       options.push({ value: status, label: this.getStatusLabel(status) });
     }
 
@@ -217,7 +217,10 @@ export class TaskWorkflowBoardComponent implements OnInit {
     this.taskService.clearError();
 
     this.taskService
-      .closeTask(task.id, { finalNotes })
+      .closeTask(task.id, {
+        nextAssignedToUserId: task.assignedToUserId,
+        finalNotes
+      })
       .pipe(
         takeUntilDestroyed(this.destroyRef),
         finalize(() => this.closeInFlight.set(false))

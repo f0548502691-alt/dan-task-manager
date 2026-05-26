@@ -198,7 +198,12 @@ public class TasksController : ControllerBase
             return BadRequest(new { error = BuildValidationErrorMessage(validation.Errors.Select(e => e.ErrorMessage)) });
         }
 
-        var result = await _taskService.CloseAsync(id, request.FinalNotes, HttpContext.RequestAborted);
+        var result = await _taskService.CloseAsync(
+            id,
+            request.NextAssignedToUserId,
+            request.FinalNotes,
+            HttpContext.RequestAborted);
+
 
         if (!result.Success)
         {
@@ -348,6 +353,11 @@ public class ChangeStatusWorkflowRequest
 /// </summary>
 public class CloseTaskRequest
 {
+    /// <summary>
+    /// המשתמש שאליו המשימה תוקצה בעת הסגירה
+    /// </summary>
+    public int NextAssignedToUserId { get; set; }
+
     /// <summary>
     /// הערות סופיות על המשימה
     /// </summary>
