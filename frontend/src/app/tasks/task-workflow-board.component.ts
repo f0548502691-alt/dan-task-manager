@@ -2,22 +2,19 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
-import {
-  BaseTaskDto,
-  ChangeStatusWorkflowRequest,
-  DEFAULT_STATUS_LABELS,
-  TASK_STATUS,
-  TASK_FINAL_STATUS_BY_TYPE,
-  TaskCustomData
-} from './task.interfaces';
+import { BaseTaskDto, ChangeStatusWorkflowRequest, TASK_STATUS } from './task.interfaces';
 import { TaskService } from './task.service';
 import { DevelopmentFieldsComponent } from './development-fields.component';
 import { ProcurementFieldsComponent } from './procurement-fields.component';
-
-interface StatusOption {
-  value: number;
-  label: string;
-}
+import {
+  WorkflowFieldValues,
+  buildWorkflowPayload,
+  canCloseTaskStatus,
+  getSuggestedTaskStatus,
+  getTaskStatusLabel,
+  getTaskStatusOptions,
+  hydrateWorkflowFields
+} from './task-workflow-board.logic';
 
 const DEFAULT_CURRENT_USER_ID = 1;
 const TASK_TYPE_OPTIONS = ['Procurement', 'Development'] as const;
@@ -63,25 +60,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
     closeNotes: this.fb.nonNullable.control('', [Validators.required, Validators.minLength(3)])
   });
 
-  readonly statusOptions = computed<StatusOption[]>(() => {
-    const task = this.selectedTask();
-    if (!task) {
-      return [];
-    }
-    if (task.currentStatus === TASK_STATUS.CLOSED) {
-      return [{ value: TASK_STATUS.CLOSED, label: this.getStatusLabel(TASK_STATUS.CLOSED) }];
-    }
-
-    const finalStatus = TASK_FINAL_STATUS_BY_TYPE[task.taskType] ?? task.currentStatus;
-    const maxStatus = Math.max(finalStatus, task.currentStatus);
-    const options: StatusOption[] = [];
-
-    for (let status = 0; status <= maxStatus; status += 1) {
-      options.push({ value: status, label: this.getStatusLabel(status) });
-    }
-
-    return options;
-  });
+  readonly statusOptions = computed(() => getTaskStatusOptions(this.selectedTask()));
 
   get selectedNextStatus(): number {
     return Number(this.statusForm.controls['newStatus'].value ?? 0);
@@ -143,7 +122,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
     this.resetStatusSpecificFields();
     this.hydrateStatusFields(task);
 
-    this.statusForm.controls['newStatus'].setValue(this.getSuggestedStatus(task));
+    this.statusForm.controls['newStatus'].setValue(getSuggestedTaskStatus(task));
   }
 
   submitStatusUpdate(): void {
@@ -157,14 +136,14 @@ export class TaskWorkflowBoardComponent implements OnInit {
       return;
     }
 
-    const payload = this.buildPayload(task.taskType, this.selectedNextStatus);
-    if (this.statusForm.controls['fallbackJson'].hasError('invalidJson')) {
+    const payloadResult = this.buildPayload(task.taskType, this.selectedNextStatus);
+    if (payloadResult.invalidFallbackJson) {
       return;
     }
 
     const request: ChangeStatusWorkflowRequest = {
       newStatus: this.selectedNextStatus,
-      newDataJson: JSON.stringify(payload)
+      newDataJson: JSON.stringify(payloadResult.payload)
     };
 
     this.submitInFlight.set(true);
@@ -180,7 +159,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
           this.selectedTask.set(response.task);
           this.resetStatusSpecificFields();
           this.hydrateStatusFields(response.task);
-          this.statusForm.controls['newStatus'].setValue(this.getSuggestedStatus(response.task));
+          this.statusForm.controls['newStatus'].setValue(getSuggestedTaskStatus(response.task));
         },
         error: () => {
           // Errors are propagated to taskService.error.
@@ -238,28 +217,15 @@ export class TaskWorkflowBoardComponent implements OnInit {
   }
 
   canCloseTask(task: BaseTaskDto): boolean {
-    return task.currentStatus !== TASK_STATUS.CLOSED;
+    return canCloseTaskStatus(task.currentStatus);
   }
 
   taskStatusLabel(status: number): string {
-    return this.getStatusLabel(status);
+    return getTaskStatusLabel(status);
   }
 
   trackByTaskId(_: number, task: BaseTaskDto): number {
     return task.id;
-  }
-
-  private getSuggestedStatus(task: BaseTaskDto): number {
-    const finalStatus = TASK_FINAL_STATUS_BY_TYPE[task.taskType];
-    if (typeof finalStatus !== 'number') {
-      return task.currentStatus;
-    }
-
-    return Math.min(task.currentStatus + 1, finalStatus);
-  }
-
-  private getStatusLabel(status: number): string {
-    return DEFAULT_STATUS_LABELS[status] ?? `Status ${status}`;
   }
 
   private resetStatusSpecificFields(): void {
@@ -285,113 +251,31 @@ export class TaskWorkflowBoardComponent implements OnInit {
   }
 
   private hydrateStatusFields(task: BaseTaskDto): void {
-    const data = this.safeParseTaskData(task.customDataJson);
-
-    if (task.taskType === 'Procurement') {
-      const prices = Array.isArray(data['prices']) ? data['prices'] : [];
-      this.statusForm.patchValue(
-        {
-          priceA: typeof prices[0] === 'string' ? prices[0] : '',
-          priceB: typeof prices[1] === 'string' ? prices[1] : '',
-          receipt: typeof data['receipt'] === 'string' ? data['receipt'] : ''
-        },
-        { emitEvent: false }
-      );
-      return;
-    }
-
-    if (task.taskType === 'Development') {
-      this.statusForm.patchValue(
-        {
-          specification: typeof data['specification'] === 'string' ? data['specification'] : '',
-          branchName: typeof data['branchName'] === 'string' ? data['branchName'] : '',
-          versionNumber:
-            typeof data['versionNumber'] === 'string' || typeof data['versionNumber'] === 'number'
-              ? String(data['versionNumber'])
-              : ''
-        },
-        { emitEvent: false }
-      );
-      return;
-    }
-
-    this.statusForm.controls['fallbackJson'].setValue(JSON.stringify(data, null, 2), { emitEvent: false });
+    this.statusForm.patchValue(hydrateWorkflowFields(task), { emitEvent: false });
   }
 
-  private buildPayload(taskType: string, status: number): TaskCustomData {
-    if (taskType === 'Procurement') {
-      if (status === TASK_STATUS.READY_FOR_REVIEW) {
-        return {
-          prices: [this.statusForm.controls['priceA'].value, this.statusForm.controls['priceB'].value]
-        };
-      }
-
-      if (status === TASK_STATUS.DONE) {
-        return {
-          receipt: this.statusForm.controls['receipt'].value
-        };
-      }
-
-      return {};
-    }
-
-    if (taskType === 'Development') {
-      if (status === TASK_STATUS.READY_FOR_REVIEW) {
-        return {
-          specification: this.statusForm.controls['specification'].value
-        };
-      }
-
-      if (status === TASK_STATUS.DONE) {
-        return {
-          branchName: this.statusForm.controls['branchName'].value
-        };
-      }
-
-      if (status === TASK_STATUS.RELEASED) {
-        return {
-          versionNumber: this.statusForm.controls['versionNumber'].value
-        };
-      }
-
-      return {};
-    }
-
-    return this.parseFallbackJson(this.statusForm.controls['fallbackJson'].value);
-  }
-
-  private parseFallbackJson(value: string): TaskCustomData {
+  private buildPayload(taskType: string, status: number): ReturnType<typeof buildWorkflowPayload> {
     const fallbackControl = this.statusForm.controls['fallbackJson'];
+    const result = buildWorkflowPayload(taskType, status, this.getWorkflowFieldValues());
 
-    if (!value.trim()) {
-      fallbackControl.setErrors(null);
-      return {};
-    }
-
-    try {
-      const parsed: unknown = JSON.parse(value);
-      fallbackControl.setErrors(null);
-      return this.isTaskCustomData(parsed) ? parsed : {};
-    } catch {
+    if (result.invalidFallbackJson) {
       fallbackControl.setErrors({ invalidJson: true });
-      return {};
+    } else {
+      fallbackControl.setErrors(null);
     }
+
+    return result;
   }
 
-  private safeParseTaskData(value: string): TaskCustomData {
-    if (!value.trim()) {
-      return {};
-    }
-
-    try {
-      const parsed: unknown = JSON.parse(value);
-      return this.isTaskCustomData(parsed) ? parsed : {};
-    } catch {
-      return {};
-    }
-  }
-
-  private isTaskCustomData(value: unknown): value is TaskCustomData {
-    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  private getWorkflowFieldValues(): WorkflowFieldValues {
+    return {
+      priceA: this.statusForm.controls['priceA'].value,
+      priceB: this.statusForm.controls['priceB'].value,
+      receipt: this.statusForm.controls['receipt'].value,
+      specification: this.statusForm.controls['specification'].value,
+      branchName: this.statusForm.controls['branchName'].value,
+      versionNumber: this.statusForm.controls['versionNumber'].value,
+      fallbackJson: this.statusForm.controls['fallbackJson'].value
+    };
   }
 }
