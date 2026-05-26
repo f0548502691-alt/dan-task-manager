@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace DanTaskManager.Controllers;
 
 /// <summary>
-/// Controller לניהול משתמשים
+/// Controller לשליפת משתמשים קיימים ומשימותיהם
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
@@ -55,40 +55,6 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// יצירת משתמש חדש
-    /// </summary>
-    [HttpPost]
-    public async Task<ActionResult<UserDetailsDto>> CreateUser(CreateUserRequest request)
-    {
-        var validation = await _createUserValidator.ValidateAsync(request, HttpContext.RequestAborted);
-        if (!validation.IsValid)
-        {
-            return BadRequest(new
-            {
-                error = string.Join("; ", validation.Errors
-                    .Select(e => e.ErrorMessage)
-                    .Where(e => !string.IsNullOrWhiteSpace(e))
-                    .Distinct())
-            });
-        }
-
-        var result = await _userService.CreateAsync(
-            new UserCreateCommand(request.Name, request.Email),
-            HttpContext.RequestAborted);
-
-        if (!result.Success)
-        {
-            return BadRequest(new { error = result.Message });
-        }
-
-        var user = result.CreatedUser!;
-
-        _logger.LogInformation("משתמש חדש נוצר: {UserId} ({Email})", user.Id, user.Email);
-
-        return CreatedAtAction(nameof(GetUser), new { id = user.Id }, user);
-    }
-
-    /// <summary>
     /// קבלת משימות של משתמש מסוים
     /// </summary>
     [HttpGet("{id}/tasks")]
@@ -109,13 +75,4 @@ public class UsersController : ControllerBase
 
         return Ok(tasks);
     }
-}
-
-/// <summary>
-/// בקשה ליצירת משתמש חדש
-/// </summary>
-public class CreateUserRequest
-{
-    public string Name { get; set; } = string.Empty;
-    public string Email { get; set; } = string.Empty;
 }

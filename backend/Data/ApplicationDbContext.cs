@@ -125,7 +125,7 @@ public class ApplicationDbContext : DbContext
     /// </summary>
     private static void SeedData(ModelBuilder modelBuilder)
     {
-        // יצירת 3 משתמשים בסיסיים
+        // יצירת משתמשים בסיסיים
         var users = new List<AppUser>
         {
             new AppUser
@@ -147,6 +147,27 @@ public class ApplicationDbContext : DbContext
                 Id = 3,
                 Name = "משה אברהם",
                 Email = "moshe@example.com",
+                CreatedAt = DateTime.UtcNow
+            },
+            new AppUser
+            {
+                Id = 4,
+                Name = "נועה ישראלי",
+                Email = "noa@example.com",
+                CreatedAt = DateTime.UtcNow
+            },
+            new AppUser
+            {
+                Id = 5,
+                Name = "איתן ברק",
+                Email = "eitan@example.com",
+                CreatedAt = DateTime.UtcNow
+            },
+            new AppUser
+            {
+                Id = 6,
+                Name = "מיכל גל",
+                Email = "michal@example.com",
                 CreatedAt = DateTime.UtcNow
             }
         };
