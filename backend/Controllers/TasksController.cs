@@ -1,5 +1,6 @@
 using DanTaskManager.Domain;
 using DanTaskManager.Services;
+using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DanTaskManager.Controllers;
@@ -12,13 +13,22 @@ namespace DanTaskManager.Controllers;
 public class TasksController : ControllerBase
 {
     private readonly ITaskApplicationService _taskService;
+    private readonly IValidator<CreateTaskRequest> _createTaskValidator;
+    private readonly IValidator<ChangeStatusWorkflowRequest> _changeStatusValidator;
+    private readonly IValidator<CloseTaskRequest> _closeTaskValidator;
     private readonly ILogger<TasksController> _logger;
 
     public TasksController(
         ITaskApplicationService taskService,
+        IValidator<CreateTaskRequest> createTaskValidator,
+        IValidator<ChangeStatusWorkflowRequest> changeStatusValidator,
+        IValidator<CloseTaskRequest> closeTaskValidator,
         ILogger<TasksController> logger)
     {
         _taskService = taskService;
+        _createTaskValidator = createTaskValidator;
+        _changeStatusValidator = changeStatusValidator;
+        _closeTaskValidator = closeTaskValidator;
         _logger = logger;
     }
 
@@ -93,15 +103,10 @@ public class TasksController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<TaskDetailsDto>> CreateTask(CreateTaskRequest request)
     {
-        // וולידציה בסיסית
-        if (string.IsNullOrWhiteSpace(request.TaskType))
+        var validation = await _createTaskValidator.ValidateAsync(request, HttpContext.RequestAborted);
+        if (!validation.IsValid)
         {
-            return BadRequest(new { error = "TaskType נדרש" });
-        }
-
-        if (string.IsNullOrWhiteSpace(request.Description))
-        {
-            return BadRequest(new { error = "Description נדרש" });
+            return BadRequest(new { error = BuildValidationErrorMessage(validation.Errors.Select(e => e.ErrorMessage)) });
         }
 
         var result = await _taskService.CreateAsync(
@@ -136,14 +141,10 @@ public class TasksController : ControllerBase
     [HttpPost("{id}/change-status")]
     public async Task<IActionResult> ChangeStatusWorkflow(int id, ChangeStatusWorkflowRequest request)
     {
-        if (request.NextAssignedToUserId <= 0)
+        var validation = await _changeStatusValidator.ValidateAsync(request, HttpContext.RequestAborted);
+        if (!validation.IsValid)
         {
-            return BadRequest(new { error = "NextAssignedToUserId נדרש" });
-        }
-
-        if (string.IsNullOrEmpty(request.NewDataJson))
-        {
-            return BadRequest(new { error = "NewDataJson נדרש" });
+            return BadRequest(new { error = BuildValidationErrorMessage(validation.Errors.Select(e => e.ErrorMessage)) });
         }
 
         var result = await _taskService.ChangeStatusAsync(
@@ -181,9 +182,10 @@ public class TasksController : ControllerBase
     [HttpPost("{id}/close")]
     public async Task<IActionResult> CloseTask(int id, CloseTaskRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.FinalNotes))
+        var validation = await _closeTaskValidator.ValidateAsync(request, HttpContext.RequestAborted);
+        if (!validation.IsValid)
         {
-            return BadRequest(new { error = "FinalNotes נדרש" });
+            return BadRequest(new { error = BuildValidationErrorMessage(validation.Errors.Select(e => e.ErrorMessage)) });
         }
 
         var result = await _taskService.CloseAsync(id, request.FinalNotes, HttpContext.RequestAborted);
@@ -253,6 +255,11 @@ public class TasksController : ControllerBase
         _logger.LogInformation("משימה {TaskId} נמחקה", id);
 
         return NoContent();
+    }
+
+    private static string BuildValidationErrorMessage(IEnumerable<string> errors)
+    {
+        return string.Join("; ", errors.Where(e => !string.IsNullOrWhiteSpace(e)).Distinct());
     }
 }
 

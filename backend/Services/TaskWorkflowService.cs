@@ -29,6 +29,13 @@ public interface ITaskWorkflowService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// בדיקה האם מותר לבצע שינוי במשימה שאינה שינוי סטטוס
+    /// </summary>
+    Task<WorkflowResult> EnsureTaskMutableAsync(
+        int taskId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// קבלת משימות של משתמש מסוים
     /// </summary>
     Task<IEnumerable<BaseTask>> GetUserTasksAsync(
@@ -222,6 +229,26 @@ public class TaskWorkflowService : ITaskWorkflowService
             WorkflowConstants.ClosedStatus,
             task,
             "משימה סגורה בהצלחה");
+    }
+
+    public async Task<WorkflowResult> EnsureTaskMutableAsync(
+        int taskId,
+        CancellationToken cancellationToken = default)
+    {
+        var task = await _context.Tasks
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
+        if (task == null)
+        {
+            return WorkflowResult.FailureResult("משימה לא קיימת");
+        }
+
+        if (task.CurrentStatus == WorkflowConstants.ClosedStatus)
+        {
+            return WorkflowResult.FailureResult("משימה סגורה היא immutable ולא ניתן לבצע שינוי");
+        }
+
+        return WorkflowResult.SuccessResult(task.CurrentStatus, task);
     }
 
     public async Task<IEnumerable<BaseTask>> GetUserTasksAsync(

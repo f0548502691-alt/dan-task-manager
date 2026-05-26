@@ -1,4 +1,5 @@
 using DanTaskManager.Services;
+using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DanTaskManager.Controllers;
@@ -11,13 +12,16 @@ namespace DanTaskManager.Controllers;
 public class UsersController : ControllerBase
 {
     private readonly IUserApplicationService _userService;
+    private readonly IValidator<CreateUserRequest> _createUserValidator;
     private readonly ILogger<UsersController> _logger;
 
     public UsersController(
         IUserApplicationService userService,
+        IValidator<CreateUserRequest> createUserValidator,
         ILogger<UsersController> logger)
     {
         _userService = userService;
+        _createUserValidator = createUserValidator;
         _logger = logger;
     }
 
@@ -56,14 +60,16 @@ public class UsersController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<UserDetailsDto>> CreateUser(CreateUserRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Name))
+        var validation = await _createUserValidator.ValidateAsync(request, HttpContext.RequestAborted);
+        if (!validation.IsValid)
         {
-            return BadRequest(new { error = "Name נדרש" });
-        }
-
-        if (string.IsNullOrWhiteSpace(request.Email))
-        {
-            return BadRequest(new { error = "Email נדרש" });
+            return BadRequest(new
+            {
+                error = string.Join("; ", validation.Errors
+                    .Select(e => e.ErrorMessage)
+                    .Where(e => !string.IsNullOrWhiteSpace(e))
+                    .Distinct())
+            });
         }
 
         var result = await _userService.CreateAsync(

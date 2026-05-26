@@ -129,13 +129,14 @@ public class TaskApplicationService : ITaskApplicationService
         string? description,
         CancellationToken cancellationToken = default)
     {
-        var task = await _context.Tasks.FindAsync(new object[] { taskId }, cancellationToken);
-        if (task == null)
+        var mutability = await _workflowService.EnsureTaskMutableAsync(taskId, cancellationToken);
+        if (!mutability.Success)
         {
             return false;
         }
 
-        if (task.CurrentStatus == WorkflowConstants.ClosedStatus)
+        var task = await _context.Tasks.FindAsync(new object[] { taskId }, cancellationToken);
+        if (task == null)
         {
             return false;
         }
@@ -152,13 +153,14 @@ public class TaskApplicationService : ITaskApplicationService
 
     public async Task<bool> DeleteAsync(int taskId, CancellationToken cancellationToken = default)
     {
-        var task = await _context.Tasks.FindAsync(new object[] { taskId }, cancellationToken);
-        if (task == null)
+        var mutability = await _workflowService.EnsureTaskMutableAsync(taskId, cancellationToken);
+        if (!mutability.Success)
         {
             return false;
         }
 
-        if (task.CurrentStatus == WorkflowConstants.ClosedStatus)
+        var task = await _context.Tasks.FindAsync(new object[] { taskId }, cancellationToken);
+        if (task == null)
         {
             return false;
         }
