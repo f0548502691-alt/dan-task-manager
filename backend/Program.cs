@@ -2,6 +2,7 @@ using DanTaskManager.Data;
 using DanTaskManager.Domain.Handlers;
 using DanTaskManager.Middleware;
 using DanTaskManager.Services;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplicationBuilder.CreateBuilder(args);
@@ -15,7 +16,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddTaskHandlersFromAssembly(typeof(ITaskHandler).Assembly);
 
 // ✅ הרשמה של TaskHandlerFactory
-builder.Services.AddSingleton(sp => new TaskHandlerFactory(sp.GetRequiredService<IEnumerable<ITaskHandler>>()));
+builder.Services.AddScoped<TaskHandlerFactory>();
 
 // ✅ cache לחוקיות מסוגי משימות
 builder.Services.AddMemoryCache();
@@ -25,11 +26,11 @@ builder.Services.AddScoped<TaskTypeValidationService>();
 builder.Services.AddScoped<ITaskTypeValidationService>(sp => sp.GetRequiredService<TaskTypeValidationService>());
 builder.Services.AddScoped<ITaskTypeMetadataService>(sp => sp.GetRequiredService<TaskTypeValidationService>());
 
-// ✅ הרשמה של Task Status Service
-builder.Services.AddScoped<ITaskStatusService, TaskStatusService>();
-
 // ✅ הרשמה של Task Workflow Service
 builder.Services.AddScoped<ITaskWorkflowService, TaskWorkflowService>();
+
+// ✅ הרשמה של FluentValidation validators
+builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
 // ✅ הרשמה של Application Services
 builder.Services.AddScoped<ITaskApplicationService, TaskApplicationService>();

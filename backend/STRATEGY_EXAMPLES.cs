@@ -1,8 +1,7 @@
-// 📝 דוגמאות לשימוש ב-Strategy Handlers ו-Task Status Service
+// 📝 דוגמאות לשימוש ב-Strategy Handlers
 
 using DanTaskManager.Domain;
 using DanTaskManager.Domain.Handlers;
-using DanTaskManager.Services;
 using System.Text.Json;
 
 /* ============================================
@@ -12,14 +11,10 @@ using System.Text.Json;
 public class StrategyHandlerExamples
 {
     private readonly TaskHandlerFactory _factory;
-    private readonly ITaskStatusService _statusService;
 
-    public StrategyHandlerExamples(
-        TaskHandlerFactory factory,
-        ITaskStatusService statusService)
+    public StrategyHandlerExamples(TaskHandlerFactory factory)
     {
         _factory = factory;
-        _statusService = statusService;
     }
 
     /// <summary>
@@ -111,81 +106,19 @@ public class StrategyHandlerExamples
     }
 
     /* ============================================
-       דוגמה 3: שימוש ב-TaskStatusService
-       ============================================ */
-
-    public void TaskStatusServiceExample()
-    {
-        // יצירת משימת Procurement
-        var procurementTask = new BaseTask
-        {
-            Id = 1,
-            TaskType = "Procurement",
-            Description = "רכישת רכיבים לשרת",
-            CurrentStatus = 1,
-            AssignedToUserId = 1,
-            CustomDataJson = "{}"
-        };
-
-        Console.WriteLine($"\n=== Task Status Service Example ===");
-        Console.WriteLine($"משימה: {procurementTask.Description}");
-        Console.WriteLine($"סוג: {procurementTask.TaskType}");
-
-        // שינוי לסטטוס 2 עם מחירים
-        var pricesData = JsonSerializer.Serialize(new
-        {
-            prices = new[] { "15000 ₪", "14500 ₪" }
-        });
-
-        var changeResult1 = _statusService.ValidateAndChangeStatus(
-            procurementTask,
-            2,
-            pricesData);
-
-        Console.WriteLine($"\nשינוי ל-Status 2: {(changeResult1.Success ? "✅" : "❌")}");
-        Console.WriteLine($"הודעה: {changeResult1.Message}");
-
-        if (changeResult1.Success)
-        {
-            procurementTask.CurrentStatus = changeResult1.NewStatus.Value;
-            procurementTask.CustomDataJson = pricesData;
-        }
-
-        // שינוי לסטטוס 3 עם קבלה
-        var receiptData = JsonSerializer.Serialize(new
-        {
-            prices = new[] { "15000 ₪", "14500 ₪" },
-            receipt = "REC-2026-0512-001"
-        });
-
-        var changeResult2 = _statusService.ValidateAndChangeStatus(
-            procurementTask,
-            3,
-            receiptData);
-
-        Console.WriteLine($"\nשינוי ל-Status 3: {(changeResult2.Success ? "✅" : "❌")}");
-        Console.WriteLine($"הודעה: {changeResult2.Message}");
-    }
-
-    /* ============================================
-       דוגמה 4: קבלת סטטוס סופי
+       דוגמה 3: קבלת סטטוס סופי
        ============================================ */
 
     public void GetFinalStatusExample()
     {
         Console.WriteLine($"\n=== Final Status Info ===");
-
-        var procFinal = _statusService.GetFinalStatus("Procurement");
-        var devFinal = _statusService.GetFinalStatus("Development");
-        var unknownFinal = _statusService.GetFinalStatus("Unknown");
-
-        Console.WriteLine($"Procurement: {procFinal}");
-        Console.WriteLine($"Development: {devFinal}");
-        Console.WriteLine($"Unknown: {unknownFinal ?? -1} (not found)");
+        Console.WriteLine($"Procurement: {_factory.GetHandler("Procurement")?.FinalStatus}");
+        Console.WriteLine($"Development: {_factory.GetHandler("Development")?.FinalStatus}");
+        Console.WriteLine($"Unknown: {_factory.GetHandler("Unknown")?.FinalStatus ?? -1} (not found)");
     }
 
     /* ============================================
-       דוגמה 5: הרחבה קלה - הוספת Handler חדש
+       דוגמה 4: הרחבה קלה - הוספת Handler חדש
        ============================================ */
 
     public void ShowHowToExtendExample()
@@ -211,7 +144,7 @@ public class StrategyHandlerExamples
     }
 
     /* ============================================
-       דוגמה 6: שימוש בפקטורי
+       דוגמה 5: שימוש בפקטורי
        ============================================ */
 
     public void FactoryPatternExample()

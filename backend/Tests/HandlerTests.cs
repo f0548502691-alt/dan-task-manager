@@ -306,6 +306,77 @@ public class DevelopmentTaskHandlerTests
 }
 
 /// <summary>
+/// בדיקות יחידתיות עבור AnalysisTaskHandler
+/// </summary>
+public class AnalysisTaskHandlerTests
+{
+    private readonly AnalysisTaskHandler _handler = new();
+
+    [Fact]
+    public void ValidateStatus2_WithMissingAnalysisReport_ShouldFail()
+    {
+        var json = JsonSerializer.Serialize(new { });
+        var result = _handler.ValidateStatusChange("{}", 1, 2, json);
+
+        Assert.False(result.IsValid);
+        Assert.Contains("analysisReport", result.Message);
+    }
+
+    [Fact]
+    public void ValidateStatus2_WithValidAnalysisReport_ShouldPass()
+    {
+        var json = JsonSerializer.Serialize(new { analysisReport = "Initial findings were reviewed." });
+        var result = _handler.ValidateStatusChange("{}", 1, 2, json);
+
+        Assert.True(result.IsValid);
+    }
+}
+
+/// <summary>
+/// בדיקות יחידתיות עבור TestingTaskHandler
+/// </summary>
+public class TestingTaskHandlerTests
+{
+    private readonly TestingTaskHandler _handler = new();
+
+    [Fact]
+    public void ValidateStatus2_WithPositiveTestCases_ShouldPass()
+    {
+        var json = JsonSerializer.Serialize(new { testCases = 15 });
+        var result = _handler.ValidateStatusChange("{}", 1, 2, json);
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void ValidateStatus3_WithCoverageAndSummary_ShouldPass()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            coverage = "85%",
+            summary = "Regression suite completed successfully"
+        });
+        var result = _handler.ValidateStatusChange("{}", 2, 3, json);
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void ValidateStatus3_WithInvalidCoverage_ShouldFail()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            coverage = "invalid",
+            summary = "Done"
+        });
+        var result = _handler.ValidateStatusChange("{}", 2, 3, json);
+
+        Assert.False(result.IsValid);
+        Assert.Contains("coverage", result.Message);
+    }
+}
+
+/// <summary>
 /// בדיקות יחידתיות עבור TaskHandlerFactory
 /// </summary>
 public class TaskHandlerFactoryTests
@@ -406,6 +477,6 @@ public class TaskHandlerFactoryTests
         // Assert
         Assert.Contains("Procurement", types);
         Assert.Contains("Development", types);
-        Assert.Equal(2, types.Count());
+        Assert.Equal(handlers.Length, types.Count());
     }
 }

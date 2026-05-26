@@ -1,5 +1,6 @@
 using DanTaskManager.Domain;
 using DanTaskManager.Services;
+using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
 
@@ -13,13 +14,22 @@ namespace DanTaskManager.Controllers;
 public class TasksController : ControllerBase
 {
     private readonly ITaskApplicationService _taskService;
+    private readonly IValidator<CreateTaskRequest> _createTaskValidator;
+    private readonly IValidator<ChangeStatusWorkflowRequest> _changeStatusValidator;
+    private readonly IValidator<CloseTaskRequest> _closeTaskValidator;
     private readonly ILogger<TasksController> _logger;
 
     public TasksController(
         ITaskApplicationService taskService,
+        IValidator<CreateTaskRequest> createTaskValidator,
+        IValidator<ChangeStatusWorkflowRequest> changeStatusValidator,
+        IValidator<CloseTaskRequest> closeTaskValidator,
         ILogger<TasksController> logger)
     {
         _taskService = taskService;
+        _createTaskValidator = createTaskValidator;
+        _changeStatusValidator = changeStatusValidator;
+        _closeTaskValidator = closeTaskValidator;
         _logger = logger;
     }
 
@@ -68,7 +78,7 @@ public class TasksController : ControllerBase
     }
 
     /// <summary>
-    /// קבלת משימות של משתמש מסוים (לא סגורות)
+    /// קבלת משימות של משתמש מסוים
     /// </summary>
     [HttpGet("user/{userId}")]
     public async Task<ActionResult<PagedResult<TaskSummaryDto>>> GetUserTasks(
@@ -81,7 +91,7 @@ public class TasksController : ControllerBase
             return NotFound("משתמש לא קיים");
         }
 
-        var tasks = await _taskService.GetOpenByUserAsync(
+        var tasks = await _taskService.GetByUserAsync(
             userId,
             pagination.ToPageRequest(),
             HttpContext.RequestAborted);
@@ -94,15 +104,10 @@ public class TasksController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<TaskDetailsDto>> CreateTask(CreateTaskRequest request)
     {
-        // וולידציה בסיסית
-        if (string.IsNullOrWhiteSpace(request.TaskType))
+        var validation = await _createTaskValidator.ValidateAsync(request, HttpContext.RequestAborted);
+        if (!validation.IsValid)
         {
-            return BadRequest(new { error = "TaskType נדרש" });
-        }
-
-        if (string.IsNullOrWhiteSpace(request.Description))
-        {
-            return BadRequest(new { error = "Description נדרש" });
+            return BadRequest(new { error = BuildValidationErrorMessage(validation.Errors.Select(e => e.ErrorMessage)) });
         }
 
         var result = await _taskService.CreateAsync(
@@ -115,6 +120,15 @@ public class TasksController : ControllerBase
 
         if (!result.Success)
         {
+            if (result.SupportedTaskTypes.Count > 0)
+            {
+                return BadRequest(new
+                {
+                    error = result.Message,
+                    supportedTaskTypes = result.SupportedTaskTypes
+                });
+            }
+
             return BadRequest(new { error = result.Message });
         }
 
@@ -137,20 +151,17 @@ public class TasksController : ControllerBase
     [HttpPost("{id}/change-status")]
     public async Task<IActionResult> ChangeStatusWorkflow(int id, ChangeStatusWorkflowRequest request)
     {
-        if (!request.CustomFields.HasValue)
+        var validation = await _changeStatusValidator.ValidateAsync(request, HttpContext.RequestAborted);
+        if (!validation.IsValid)
         {
-            return BadRequest(new { error = "customFields נדרש" });
-        }
-
-        if (request.CustomFields.Value.ValueKind != JsonValueKind.Object)
-        {
-            return BadRequest(new { error = "customFields חייב להיות אובייקט JSON" });
+            return BadRequest(new { error = BuildValidationErrorMessage(validation.Errors.Select(e => e.ErrorMessage)) });
         }
 
         var result = await _taskService.ChangeStatusAsync(
             id,
             request.NewStatus,
-            request.CustomFields.Value.GetRawText(),
+            request.NextAssignedToUserId,
+            ExtractCustomFieldsJson(request.CustomFields),
             HttpContext.RequestAborted);
 
         if (!result.Success)
@@ -181,9 +192,10 @@ public class TasksController : ControllerBase
     [HttpPost("{id}/close")]
     public async Task<IActionResult> CloseTask(int id, CloseTaskRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.FinalNotes))
+        var validation = await _closeTaskValidator.ValidateAsync(request, HttpContext.RequestAborted);
+        if (!validation.IsValid)
         {
-            return BadRequest(new { error = "FinalNotes נדרש" });
+            return BadRequest(new { error = BuildValidationErrorMessage(validation.Errors.Select(e => e.ErrorMessage)) });
         }
 
         var result = await _taskService.CloseAsync(id, request.FinalNotes, HttpContext.RequestAborted);
@@ -220,7 +232,13 @@ public class TasksController : ControllerBase
             HttpContext.RequestAborted);
         if (!updated)
         {
-            return NotFound();
+            var task = await _taskService.GetByIdAsync(id, HttpContext.RequestAborted);
+            if (task == null)
+            {
+                return NotFound();
+            }
+
+            throw new WorkflowValidationException("משימה סגורה היא immutable ולא ניתן לעדכן אותה");
         }
 
         return NoContent();
@@ -235,7 +253,13 @@ public class TasksController : ControllerBase
         var deleted = await _taskService.DeleteAsync(id, HttpContext.RequestAborted);
         if (!deleted)
         {
-            return NotFound();
+            var task = await _taskService.GetByIdAsync(id, HttpContext.RequestAborted);
+            if (task == null)
+            {
+                return NotFound();
+            }
+
+            throw new WorkflowValidationException("משימה סגורה היא immutable ולא ניתן למחוק אותה");
         }
 
         _logger.LogInformation("משימה {TaskId} נמחקה", id);
@@ -253,6 +277,11 @@ public class TasksController : ControllerBase
         return customFields.Value.ValueKind == JsonValueKind.Object
             ? customFields.Value.GetRawText()
             : "{}";
+    }
+
+    private static string BuildValidationErrorMessage(IEnumerable<string> errors)
+    {
+        return string.Join("; ", errors.Where(e => !string.IsNullOrWhiteSpace(e)).Distinct());
     }
 }
 
@@ -302,6 +331,11 @@ public class ChangeStatusWorkflowRequest
     /// הסטטוס החדש (תנועה קדימה: בדיוק +1, תנועה אחורה: לכל סטטוס נמוך)
     /// </summary>
     public int NewStatus { get; set; }
+
+    /// <summary>
+    /// המשתמש שאליו המשימה תוקצה לאחר שינוי הסטטוס
+    /// </summary>
+    public int NextAssignedToUserId { get; set; }
 
     /// <summary>
     /// customFields חדשים עם נתונים מעודכנים

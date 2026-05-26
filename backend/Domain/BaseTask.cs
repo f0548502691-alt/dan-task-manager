@@ -17,9 +17,10 @@ public class BaseTask
     public string TaskType { get; set; } = string.Empty;
 
     /// <summary>
-    /// סטטוס המשימה (ערך מספרי: 0=לא התחילה, 1=בתהליך, 2=הושלמה, 3=ביוטלה)
+    /// סטטוס המשימה (ערך מספרי: 1,2,3...)
+    /// 99 מייצג משימה סגורה (Closed)
     /// </summary>
-    public int CurrentStatus { get; set; } = 0;
+    public int CurrentStatus { get; set; } = WorkflowConstants.CreatedStatus;
 
     /// <summary>
     /// מזהה המשתמש שמבצע את המשימה

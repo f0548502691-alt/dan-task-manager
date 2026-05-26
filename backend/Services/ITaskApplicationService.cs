@@ -9,7 +9,7 @@ public interface ITaskApplicationService
         string taskType,
         PageRequest pageRequest,
         CancellationToken cancellationToken = default);
-    Task<PagedResult<TaskSummaryDto>> GetOpenByUserAsync(
+    Task<PagedResult<TaskSummaryDto>> GetByUserAsync(
         int userId,
         PageRequest pageRequest,
         CancellationToken cancellationToken = default);
@@ -21,6 +21,7 @@ public interface ITaskApplicationService
     Task<WorkflowResult> ChangeStatusAsync(
         int taskId,
         int newStatus,
+        int nextAssignedToUserId,
         string newDataJson,
         CancellationToken cancellationToken = default);
     Task<WorkflowResult> CloseAsync(
@@ -40,10 +41,23 @@ public class TaskCreationResult
     public bool Success { get; init; }
     public string Message { get; init; } = string.Empty;
     public TaskDetailsDto? CreatedTask { get; init; }
+    public IReadOnlyCollection<string> SupportedTaskTypes { get; init; } = Array.Empty<string>();
 
     public static TaskCreationResult SuccessResult(TaskDetailsDto task)
         => new() { Success = true, CreatedTask = task };
 
-    public static TaskCreationResult FailureResult(string message)
-        => new() { Success = false, Message = message };
+    public static TaskCreationResult FailureResult(
+        string message,
+        IEnumerable<string>? supportedTaskTypes = null)
+        => new()
+        {
+            Success = false,
+            Message = message,
+            SupportedTaskTypes = supportedTaskTypes?
+                .Where(type => !string.IsNullOrWhiteSpace(type))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(type => type, StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+                ?? Array.Empty<string>()
+        };
 }

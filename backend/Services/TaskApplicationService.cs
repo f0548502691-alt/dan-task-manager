@@ -51,14 +51,14 @@ public class TaskApplicationService : ITaskApplicationService
         return QueryTaskSummariesAsync(query, pageRequest, cancellationToken);
     }
 
-    public Task<PagedResult<TaskSummaryDto>> GetOpenByUserAsync(
+    public Task<PagedResult<TaskSummaryDto>> GetByUserAsync(
         int userId,
         PageRequest pageRequest,
         CancellationToken cancellationToken = default)
     {
         var query = _context.Tasks
             .AsNoTracking()
-            .Where(t => t.AssignedToUserId == userId && t.CurrentStatus != WorkflowConstants.ClosedStatus);
+            .Where(t => t.AssignedToUserId == userId);
 
         return QueryTaskSummariesAsync(query, pageRequest, cancellationToken);
     }
@@ -102,9 +102,10 @@ public class TaskApplicationService : ITaskApplicationService
         if (!_handlerFactory.HasHandler(command.TaskType) &&
             !_taskTypeValidationService.HasTaskType(command.TaskType))
         {
-            _logger.LogWarning(
-                "Creating task with task type {TaskType} without dedicated handler/rules configuration",
-                command.TaskType);
+            var supportedTaskTypes = GetSupportedTaskTypes();
+            return TaskCreationResult.FailureResult(
+                $"סוג משימה לא נתמך: {command.TaskType}",
+                supportedTaskTypes);
         }
 
         var task = new BaseTask
@@ -112,7 +113,7 @@ public class TaskApplicationService : ITaskApplicationService
             TaskType = command.TaskType,
             Description = command.Description,
             AssignedToUserId = command.AssignedToUserId,
-            CurrentStatus = 0,
+            CurrentStatus = WorkflowConstants.CreatedStatus,
             CustomDataJson = normalizedJson,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -141,6 +142,12 @@ public class TaskApplicationService : ITaskApplicationService
         string? description,
         CancellationToken cancellationToken = default)
     {
+        var mutability = await _workflowService.EnsureTaskMutableAsync(taskId, cancellationToken);
+        if (!mutability.Success)
+        {
+            return false;
+        }
+
         var task = await _context.Tasks.FindAsync(new object[] { taskId }, cancellationToken);
         if (task == null)
         {
@@ -159,6 +166,12 @@ public class TaskApplicationService : ITaskApplicationService
 
     public async Task<bool> DeleteAsync(int taskId, CancellationToken cancellationToken = default)
     {
+        var mutability = await _workflowService.EnsureTaskMutableAsync(taskId, cancellationToken);
+        if (!mutability.Success)
+        {
+            return false;
+        }
+
         var task = await _context.Tasks.FindAsync(new object[] { taskId }, cancellationToken);
         if (task == null)
         {
@@ -173,10 +186,11 @@ public class TaskApplicationService : ITaskApplicationService
     public Task<WorkflowResult> ChangeStatusAsync(
         int taskId,
         int newStatus,
+        int nextAssignedToUserId,
         string newDataJson,
         CancellationToken cancellationToken = default)
     {
-        return _workflowService.ChangeStatusAsync(taskId, newStatus, newDataJson, cancellationToken);
+        return _workflowService.ChangeStatusAsync(taskId, newStatus, nextAssignedToUserId, newDataJson, cancellationToken);
     }
 
     public Task<WorkflowResult> CloseAsync(
@@ -293,9 +307,20 @@ public class TaskApplicationService : ITaskApplicationService
             return JsonSerializer.SerializeToElement(new Dictionary<string, object?>());
         }
     }
-}
 
-internal static class WorkflowConstants
-{
-    public const int ClosedStatus = 99;
+    private IReadOnlyCollection<string> GetSupportedTaskTypes()
+    {
+        var handlerTypes = _handlerFactory.GetRegisteredTaskTypes();
+        var metadataTypes = (_taskTypeValidationService as ITaskTypeMetadataService)?
+            .GetTaskTypes()
+            .Select(taskType => taskType.TaskType)
+            ?? Enumerable.Empty<string>();
+
+        return handlerTypes
+            .Concat(metadataTypes)
+            .Where(type => !string.IsNullOrWhiteSpace(type))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(type => type, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
 }
