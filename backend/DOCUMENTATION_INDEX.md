@@ -19,6 +19,7 @@
 |----------|-------|----------|
 | [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md) | Handler design & extensibility | Understanding the pattern |
 | [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) | State machine & workflow rules | API usage & workflows |
+| [EXTENSION_GUIDE.md](EXTENSION_GUIDE.md) | Adding task types, config rules, and endpoints | Extending behavior safely |
 | [BEST_PRACTICES.md](BEST_PRACTICES.md) | Code conventions & patterns | Maintaining code quality |
 
 ### 🔌 API Reference
@@ -57,8 +58,8 @@
 → Study [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs)
 
 #### ➕ **Add new features**
-→ Check [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md) for patterns  
-→ Review handler examples in [STRATEGY_EXAMPLES.cs](STRATEGY_EXAMPLES.cs)
+→ Start with [EXTENSION_GUIDE.md](EXTENSION_GUIDE.md) for config-driven custom fields and handler fallback  
+→ Check [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md) for handler patterns
 
 #### 🧪 **Run tests**
 → `dotnet test`  
@@ -175,6 +176,7 @@ Implementation:
 | API Endpoints | [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) - REST API Endpoints section |
 | Error Messages | [API_ERROR_CODES.md](API_ERROR_CODES.md) |
 | Workflow Rules | [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) - Workflow Rules section |
+| Custom Field Validation | [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) - Task Type Validation Configuration; [EXTENSION_GUIDE.md](EXTENSION_GUIDE.md) |
 | Handler Validation | [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md) |
 | Code Examples | [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs) or [STRATEGY_EXAMPLES.cs](STRATEGY_EXAMPLES.cs) |
 | Best Practices | [BEST_PRACTICES.md](BEST_PRACTICES.md) |
@@ -210,11 +212,11 @@ Test Cases:                35+
 - ✅ Forward movement: +1 only
 - ✅ Backward movement: to any lower status
 - ✅ Closed status: 99 (permanent)
-- ✅ Final status: handler-specific
+- ✅ Final status: config-specific first, handler-specific fallback
 
-### Handler Types
-- **Procurement**: 3 statuses, validates prices & receipt
-- **Development**: 4 statuses, validates spec, branch, version
+### Configured Task Types
+- **Procurement**: 3 statuses, validates prices & receipt from `TaskTypeValidation`
+- **Development**: 4 statuses, validates spec, branch, version from `TaskTypeValidation`
 
 ### Response Pattern
 - Success: 200/201 with data

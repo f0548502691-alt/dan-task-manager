@@ -15,8 +15,8 @@ ITaskWorkflowService
     ↓
 TaskWorkflowService
     ├─ DbContext (EF Core)
-    ├─ TaskHandlerFactory (Handlers)
-    └─ Validation Rules
+    ├─ TaskTypeValidationService (appsettings rules)
+    └─ TaskHandlerFactory (fallback handlers)
 ```
 
 ---
@@ -51,24 +51,40 @@ if (task.CurrentStatus == 99)  // ClosedStatus
 2 → 2 ❌ (אותו סטטוס)
 ```
 
-### 3. **וולידציה ספציפית של Handler**
-לאחר שהתנועה אושרה, Handler בודק וולידציה ספציפית:
+### 3. **בדיקת JSON**
+כל שינוי סטטוס חייב לקבל `newDataJson` שהוא JSON תקין ולא ריק:
 ```csharp
-var handlerValidation = handler.ValidateStatusChange(
-    currentDataJson,
-    currentStatus,
-    newStatus,
-    newDataJson);
+if (!IsValidJsonPayload(newDataJson))
+    return Failure("NewDataJson חייב להיות JSON תקין");
 ```
 
 ### 4. **בדיקת סטטוס סופי**
+הסטטוס הסופי מגיע קודם מהקונפיגורציה `TaskTypeValidation`, ואם סוג המשימה לא מוגדר שם הוא מגיע מה-Handler:
 ```csharp
-// אי אפשר להעבור את סטטוס סופי של Handler
+var handler = _handlerFactory.GetHandler(task.TaskType);
+var finalStatus = _taskTypeValidationService.GetFinalStatus(task.TaskType) ?? handler?.FinalStatus;
+
 if (finalStatus.HasValue && currentStatus >= finalStatus && newStatus > currentStatus)
     return Failure("משימה הגיעה לסטטוס סופי");
 ```
 
-### 5. **עדכון נתונים**
+### 5. **וולידציה של CustomDataJson לפי סוג משימה**
+`TaskTypeValidationService` הוא המקור הראשי לחוקי שדות מותאמים. אם `TaskType` מוגדר ב-`appsettings.json`, החוקים בקונפיגורציה מחליפים את הוולידציה של ה-Handler:
+```csharp
+if (_taskTypeValidationService.HasTaskType(task.TaskType))
+{
+    var result = _taskTypeValidationService.ValidateStatusData(task.TaskType, newStatus, newDataJson);
+    if (!result.IsValid)
+        return Failure(result.Message);
+}
+else if (handler != null)
+{
+    // Fallback for task types not migrated to TaskTypeValidation.
+    var result = handler.ValidateStatusChange(task.CustomDataJson, task.CurrentStatus, newStatus, newDataJson);
+}
+```
+
+### 6. **עדכון נתונים**
 ```csharp
 task.CurrentStatus = newStatus;
 task.CustomDataJson = newDataJson;
@@ -76,6 +92,63 @@ task.UpdatedAt = DateTime.UtcNow;
 ```
 
 ---
+
+## ⚙️ Task Type Validation Configuration
+
+חוקי השדות נמצאים תחת `TaskTypeValidation:TaskTypes` ב-`backend/appsettings.json`. השירות נטען דרך Options ב-`Program.cs` ונרשם כ-singleton:
+
+```json
+{
+  "TaskTypeValidation": {
+    "TaskTypes": [
+      {
+        "TaskType": "Development",
+        "FinalStatus": 4,
+        "StatusRules": [
+          {
+            "Status": 3,
+            "Fields": [
+              {
+                "Field": "branchName",
+                "Type": "string",
+                "Required": true,
+                "Pattern": "valid_git_branch"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Supported Field Rules
+
+| Property | Meaning | Notes |
+|----------|---------|-------|
+| `Field` | JSON property name to validate | Required in each field rule |
+| `Type` | Expected JSON type | `string`, `number`, `array`, `object`, `boolean`, `stringOrNumber`; unknown/empty types are treated as `any` |
+| `Required` | Whether the field must exist | Defaults to `true`; optional missing fields pass validation |
+| `MinLength` / `MaxLength` | String length constraints | Applied to JSON strings |
+| `ArrayLength` | Exact array length | Applied to arrays |
+| `MinItems` / `MaxItems` | Array size bounds | Applied to arrays |
+| `ElementType` | Expected type for each array item | Uses the same type names as `Type` |
+| `Pattern` | Named pattern or regular expression | Built-ins: `valid_git_branch`, `semantic_version`; other values are used as regex patterns |
+
+### Configured Task Types
+
+| Task type | Final status | Status rules |
+|-----------|--------------|--------------|
+| `Procurement` | `3` | status `2` requires `prices` array with exactly 2 string items; status `3` requires non-empty string `receipt` |
+| `Development` | `4` | status `2` requires string `specification` with at least 10 chars; status `3` requires valid git branch string `branchName`; status `4` requires `versionNumber` as string or number matching semantic version digits (`1`, `1.0`, `1.0.0`) |
+
+### Precedence and Fallback
+
+- If a task type exists in `TaskTypeValidation`, those config rules are authoritative for field validation and final status.
+- If a task type is not configured, `TaskWorkflowService` falls back to the registered `ITaskHandler`.
+- If neither config nor handler exists, movement rules and JSON validity still apply, but no custom field validation or final status limit is enforced.
+- Creating a task with an unknown type is allowed after basic request validation; the application service logs a warning.
 
 ## 📊 Example Workflows
 
@@ -87,10 +160,10 @@ Status 0: התחלה
 Status 1: בתהליך
    ↓ +1 (forward)
 Status 2: בחירת ספקים ⭐
-   Requires: {"prices": ["5000", "4800"]}
+   Config requires: {"prices": ["5000", "4800"]}
    ↓ +1 (forward)
 Status 3: ✅ FinalStatus (לא יכול להעבור)
-   Requires: {"receipt": "REC-123"}
+   Config requires: {"receipt": "REC-123"}
    ↓
 Status 99: Closed (סגור לנצח)
 
@@ -107,13 +180,13 @@ Status 0: התחלה
 Status 1: בתהליך
    ↓ +1
 Status 2: אפיון ⭐
-   Requires: {"specification": "..."}
+   Config requires: {"specification": "at least 10 chars"}
    ↓ +1
 Status 3: בקידוד ⭐
-   Requires: {"branchName": "feature/xyz"}
+   Config requires: {"branchName": "feature/xyz"}
    ↓ +1
 Status 4: ✅ FinalStatus
-   Requires: {"versionNumber": "1.2.0"}
+   Config requires: {"versionNumber": "1.2.0"}
    ↓
 Status 99: Closed (סגור לנצח)
 
@@ -158,6 +231,19 @@ public class WorkflowResult
 }
 ```
 
+### ITaskTypeValidationService Methods
+
+```csharp
+public interface ITaskTypeValidationService
+{
+    bool HasTaskType(string taskType);
+    int? GetFinalStatus(string taskType);
+    ValidationResult ValidateStatusData(string taskType, int status, string payloadJson);
+}
+```
+
+`ValidateStatusData` returns success when the task type or status has no configured field rules.
+
 ---
 
 ## 🔌 REST API Endpoints
@@ -188,6 +274,11 @@ Content-Type: application/json
   "createdAt": "2026-05-25T10:00:00Z"
 }
 ```
+
+Notes:
+- `customDataJson` is normalized to valid JSON on create; when omitted, it becomes `{}`.
+- Custom field rules are enforced during `change-status`, not during task creation.
+- Unknown task types are accepted but logged if they have neither config rules nor a handler.
 
 ---
 
@@ -223,7 +314,7 @@ Content-Type: application/json
 **Response (400) - Validation Failed:**
 ```json
 {
-  "error": "'prices' חייב להכיל בדיוק 2 מחרוזות, נמצאו 1"
+  "error": "בסטטוס 2, נדרש שדה 'prices'"
 }
 ```
 
@@ -270,25 +361,31 @@ GET /api/tasks/user/1
 
 **Response (200):**
 ```json
-[
-  {
-    "id": 1,
-    "taskType": "Procurement",
-    "description": "רכישת רכיבים",
-    "currentStatus": 2,
-    "assignedToUserId": 1,
-    "customDataJson": "{\"prices\": [\"5000\", \"4800\"]}"
-  },
-  {
-    "id": 2,
-    "taskType": "Development",
-    "description": "פיתוח API",
-    "currentStatus": 1,
-    "assignedToUserId": 1,
-    "customDataJson": "{}"
-  }
-]
+{
+  "items": [
+    {
+      "id": 1,
+      "taskType": "Procurement",
+      "description": "רכישת רכיבים",
+      "currentStatus": 2,
+      "assignedToUserId": 1,
+      "createdAt": "2026-05-25T10:00:00Z",
+      "updatedAt": "2026-05-25T10:10:00Z",
+      "assignedToUser": {
+        "id": 1,
+        "name": "דן כהן",
+        "email": "dan@example.com"
+      }
+    }
+  ],
+  "page": 1,
+  "pageSize": 20,
+  "totalCount": 1,
+  "totalPages": 1
+}
 ```
+
+List endpoints return `TaskSummaryDto`, so `customDataJson` is intentionally omitted. Use `GET /api/tasks/{id}` for `TaskDetailsDto` with `customDataJson`.
 
 ---
 
@@ -318,6 +415,8 @@ GET /api/tasks/1
 GET /api/tasks
 ```
 
+Returns `PagedResult<TaskSummaryDto>`.
+
 ---
 
 ### 7. **Get Tasks by Type**
@@ -325,6 +424,8 @@ GET /api/tasks
 ```http
 GET /api/tasks/byType/Procurement
 ```
+
+Returns `PagedResult<TaskSummaryDto>`.
 
 ---
 
@@ -509,8 +610,8 @@ POST /api/tasks/1/change-status
 1. **Forward Movement**: Must be exactly +1 status
 2. **Backward Movement**: Allowed to any lower status (rollback)
 3. **Closed Status**: 99 (permanent, cannot be changed)
-4. **Final Status**: Handler-specific status that cannot be exceeded
-5. **Workflow Validation**: Combines movement rules + handler validation
+4. **Final Status**: Config-specific status first, handler-specific fallback
+5. **Workflow Validation**: Movement rules + valid JSON + config-driven custom fields; handlers remain a fallback for unconfigured task types
 
 ---
 

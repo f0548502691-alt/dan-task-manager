@@ -2,15 +2,162 @@
 
 ## 📖 Table of Contents
 
-1. [Adding New Handler Type](#adding-new-handler-type)
-2. [Adding New Endpoint](#adding-new-endpoint)
-3. [Adding Validation Rule](#adding-validation-rule)
-4. [Common Extension Scenarios](#common-extension-scenarios)
-5. [Testing Extensions](#testing-extensions)
+1. [Adding or Changing Task-Type Custom Fields](#adding-or-changing-task-type-custom-fields)
+2. [Adding New Handler Type](#adding-new-handler-type)
+3. [Adding New Endpoint](#adding-new-endpoint)
+4. [Adding Validation Rule](#adding-validation-rule)
+5. [Common Extension Scenarios](#common-extension-scenarios)
+6. [Testing Extensions](#testing-extensions)
 
 ---
 
+## ⚙️ Adding or Changing Task-Type Custom Fields
+
+Use configuration first when a task type only needs `CustomDataJson` field requirements by status. The active source is `TaskTypeValidation` in `backend/appsettings.json`, loaded by `TaskTypeValidationService` and used by `TaskWorkflowService`.
+
+### When to Use Config vs. a Handler
+
+| Need | Use |
+|------|-----|
+| Require fields for a status | `TaskTypeValidation` config |
+| Check JSON primitive types, arrays, string lengths, array sizes, or regex patterns | `TaskTypeValidation` config |
+| Set the final status for a task type | `TaskTypeValidation` config |
+| Validate against database state, call external services, or use custom branching logic | `ITaskHandler` fallback or a service change |
+
+If a task type appears in `TaskTypeValidation`, config validation is authoritative and the handler validation is skipped for that type.
+
+### Step 1: Add or Update `appsettings.json`
+
+```json
+{
+  "TaskTypeValidation": {
+    "TaskTypes": [
+      {
+        "TaskType": "QA",
+        "FinalStatus": 3,
+        "StatusRules": [
+          {
+            "Status": 2,
+            "Fields": [
+              {
+                "Field": "testEnvironment",
+                "Type": "string",
+                "Required": true,
+                "MinLength": 3
+              },
+              {
+                "Field": "testCases",
+                "Type": "array",
+                "MinItems": 1,
+                "ElementType": "string"
+              }
+            ]
+          },
+          {
+            "Status": 3,
+            "Fields": [
+              {
+                "Field": "releaseVersion",
+                "Type": "stringOrNumber",
+                "Required": true,
+                "Pattern": "semantic_version"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Step 2: Know When Rules Run
+
+Rules run only during `POST /api/tasks/{id}/change-status` after the generic workflow checks pass:
+
+1. The task exists and is not closed (`CurrentStatus != 99`).
+2. `newDataJson` is valid JSON.
+3. Forward moves advance exactly one status; backward moves can return to any lower status.
+4. The requested status does not move beyond the configured final status.
+5. The fields for the requested `Status` are validated against `newDataJson`.
+
+Task creation validates the assignee, normalizes `customDataJson`, and logs a warning for unknown task types. It does not enforce status-specific custom fields.
+
+### Supported Field Rule Properties
+
+| Property | Description |
+|----------|-------------|
+| `Field` | JSON property name to validate. Empty names fail validation. |
+| `Type` | `string`, `number`, `array`, `object`, `boolean`, or `stringOrNumber`. Empty/unknown types are treated as any JSON type. |
+| `Required` | Defaults to `true`. Optional missing fields pass validation. |
+| `MinLength`, `MaxLength` | String length limits. |
+| `ArrayLength` | Exact array item count. |
+| `MinItems`, `MaxItems` | Minimum/maximum array item count. |
+| `ElementType` | Type required for every array item. |
+| `Pattern` | `valid_git_branch`, `semantic_version`, or a regular expression. |
+
+Built-in pattern constraints:
+- `valid_git_branch`: rejects blank names, `//`, names ending in `/` or `.`, and spaces.
+- `semantic_version`: accepts digit groups separated by dots, such as `1`, `1.0`, or `1.0.0`.
+
+### Step 3: Add Focused Tests
+
+Construct `TaskTypeValidationService` with options in tests, then pass it to `TaskWorkflowService`:
+
+```csharp
+var validationService = new TaskTypeValidationService(Options.Create(new TaskTypeValidationOptions
+{
+    TaskTypes = new List<TaskTypeDefinition>
+    {
+        new()
+        {
+            TaskType = "QA",
+            FinalStatus = 3,
+            StatusRules = new List<TaskStatusRuleDefinition>
+            {
+                new()
+                {
+                    Status = 2,
+                    Fields = new List<FieldRuleDefinition>
+                    {
+                        new()
+                        {
+                            Field = "testCases",
+                            Type = "array",
+                            MinItems = 1,
+                            ElementType = "string"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}));
+
+var service = new TaskWorkflowService(
+    context,
+    handlerFactory,
+    validationService,
+    logger);
+```
+
+Cover at least:
+- A valid status change with the required fields.
+- A missing required field.
+- A type mismatch or constraint failure.
+- Final-status behavior if `FinalStatus` changes.
+
+### Constraints and Pitfalls
+
+- `TaskType` lookup is case-insensitive.
+- Duplicate task-type entries are grouped case-insensitively; the last definition wins.
+- A status with no `Fields` entry has no custom field validation.
+- Configured task types skip handler validation, so keep config in sync with any existing handler expectations.
+- Backward moves still replace `CustomDataJson` with the submitted payload.
+
 ## 🎯 Adding New Handler Type
+
+Handlers remain useful for task types whose validation cannot be expressed with `TaskTypeValidation` alone.
 
 ### Step 1: Create Handler Class
 
@@ -132,17 +279,14 @@ public class QATaskHandler : ITaskHandler
 }
 ```
 
-### Step 2: Register Handler
+### Step 2: Make Handler Discoverable
 
 ```csharp
 // Program.cs
-builder.Services.AddTransient<ITaskHandler, QATaskHandler>();
-
-// Full example:
-services.AddTransient<ITaskHandler, ProcurementTaskHandler>();
-services.AddTransient<ITaskHandler, DevelopmentTaskHandler>();
-services.AddTransient<ITaskHandler, QATaskHandler>(); // NEW
+builder.Services.AddTaskHandlersFromAssembly(typeof(ITaskHandler).Assembly);
 ```
+
+Handlers in the `DanTaskManager.Domain.Handlers` namespace are auto-registered at startup by `AddTaskHandlersFromAssembly`. Keep the class concrete, non-abstract, and implementing `ITaskHandler`.
 
 ### Step 3: Write Tests
 
@@ -525,9 +669,11 @@ public class ExtensionFeatureTests : IAsyncLifetime
         await _context.Database.EnsureCreatedAsync();
         
         var handlers = new ITaskHandler[] { new YourNewHandler() };
+        var validationService = new TaskTypeValidationService(Options.Create(new TaskTypeValidationOptions()));
         _service = new TaskWorkflowService(
             _context,
             new TaskHandlerFactory(handlers),
+            validationService,
             new MockLogger());
     }
 
@@ -613,10 +759,11 @@ public async Task FullWorkflow_WithNewFeature_ShouldPass()
 
 To extend the system:
 
-1. **New Handler**: Implement ITaskHandler, register in Program.cs
-2. **New Endpoint**: Add to interface, implement in service, add to controller
-3. **New Validation**: Add validation method, integrate into workflow
-4. **New Datatype**: Add handler with appropriate validation
+1. **New custom fields**: Prefer `TaskTypeValidation` config in `appsettings.json`
+2. **New Handler**: Implement `ITaskHandler` when config cannot express the behavior
+3. **New Endpoint**: Add to interface, implement in service, add to controller
+4. **New Validation**: Add focused tests for config rules or handler logic
+5. **New Datatype**: Add config rules or a handler with appropriate validation
 
 All extensions follow the same patterns and principles as the existing code.
 
