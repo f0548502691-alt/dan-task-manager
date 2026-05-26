@@ -1,7 +1,8 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges } from '@angular/core';
-import { FormGroup, ReactiveFormsModule, ValidatorFn, Validators } from '@angular/forms';
+import { FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { TASK_STATUS } from './task.interfaces';
+import { syncControlState } from './task-form.utils';
 
 @Component({
   selector: 'app-development-fields',
@@ -13,6 +14,7 @@ import { TASK_STATUS } from './task.interfaces';
 export class DevelopmentFieldsComponent implements OnChanges {
   @Input({ required: true }) form!: FormGroup;
   @Input({ required: true }) status!: number;
+  readonly TASK_STATUS = TASK_STATUS;
 
   ngOnChanges(changes: SimpleChanges): void {
     if ('form' in changes || 'status' in changes) {
@@ -26,32 +28,14 @@ export class DevelopmentFieldsComponent implements OnChanges {
   }
 
   private syncValidators(): void {
-    this.setControlState('specification', this.status === TASK_STATUS.READY_FOR_REVIEW, [
+    syncControlState(this.form.get('specification'), this.status === TASK_STATUS.READY_FOR_REVIEW, [
       Validators.required,
       Validators.minLength(10)
     ]);
-    this.setControlState('branchName', this.status === TASK_STATUS.DONE, [
+    syncControlState(this.form.get('branchName'), this.status === TASK_STATUS.DONE, [
       Validators.required,
       Validators.pattern(/^\S+$/)
     ]);
-    this.setControlState('versionNumber', this.status === TASK_STATUS.RELEASED, [Validators.required]);
-  }
-
-  private setControlState(controlName: string, enabled: boolean, validators: ValidatorFn[]): void {
-    const control = this.form.get(controlName);
-    if (!control) {
-      return;
-    }
-
-    if (enabled) {
-      control.setValidators(validators);
-    } else {
-      control.setValue('');
-      control.clearValidators();
-      control.markAsPristine();
-      control.markAsUntouched();
-    }
-
-    control.updateValueAndValidity({ emitEvent: false });
+    syncControlState(this.form.get('versionNumber'), this.status === TASK_STATUS.RELEASED, [Validators.required]);
   }
 }

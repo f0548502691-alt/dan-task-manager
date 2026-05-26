@@ -35,12 +35,14 @@ public class TaskApplicationServiceTests
             new ProcurementTaskHandler(),
             new TestingTaskHandler()
         };
+        var metadataService = new TaskTypeValidationService(Options.Create(new TaskTypeValidationOptions()));
 
         var service = new TaskApplicationService(
             context,
             new NoOpWorkflowService(),
             new TaskHandlerFactory(handlers),
-            new TaskTypeValidationService(Options.Create(new TaskTypeValidationOptions())),
+            metadataService,
+            metadataService,
             new MockLogger());
 
         var result = await service.CreateAsync(

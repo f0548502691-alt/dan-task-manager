@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 import {
@@ -13,6 +14,8 @@ import {
 import { TaskService } from './task.service';
 import { DevelopmentFieldsComponent } from './development-fields.component';
 import { ProcurementFieldsComponent } from './procurement-fields.component';
+import { parseTaskCustomDataJson, resetControl } from './task-form.utils';
+import { getTaskWorkflowAdapter } from './task-workflow-adapters';
 
 interface StatusOption {
   value: number;
@@ -32,6 +35,7 @@ const TASK_TYPE_OPTIONS = ['Procurement', 'Development'] as const;
 })
 export class TaskWorkflowBoardComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly TASK_STATUS = TASK_STATUS;
   readonly taskService = inject(TaskService);
@@ -117,13 +121,14 @@ export class TaskWorkflowBoardComponent implements OnInit {
         description,
         assignedToUserId: this.currentUserId
       })
-      .pipe(finalize(() => this.createInFlight.set(false)))
+      .pipe(
+        takeUntilDestroyed(this.destroyRef),
+        finalize(() => this.createInFlight.set(false))
+      )
       .subscribe({
         next: (task) => {
           this.successMessage.set(`Task #${task.id} created successfully.`);
-          this.createForm.controls['createTaskDescription'].setValue('');
-          this.createForm.controls['createTaskDescription'].markAsPristine();
-          this.createForm.controls['createTaskDescription'].markAsUntouched();
+          resetControl(this.createForm.controls['createTaskDescription']);
           this.selectTask(task);
         },
         error: () => {
@@ -136,9 +141,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
     this.selectedTask.set(task);
     this.taskService.clearError();
     this.successMessage.set(null);
-    this.closeForm.controls['closeNotes'].setValue('');
-    this.closeForm.controls['closeNotes'].markAsPristine();
-    this.closeForm.controls['closeNotes'].markAsUntouched();
+    resetControl(this.closeForm.controls['closeNotes']);
 
     this.resetStatusSpecificFields();
     this.hydrateStatusFields(task);
@@ -173,7 +176,10 @@ export class TaskWorkflowBoardComponent implements OnInit {
 
     this.taskService
       .changeTaskStatus(task.id, request)
-      .pipe(finalize(() => this.submitInFlight.set(false)))
+      .pipe(
+        takeUntilDestroyed(this.destroyRef),
+        finalize(() => this.submitInFlight.set(false))
+      )
       .subscribe({
         next: (response) => {
           this.successMessage.set(response.message);
@@ -212,14 +218,15 @@ export class TaskWorkflowBoardComponent implements OnInit {
 
     this.taskService
       .closeTask(task.id, { finalNotes })
-      .pipe(finalize(() => this.closeInFlight.set(false)))
+      .pipe(
+        takeUntilDestroyed(this.destroyRef),
+        finalize(() => this.closeInFlight.set(false))
+      )
       .subscribe({
         next: (response) => {
           this.successMessage.set(response.message);
           this.selectedTask.set(response.task);
-          closeNotesControl.setValue('');
-          closeNotesControl.markAsPristine();
-          closeNotesControl.markAsUntouched();
+          resetControl(closeNotesControl);
         },
         error: () => {
           // Errors are propagated to taskService.error.
@@ -275,43 +282,17 @@ export class TaskWorkflowBoardComponent implements OnInit {
 
     for (const controlName of dynamicControls) {
       const control = this.statusForm.controls[controlName];
-      control.setValue('');
+      resetControl(control);
       control.clearValidators();
-      control.setErrors(null);
-      control.markAsPristine();
-      control.markAsUntouched();
       control.updateValueAndValidity({ emitEvent: false });
     }
   }
 
   private hydrateStatusFields(task: BaseTaskDto): void {
-    const data = this.safeParseTaskData(task.customDataJson);
-
-    if (task.taskType === 'Procurement') {
-      const prices = Array.isArray(data['prices']) ? data['prices'] : [];
-      this.statusForm.patchValue(
-        {
-          priceA: typeof prices[0] === 'string' ? prices[0] : '',
-          priceB: typeof prices[1] === 'string' ? prices[1] : '',
-          receipt: typeof data['receipt'] === 'string' ? data['receipt'] : ''
-        },
-        { emitEvent: false }
-      );
-      return;
-    }
-
-    if (task.taskType === 'Development') {
-      this.statusForm.patchValue(
-        {
-          specification: typeof data['specification'] === 'string' ? data['specification'] : '',
-          branchName: typeof data['branchName'] === 'string' ? data['branchName'] : '',
-          versionNumber:
-            typeof data['versionNumber'] === 'string' || typeof data['versionNumber'] === 'number'
-              ? String(data['versionNumber'])
-              : ''
-        },
-        { emitEvent: false }
-      );
+    const { data } = parseTaskCustomDataJson(task.customDataJson);
+    const adapter = getTaskWorkflowAdapter(task.taskType);
+    if (adapter) {
+      adapter.hydrate(this.statusForm, data);
       return;
     }
 
@@ -319,79 +300,19 @@ export class TaskWorkflowBoardComponent implements OnInit {
   }
 
   private buildPayload(taskType: string, status: number): TaskCustomData {
-    if (taskType === 'Procurement') {
-      if (status === TASK_STATUS.READY_FOR_REVIEW) {
-        return {
-          prices: [this.statusForm.controls['priceA'].value, this.statusForm.controls['priceB'].value]
-        };
-      }
-
-      if (status === TASK_STATUS.DONE) {
-        return {
-          receipt: this.statusForm.controls['receipt'].value
-        };
-      }
-
-      return {};
+    const adapter = getTaskWorkflowAdapter(taskType);
+    if (adapter) {
+      return adapter.buildPayload(this.statusForm, status);
     }
 
-    if (taskType === 'Development') {
-      if (status === TASK_STATUS.READY_FOR_REVIEW) {
-        return {
-          specification: this.statusForm.controls['specification'].value
-        };
-      }
-
-      if (status === TASK_STATUS.DONE) {
-        return {
-          branchName: this.statusForm.controls['branchName'].value
-        };
-      }
-
-      if (status === TASK_STATUS.RELEASED) {
-        return {
-          versionNumber: this.statusForm.controls['versionNumber'].value
-        };
-      }
-
-      return {};
-    }
-
-    return this.parseFallbackJson(this.statusForm.controls['fallbackJson'].value);
-  }
-
-  private parseFallbackJson(value: string): TaskCustomData {
     const fallbackControl = this.statusForm.controls['fallbackJson'];
-
-    if (!value.trim()) {
+    const parsedResult = parseTaskCustomDataJson(fallbackControl.value);
+    if (parsedResult.isValid) {
       fallbackControl.setErrors(null);
-      return {};
+      return parsedResult.data;
     }
 
-    try {
-      const parsed: unknown = JSON.parse(value);
-      fallbackControl.setErrors(null);
-      return this.isTaskCustomData(parsed) ? parsed : {};
-    } catch {
-      fallbackControl.setErrors({ invalidJson: true });
-      return {};
-    }
-  }
-
-  private safeParseTaskData(value: string): TaskCustomData {
-    if (!value.trim()) {
-      return {};
-    }
-
-    try {
-      const parsed: unknown = JSON.parse(value);
-      return this.isTaskCustomData(parsed) ? parsed : {};
-    } catch {
-      return {};
-    }
-  }
-
-  private isTaskCustomData(value: unknown): value is TaskCustomData {
-    return value !== null && typeof value === 'object' && !Array.isArray(value);
+    fallbackControl.setErrors({ invalidJson: true });
+    return {};
   }
 }

@@ -15,7 +15,6 @@ public static class TaskHandlerRegistrationExtensions
             .GetTypes()
             .Where(type =>
                 handlerInterface.IsAssignableFrom(type) &&
-                type.Namespace == "DanTaskManager.Domain.Handlers" &&
                 !type.IsInterface &&
                 !type.IsAbstract)
             .OrderBy(type => type.Name)

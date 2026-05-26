@@ -1,6 +1,5 @@
 using DanTaskManager.Data;
 using DanTaskManager.Domain;
-using DanTaskManager.Domain.Handlers;
 using Microsoft.EntityFrameworkCore;
 
 namespace DanTaskManager.Services;
@@ -72,19 +71,18 @@ public class WorkflowResult
 public class TaskWorkflowService : ITaskWorkflowService
 {
     private readonly ApplicationDbContext _context;
-    private readonly TaskHandlerFactory _handlerFactory;
-    private readonly ITaskTypeValidationService _taskTypeValidationService;
+    private readonly IReadOnlyList<ITaskWorkflowRuleProvider> _ruleProviders;
     private readonly ILogger<TaskWorkflowService> _logger;
 
     public TaskWorkflowService(
         ApplicationDbContext context,
-        TaskHandlerFactory handlerFactory,
-        ITaskTypeValidationService taskTypeValidationService,
+        IEnumerable<ITaskWorkflowRuleProvider> ruleProviders,
         ILogger<TaskWorkflowService> logger)
     {
         _context = context;
-        _handlerFactory = handlerFactory;
-        _taskTypeValidationService = taskTypeValidationService;
+        _ruleProviders = ruleProviders
+            .OrderBy(provider => provider.Priority)
+            .ToArray();
         _logger = logger;
     }
 
@@ -121,19 +119,18 @@ public class TaskWorkflowService : ITaskWorkflowService
             return WorkflowResult.FailureResult("customFields חייב להיות אובייקט JSON תקין");
         }
 
-        // 3. קבלת ה-Handler לבדיקת הוולידציה
-        var handler = _handlerFactory.GetHandler(task.TaskType);
-        var hasConfiguredRules = _taskTypeValidationService.HasTaskType(task.TaskType);
-        if (handler == null && !hasConfiguredRules)
+        // 3. איתור ספק הכללים עבור סוג המשימה
+        var ruleProvider = ResolveRuleProvider(task.TaskType);
+        if (ruleProvider == null)
         {
             _logger.LogWarning(
-                "לא נמצא Handler עבור סוג משימה {TaskType} במשימה {TaskId}",
+                "לא נמצא ספק כללים עבור סוג משימה {TaskType} במשימה {TaskId}",
                 task.TaskType,
                 taskId);
             return WorkflowResult.FailureResult($"סוג משימה לא נתמך: {task.TaskType}");
         }
 
-        var finalStatus = _taskTypeValidationService.GetFinalStatus(task.TaskType) ?? handler?.FinalStatus;
+        var finalStatus = ruleProvider.GetFinalStatus(task.TaskType);
 
         // 4. בדיקת כללי תנועה
         var movementValidation = ValidateStatusMovement(task, newStatus, finalStatus);
@@ -142,30 +139,11 @@ public class TaskWorkflowService : ITaskWorkflowService
             return WorkflowResult.FailureResult(movementValidation.Message);
         }
 
-        // 5. וולידציה לפי קונפיגורציה (TaskTypeValidation)
-        if (hasConfiguredRules)
+        // 5. וולידציה לפי ספק הכללים שנבחר
+        var validationResult = ruleProvider.ValidateStatusChange(task, newStatus, newDataJson);
+        if (!validationResult.IsValid)
         {
-            var configValidation = _taskTypeValidationService.ValidateStatusData(
-                task.TaskType,
-                newStatus,
-                newDataJson);
-            if (!configValidation.IsValid)
-            {
-                return WorkflowResult.FailureResult(configValidation.Message);
-            }
-        }
-        // Fallback ל-Handlers עבור סוגי משימות שטרם הוגדרו בקונפיגורציה.
-        else if (handler != null)
-        {
-            var handlerValidation = handler.ValidateStatusChange(
-                task.CustomDataJson,
-                task.CurrentStatus,
-                newStatus,
-                newDataJson);
-            if (!handlerValidation.IsValid)
-            {
-                return WorkflowResult.FailureResult(handlerValidation.Message);
-            }
+            return WorkflowResult.FailureResult(validationResult.Message);
         }
 
         // 6. עדכון המשימה
@@ -208,8 +186,8 @@ public class TaskWorkflowService : ITaskWorkflowService
             return WorkflowResult.FailureResult("משימה כבר סגורה");
         }
 
-        var handler = _handlerFactory.GetHandler(task.TaskType);
-        var finalStatus = _taskTypeValidationService.GetFinalStatus(task.TaskType) ?? handler?.FinalStatus;
+        var ruleProvider = ResolveRuleProvider(task.TaskType);
+        var finalStatus = ruleProvider?.GetFinalStatus(task.TaskType);
         if (!finalStatus.HasValue)
         {
             return WorkflowResult.FailureResult($"סוג משימה לא נתמך: {task.TaskType}");
@@ -371,5 +349,10 @@ public class TaskWorkflowService : ITaskWorkflowService
         {
             return false;
         }
+    }
+
+    private ITaskWorkflowRuleProvider? ResolveRuleProvider(string taskType)
+    {
+        return _ruleProviders.FirstOrDefault(provider => provider.CanHandle(taskType));
     }
 }

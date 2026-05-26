@@ -27,6 +27,8 @@ builder.Services.AddScoped<ITaskTypeValidationService>(sp => sp.GetRequiredServi
 builder.Services.AddScoped<ITaskTypeMetadataService>(sp => sp.GetRequiredService<TaskTypeValidationService>());
 
 // ✅ הרשמה של Task Workflow Service
+builder.Services.AddScoped<ITaskWorkflowRuleProvider, MetadataTaskWorkflowRuleProvider>();
+builder.Services.AddScoped<ITaskWorkflowRuleProvider, HandlerTaskWorkflowRuleProvider>();
 builder.Services.AddScoped<ITaskWorkflowService, TaskWorkflowService>();
 
 // ✅ הרשמה של FluentValidation validators
