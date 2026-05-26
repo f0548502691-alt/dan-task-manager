@@ -59,7 +59,7 @@
 
 #### ➕ **Add new features**
 → Check [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md) for patterns  
-→ Review workflow provider guidance in [EXTENSION_GUIDE.md](EXTENSION_GUIDE.md)  
+→ Review workflow provider guidance in [EXTENSION_GUIDE.md](EXTENSION_GUIDE.md)
 → Review handler examples in [STRATEGY_EXAMPLES.cs](STRATEGY_EXAMPLES.cs)
 
 #### 🧪 **Run tests**
