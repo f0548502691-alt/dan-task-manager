@@ -11,5 +11,6 @@
     "src/app/tasks/task.interfaces.ts",
     "src/app/tasks/task-workflow-board.logic.ts",
     "src/app/tasks/task-workflow-board.logic.spec.ts"
-  ]
+  ],
+  "exclude": []
 }
