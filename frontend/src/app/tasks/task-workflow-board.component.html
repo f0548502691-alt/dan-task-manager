@@ -1,4 +1,24 @@
 <section class="workflow-layout">
+  <section class="create-panel">
+    <h2>Create task</h2>
+    <p class="panel-note">Current user is hard-coded to #{{ currentUserId }}.</p>
+
+    <form [formGroup]="createForm" (ngSubmit)="submitCreateTask()">
+      <label for="createTaskType">Task type</label>
+      <select id="createTaskType" formControlName="createTaskType">
+        <option *ngFor="let type of taskTypeOptions" [ngValue]="type">{{ type }}</option>
+      </select>
+
+      <label for="createTaskDescription">Description</label>
+      <textarea id="createTaskDescription" rows="3" formControlName="createTaskDescription"></textarea>
+      <small *ngIf="isCreateDescriptionInvalid()">Description is required (minimum 5 characters).</small>
+
+      <button type="submit" [disabled]="createInFlight() || createForm.invalid">
+        {{ createInFlight() ? 'Creating...' : 'Create task' }}
+      </button>
+    </form>
+  </section>
+
   <aside class="task-list-panel">
     <h2>Your tasks</h2>
 
@@ -24,7 +44,7 @@
       <strong>{{ taskStatusLabel(task.currentStatus) }}</strong>
     </p>
 
-    <form [formGroup]="form" (ngSubmit)="submitStatusUpdate()">
+    <form [formGroup]="statusForm" (ngSubmit)="submitStatusUpdate()">
       <label for="newStatus">New status</label>
       <select id="newStatus" formControlName="newStatus">
         <option [ngValue]="null" disabled>Select a status</option>
@@ -36,20 +56,20 @@
       <ng-container [ngSwitch]="task.taskType">
         <app-procurement-fields
           *ngSwitchCase="'Procurement'"
-          [form]="form"
+          [form]="statusForm"
           [status]="selectedNextStatus"
         ></app-procurement-fields>
 
         <app-development-fields
           *ngSwitchCase="'Development'"
-          [form]="form"
+          [form]="statusForm"
           [status]="selectedNextStatus"
         ></app-development-fields>
 
         <ng-container *ngSwitchDefault>
           <label for="fallbackJson">Workflow payload (JSON)</label>
           <textarea id="fallbackJson" rows="6" formControlName="fallbackJson"></textarea>
-          <small *ngIf="form.controls['fallbackJson'].hasError('invalidJson')">
+          <small *ngIf="statusForm.controls['fallbackJson'].hasError('invalidJson')">
             The JSON payload is invalid.
           </small>
         </ng-container>
@@ -58,10 +78,23 @@
       <p class="feedback feedback--error" *ngIf="taskService.error()">{{ taskService.error() }}</p>
       <p class="feedback feedback--success" *ngIf="successMessage()">{{ successMessage() }}</p>
 
-      <button type="submit" [disabled]="submitInFlight() || form.invalid">
+      <button type="submit" [disabled]="submitInFlight() || statusForm.invalid || task.currentStatus === TASK_STATUS.CLOSED">
         {{ submitInFlight() ? 'Updating...' : 'Update status' }}
       </button>
     </form>
+
+    <section class="close-task-panel">
+      <h4>Close task</h4>
+      <form [formGroup]="closeForm" (ngSubmit)="submitCloseTask()">
+        <label for="closeNotes">Final notes</label>
+        <textarea id="closeNotes" rows="3" formControlName="closeNotes"></textarea>
+        <small *ngIf="isCloseNotesInvalid()">Final notes are required (minimum 3 characters).</small>
+
+        <button type="submit" [disabled]="!canCloseTask(task) || closeInFlight() || closeForm.invalid">
+          {{ closeInFlight() ? 'Closing...' : 'Close task' }}
+        </button>
+      </form>
+    </section>
   </section>
 
   <ng-template #chooseTaskTemplate>

@@ -47,7 +47,7 @@ Use the following checklist as the default baseline for client-side task workflo
 - [OK] Minimal UI approach is in place (simple layout and lightweight styles).
 - [OK] Viewing user tasks is implemented (`TaskService.refreshCurrentUserTasks()` + board list rendering).
 - [OK] Advancing/reversing task status is available through status selection in the workflow board.
-- [Gap] Closing a task from the UI is not implemented yet (service method exists, board action is missing).
-- [Gap] Creating a task from the UI is not implemented yet (service method exists, create form/action is missing).
-- [Gap] Hard-coded user ID wiring is not visible in the current frontend snapshot (likely expected in app shell/bootstrap).
-- [Gap] Strict mode cannot be directly verified in this snapshot because `tsconfig` files are not present in the repository tree.
+- [OK] Creating a task from the UI is implemented in `task-workflow-board` via `submitCreateTask()`.
+- [OK] Closing a task from the UI is implemented in `task-workflow-board` via `submitCloseTask()`.
+- [OK] Hard-coded user ID wiring is implemented in `TaskWorkflowBoardComponent` (`DEFAULT_CURRENT_USER_ID = 1` + `setCurrentUserId` on init).
+- [OK] Strict mode is explicitly configured in `frontend/tsconfig.json` (`"strict": true`).
