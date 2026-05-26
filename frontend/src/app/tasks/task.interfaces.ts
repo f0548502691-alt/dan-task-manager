@@ -64,7 +64,8 @@ export interface UpdateTaskRequest {
 
 export interface ChangeStatusWorkflowRequest {
   newStatus: number;
-  newDataJson: string;
+  nextAssignedToUserId: number;
+  customFields: TaskCustomData;
 }
 
 export interface CloseTaskRequest {

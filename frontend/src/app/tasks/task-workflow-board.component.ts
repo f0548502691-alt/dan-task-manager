@@ -167,7 +167,8 @@ export class TaskWorkflowBoardComponent implements OnInit {
 
     const request: ChangeStatusWorkflowRequest = {
       newStatus: this.selectedNextStatus,
-      newDataJson: JSON.stringify(payload)
+      nextAssignedToUserId: task.assignedToUserId,
+      customFields: payload
     };
 
     this.submitInFlight.set(true);
