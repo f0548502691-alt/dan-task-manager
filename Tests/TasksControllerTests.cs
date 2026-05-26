@@ -42,7 +42,7 @@ public class TasksControllerTests : IDisposable
     {
         var request = new CreateTaskRequest
         {
-            TaskType = "Analysis",
+            TaskType = "Unsupported",
             Description = "Analyze the risky flow",
             AssignedToUserId = 1,
             CustomDataJson = "{}"
@@ -53,10 +53,10 @@ public class TasksControllerTests : IDisposable
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var payloadJson = JsonSerializer.Serialize(badRequest.Value);
         Assert.Contains("TaskType", payloadJson);
-        Assert.Contains("Analysis", payloadJson);
+        Assert.Contains("Unsupported", payloadJson);
         Assert.Contains("Development", payloadJson);
         Assert.Contains("Procurement", payloadJson);
-        Assert.Empty(await _context.Tasks.Where(task => task.TaskType == "Analysis").ToListAsync());
+        Assert.Empty(await _context.Tasks.Where(task => task.Description == request.Description).ToListAsync());
     }
 
     public void Dispose()
