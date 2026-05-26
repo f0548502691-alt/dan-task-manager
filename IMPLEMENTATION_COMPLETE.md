@@ -39,11 +39,20 @@ All three phases successfully implemented with comprehensive documentation and 3
 │    │   Status 2: Requires prices[]  │
 │    │   Status 3: Requires receipt   │
 │    │                                │
-│    └─ DevelopmentTaskHandler        │
-│        FinalStatus: 4               │
-│        Status 2: Requires spec      │
-│        Status 3: Requires branch    │
-│        Status 4: Requires version   │
+│    ├─ DevelopmentTaskHandler        │
+│    │   FinalStatus: 4               │
+│    │   Status 2: Requires spec      │
+│    │   Status 3: Requires branch    │
+│    │   Status 4: Requires version   │
+│    │                                │
+│    ├─ AnalysisTaskHandler           │
+│    │   FinalStatus: 2               │
+│    │   Status 2: Requires report    │
+│    │                                │
+│    └─ TestingTaskHandler            │
+│        FinalStatus: 3               │
+│        Status 2: Requires cases     │
+│        Status 3: Requires coverage  │
 │                                     │
 │  TaskHandlerFactory                 │
 │    └─ Handler Lookup (DI)           │
@@ -138,16 +147,41 @@ All three phases successfully implemented with comprehensive documentation and 3
   - Requires JSON field: `versionNumber`
   - SemVer format: "major.minor.patch"
 
+#### 3. AnalysisTaskHandler
+- **FinalStatus**: 2
+- **Status 2 Validation**:
+  - Requires JSON field: `analysisReport`
+  - Must be a non-empty string
+
+#### 4. TestingTaskHandler
+- **FinalStatus**: 3
+- **Status 2 Validation**:
+  - Requires JSON field: `testCases`
+  - Must be an integer greater than 0
+
+- **Status 3 Validation**:
+  - Requires JSON field: `coverage`
+  - Must be a percentage string from 0% to 100%
+  - Requires non-empty `summary`
+
 ### Factory
 - **TaskHandlerFactory.cs**
   - Receives `IEnumerable<ITaskHandler>` via DI
   - Case-insensitive lookup
   - Methods: GetHandler(), HasHandler(), GetRegisteredTaskTypes()
+  - Unknown task types are rejected by create/status workflows instead of using fallback validation
+
+### Handler Auto-registration
+- **TaskHandlerRegistrationExtensions.cs**
+  - `AddTaskHandlersFromAssembly()` registers concrete `ITaskHandler` classes
+  - Classes must be in `DanTaskManager.Domain.Handlers`
+  - Class names must end with `TaskHandler`
 
 ### Status: ✅ Complete
 - 1 interface
-- 2 handler implementations
+- 4 handler implementations
 - 1 factory
+- 1 DI registration helper
 - Full validation logic
 
 ---
@@ -170,9 +204,10 @@ Task<BaseTask?> GetTaskAsync(int taskId);
 1. **Check Not Closed** - Status 99 is immutable
 2. **Forward Movement** - Must be exactly +1
 3. **Backward Movement** - Can go to any lower status
-4. **Handler Validation** - Delegates to handler for specific rules
-5. **Final Status** - Cannot exceed handler's FinalStatus
-6. **Persistence** - All changes saved to database
+4. **Registered Handler Required** - unsupported `TaskType` fails
+5. **Handler Validation** - Delegates to handler for specific rules
+6. **Final Status** - Cannot exceed handler's FinalStatus
+7. **Persistence** - All changes saved to database
 
 **Result Classes**:
 - `WorkflowResult` - Success, Message, NewStatus, UpdatedTask
@@ -202,9 +237,8 @@ Task<BaseTask?> GetTaskAsync(int taskId);
 ### Dependency Injection
 ```csharp
 // Program.cs
-services.AddTransient<ITaskHandler, ProcurementTaskHandler>();
-services.AddTransient<ITaskHandler, DevelopmentTaskHandler>();
-services.AddSingleton(sp => new TaskHandlerFactory(...));
+services.AddTaskHandlersFromAssembly();
+services.AddScoped<TaskHandlerFactory>();
 services.AddScoped<ITaskWorkflowService, TaskWorkflowService>();
 ```
 
@@ -225,6 +259,8 @@ services.AddScoped<ITaskWorkflowService, TaskWorkflowService>();
 - 20+ tests covering:
   - ProcurementTaskHandler validation
   - DevelopmentTaskHandler validation
+  - AnalysisTaskHandler validation
+  - TestingTaskHandler validation
   - TaskHandlerFactory functionality
 
 #### WorkflowServiceTests.cs
@@ -417,7 +453,8 @@ Task workflow with discrete states
 1. Create class implementing ITaskHandler
 2. Define TaskType and FinalStatus
 3. Implement ValidateStatusChange()
-4. Register in Program.cs: AddTransient<ITaskHandler, MyHandler>()
+4. Put it in DanTaskManager.Domain.Handlers with a class name ending in TaskHandler
+5. Add tests for valid payloads and validation failures
 ```
 
 ### Adding New Validation Rule

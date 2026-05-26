@@ -132,17 +132,26 @@ public class QATaskHandler : ITaskHandler
 }
 ```
 
-### Step 2: Register Handler
+### Step 2: Make Handler Discoverable
+
+Handlers are registered automatically by `AddTaskHandlersFromAssembly()` in `Program.cs`.
+Do not add one line per handler unless the registration helper is intentionally replaced.
+
+For automatic registration, the handler must:
+
+1. Implement `ITaskHandler`.
+2. Be a concrete, non-abstract class.
+3. Live in `DanTaskManager.Domain.Handlers`.
+4. Have a class name ending in `TaskHandler`.
 
 ```csharp
-// Program.cs
-builder.Services.AddTransient<ITaskHandler, QATaskHandler>();
-
-// Full example:
-services.AddTransient<ITaskHandler, ProcurementTaskHandler>();
-services.AddTransient<ITaskHandler, DevelopmentTaskHandler>();
-services.AddTransient<ITaskHandler, QATaskHandler>(); // NEW
+// Program.cs already contains this:
+builder.Services.AddTaskHandlersFromAssembly();
+builder.Services.AddScoped<TaskHandlerFactory>();
 ```
+
+`TaskHandlerFactory` builds a case-insensitive map from `TaskType` to handler. Keep `TaskType`
+values unique; a duplicate value will fail factory construction rather than silently picking one.
 
 ### Step 3: Write Tests
 
@@ -244,6 +253,15 @@ curl -X POST http://localhost:5000/api/tasks \
     "description": "Test new feature",
     "assignedToUserId": 1
   }'
+```
+
+If the handler is not discoverable, create-task requests fail with a 400 response:
+
+```json
+{
+  "error": "TaskType לא נתמך: QA",
+  "supportedTaskTypes": ["Analysis", "Development", "Procurement", "Testing"]
+}
 ```
 
 ---
@@ -585,6 +603,8 @@ public async Task FullWorkflow_WithNewFeature_ShouldPass()
 - Follow existing patterns
 - Write XML documentation
 - Add appropriate logging
+- Keep handler classes in `DanTaskManager.Domain.Handlers` and end names with `TaskHandler`
+- Use a unique `TaskType`; matching is case-insensitive
 
 ✅ **Test Thoroughly**
 - Unit tests for new logic
@@ -613,7 +633,7 @@ public async Task FullWorkflow_WithNewFeature_ShouldPass()
 
 To extend the system:
 
-1. **New Handler**: Implement ITaskHandler, register in Program.cs
+1. **New Handler**: Implement ITaskHandler and satisfy the auto-registration naming/namespace rules
 2. **New Endpoint**: Add to interface, implement in service, add to controller
 3. **New Validation**: Add validation method, integrate into workflow
 4. **New Datatype**: Add handler with appropriate validation

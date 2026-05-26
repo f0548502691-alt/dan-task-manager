@@ -51,7 +51,18 @@ if (task.CurrentStatus == 99)  // ClosedStatus
 2 → 2 ❌ (אותו סטטוס)
 ```
 
-### 3. **וולידציה ספציפית של Handler**
+### 3. **בדיקת Handler רשום**
+
+כל שינוי סטטוס חייב Handler רשום עבור `TaskType`.
+אם המשימה נשמרה בעבר עם סוג לא מוכר, השירות מחזיר שגיאה ולא מפעיל fallback בסיסי:
+
+```csharp
+var handler = _handlerFactory.GetHandler(task.TaskType);
+if (handler == null)
+    return Failure($"סוג משימה לא נתמך: {task.TaskType}");
+```
+
+### 4. **וולידציה ספציפית של Handler**
 לאחר שהתנועה אושרה, Handler בודק וולידציה ספציפית:
 ```csharp
 var handlerValidation = handler.ValidateStatusChange(
@@ -61,14 +72,14 @@ var handlerValidation = handler.ValidateStatusChange(
     newDataJson);
 ```
 
-### 4. **בדיקת סטטוס סופי**
+### 5. **בדיקת סטטוס סופי**
 ```csharp
 // אי אפשר להעבור את סטטוס סופי של Handler
 if (finalStatus.HasValue && currentStatus >= finalStatus && newStatus > currentStatus)
     return Failure("משימה הגיעה לסטטוס סופי");
 ```
 
-### 5. **עדכון נתונים**
+### 6. **עדכון נתונים**
 ```csharp
 task.CurrentStatus = newStatus;
 task.CustomDataJson = newDataJson;
@@ -121,6 +132,35 @@ Status 99: Closed (סגור לנצח)
 Status 3 → Status 2 ← (rollback)
 Status 2 → Status 1 ← (rollback)
 Status 2 → Status 0 ← (rollback)
+```
+
+### Analysis Task
+
+```
+Status 0: התחלה
+   ↓ +1
+Status 1: בתהליך
+   ↓ +1
+Status 2: ✅ FinalStatus
+   Requires: {"analysisReport": "Reviewed scope and risks."}
+   ↓
+Status 99: Closed (סגור לנצח)
+```
+
+### Testing Task
+
+```
+Status 0: התחלה
+   ↓ +1
+Status 1: בתהליך
+   ↓ +1
+Status 2: תכנון בדיקות ⭐
+   Requires: {"testCases": 15}
+   ↓ +1
+Status 3: ✅ FinalStatus
+   Requires: {"coverage": "85%", "summary": "Regression completed"}
+   ↓
+Status 99: Closed (סגור לנצח)
 ```
 
 ---
@@ -189,6 +229,14 @@ Content-Type: application/json
 }
 ```
 
+**Response (400) - Unsupported TaskType:**
+```json
+{
+  "error": "TaskType לא נתמך: Unknown",
+  "supportedTaskTypes": ["Analysis", "Development", "Procurement", "Testing"]
+}
+```
+
 ---
 
 ### 2. **Change Status with Workflow**
@@ -224,6 +272,13 @@ Content-Type: application/json
 ```json
 {
   "error": "'prices' חייב להכיל בדיוק 2 מחרוזות, נמצאו 1"
+}
+```
+
+**Response (400) - Unsupported Existing TaskType:**
+```json
+{
+  "error": "סוג משימה לא נתמך: Unknown"
 }
 ```
 
@@ -510,7 +565,8 @@ POST /api/tasks/1/change-status
 2. **Backward Movement**: Allowed to any lower status (rollback)
 3. **Closed Status**: 99 (permanent, cannot be changed)
 4. **Final Status**: Handler-specific status that cannot be exceeded
-5. **Workflow Validation**: Combines movement rules + handler validation
+5. **Registered Handler Required**: unsupported task types fail creation and status changes
+6. **Workflow Validation**: Combines movement rules + handler validation
 
 ---
 

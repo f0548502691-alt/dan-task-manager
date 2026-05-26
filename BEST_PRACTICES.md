@@ -70,8 +70,11 @@ public class TaskWorkflowService
     }
 }
 
-// Registered in Program.cs
+// Services are registered in Program.cs
 services.AddScoped<ITaskWorkflowService, TaskWorkflowService>();
+
+// Task handlers are discovered by AddTaskHandlersFromAssembly()
+services.AddTaskHandlersFromAssembly();
 ```
 
 ### 3. Single Responsibility
@@ -113,6 +116,8 @@ public class ProcurementTaskHandler : ITaskHandler
 // Handlers
 public class ProcurementTaskHandler
 public class DevelopmentTaskHandler
+public class AnalysisTaskHandler
+public class TestingTaskHandler
 
 // Services
 public class TaskWorkflowService

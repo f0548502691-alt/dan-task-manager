@@ -154,6 +154,50 @@ Response:
 }
 ```
 
+#### ❌ Analysis - Missing Report
+```
+Status: 400 Bad Request
+
+Response:
+{
+  "error": "בסטטוס 2, נדרש שדה 'analysisReport' לא ריק"
+}
+```
+
+#### ❌ Testing - Missing or Invalid Test Cases
+```
+Status: 400 Bad Request
+
+Response:
+{
+  "error": "בסטטוס 2, נדרש שדה 'testCases'"
+}
+```
+
+Or:
+```
+{
+  "error": "'testCases' חייב להיות מספר שלם גדול מ-0"
+}
+```
+
+#### ❌ Testing - Invalid Coverage or Summary
+```
+Status: 400 Bad Request
+
+Response:
+{
+  "error": "'coverage' חייב להיות בפורמט אחוזים תקין, לדוגמה 85%"
+}
+```
+
+Or:
+```
+{
+  "error": "בסטטוס 3, נדרש שדה 'summary' לא ריק"
+}
+```
+
 ---
 
 ### Resource Not Found Errors
@@ -188,7 +232,7 @@ Status: 400 Bad Request
 
 Response:
 {
-  "error": "TaskType חייב להיות מחרוזת לא ריקה"
+  "error": "TaskType נדרש"
 }
 ```
 
@@ -208,7 +252,18 @@ Status: 400 Bad Request
 
 Response:
 {
-  "error": "TaskType 'Unknown' לא רשום בהנדלרים"
+  "error": "TaskType לא נתמך: Unknown",
+  "supportedTaskTypes": ["Analysis", "Development", "Procurement", "Testing"]
+}
+```
+
+#### ❌ Unsupported Existing Task Type During Status Change
+```
+Status: 400 Bad Request
+
+Response:
+{
+  "error": "סוג משימה לא נתמך: Unknown"
 }
 ```
 
@@ -453,6 +508,7 @@ pm.test("Error message contains validation text", function () {
 | ✅ Success | 200 | "סטטוס עודכן בהצלחה" | Proceed |
 | ❌ Invalid jump | 400 | "בדיוק ב-1 סטטוס" | Move +1 first |
 | ❌ Missing data | 400 | "לא נמצא שדה" | Add required data |
+| ❌ Unknown task type | 400 | "לא נתמך" | Use one of `supportedTaskTypes` or add a discoverable handler |
 | ❌ Closed task | 400 | "משימה סגורה" | Cannot change |
 | ❌ Not found | 404 | "לא נמצאה" | Create first |
 | ❌ Bad request | 400 | Various | Check input |

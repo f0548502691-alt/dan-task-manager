@@ -78,7 +78,8 @@
 ✅ Type-safe validation  
 ✅ Easy to add new handlers  
 ✅ Factory pattern with DI  
-✅ 2 built-in handlers (Procurement, Development)  
+✅ 4 built-in handlers (Procurement, Development, Analysis, Testing)
+✅ Automatic handler discovery via `AddTaskHandlersFromAssembly()`
 
 ### REST API
 ✅ 9 endpoints  

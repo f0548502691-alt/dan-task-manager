@@ -60,6 +60,25 @@ Domain/Handlers/DevelopmentTaskHandler.cs
    └─ Status 4: versionNumber (SemVer)
 ```
 
+#### `AnalysisTaskHandler` - סוג משימה 3
+```
+Domain/Handlers/AnalysisTaskHandler.cs
+├─ TaskType = "Analysis"
+├─ FinalStatus = 2
+└─ ValidateStatusChange()
+   └─ Status 2: analysisReport (מחרוזת לא ריקה)
+```
+
+#### `TestingTaskHandler` - סוג משימה 4
+```
+Domain/Handlers/TestingTaskHandler.cs
+├─ TaskType = "Testing"
+├─ FinalStatus = 3
+└─ ValidateStatusChange()
+   ├─ Status 2: testCases (מספר שלם גדול מ-0)
+   └─ Status 3: coverage ("85%") + summary
+```
+
 #### `TaskHandlerFactory` - Factory לייצור Handlers
 ```
 Domain/Handlers/TaskHandlerFactory.cs
@@ -100,6 +119,8 @@ Controllers/TasksController.cs
 Tests/HandlerTests.cs
 ├─ ProcurementTaskHandlerTests (10 בדיקות)
 ├─ DevelopmentTaskHandlerTests (10 בדיקות)
+├─ AnalysisTaskHandlerTests
+├─ TestingTaskHandlerTests
 └─ TaskHandlerFactoryTests (5 בדיקות)
 ```
 
@@ -222,17 +243,17 @@ Content-Type: application/json
 ```csharp
 // Program.cs
 
-// הרשמה של Handlers
-builder.Services.AddTransient<ITaskHandler, ProcurementTaskHandler>();
-builder.Services.AddTransient<ITaskHandler, DevelopmentTaskHandler>();
+// הרשמה אוטומטית של כל Handler שעומד בכללי הגילוי
+builder.Services.AddTaskHandlersFromAssembly();
 
-// הרשמה של Factory (מזריק את כל ה-Handlers אוטומטי)
-builder.Services.AddSingleton(sp => 
-    new TaskHandlerFactory(sp.GetRequiredService<IEnumerable<ITaskHandler>>()));
+// הרשמה של Factory (מזריק את כל ה-Handlers אוטומטית)
+builder.Services.AddScoped<TaskHandlerFactory>();
 
 // הרשמה של Service
 builder.Services.AddScoped<ITaskStatusService, TaskStatusService>();
 ```
+
+כללי גילוי: המחלקה חייבת לממש `ITaskHandler`, להיות concrete, להימצא ב-`DanTaskManager.Domain.Handlers`, ושמה חייב להסתיים ב-`TaskHandler`.
 
 ---
 
@@ -259,13 +280,13 @@ public class TestingTaskHandler : ITaskHandler
 }
 ```
 
-### שלב 2: הרשמה
-```csharp
-builder.Services.AddTransient<ITaskHandler, TestingTaskHandler>();
-```
+### שלב 2: ודא גילוי אוטומטי
+- namespace: `DanTaskManager.Domain.Handlers`
+- שם מחלקה: מסתיים ב-`TaskHandler`
+- `TaskType`: ייחודי, כי ההתאמה case-insensitive
 
 ### שלב 3: סיום! ✅
-כל יתר הקוד עובד אוטומטי!
+`AddTaskHandlersFromAssembly()` ירשום את המחלקה, וכל יתר הקוד עובד אוטומטית.
 
 ---
 
@@ -289,8 +310,10 @@ dotnet test
 Results:
 - ✅ ProcurementTaskHandler: 7 בדיקות
 - ✅ DevelopmentTaskHandler: 8 בדיקות
+- ✅ AnalysisTaskHandler: בדיקות שדה `analysisReport`
+- ✅ TestingTaskHandler: בדיקות `testCases`, `coverage`, `summary`
 - ✅ TaskHandlerFactory: 5 בדיקות
-- **Total: 20 בדיקות**
+- **Total: 30+ בדיקות**
 
 ---
 
@@ -299,6 +322,8 @@ Results:
 - [x] ITaskHandler ממשק
 - [x] ProcurementTaskHandler implementation
 - [x] DevelopmentTaskHandler implementation
+- [x] AnalysisTaskHandler implementation
+- [x] TestingTaskHandler implementation
 - [x] TaskHandlerFactory
 - [x] ITaskStatusService ממשק
 - [x] TaskStatusService implementation

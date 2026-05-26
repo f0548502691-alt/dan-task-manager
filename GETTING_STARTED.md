@@ -74,7 +74,10 @@ dan-task-manager/
 │       ├── ITaskHandler.cs         # Handler interface
 │       ├── ProcurementTaskHandler.cs
 │       ├── DevelopmentTaskHandler.cs
-│       └── TaskHandlerFactory.cs
+│       ├── AnalysisTaskHandler.cs
+│       ├── TestingTaskHandler.cs
+│       ├── TaskHandlerFactory.cs
+│       └── TaskHandlerRegistrationExtensions.cs
 │
 ├── Services/                        # Business logic
 │   ├── ITaskWorkflowService.cs     # Workflow interface
@@ -112,6 +115,8 @@ dan-task-manager/
 ```
 Procurement:  0 → 1 → 2 → 3 → 99 (FinalStatus: 3)
 Development:  0 → 1 → 2 → 3 → 4 → 99 (FinalStatus: 4)
+Analysis:     0 → 1 → 2 → 99 (FinalStatus: 2)
+Testing:      0 → 1 → 2 → 3 → 99 (FinalStatus: 3)
 
 Rules:
 ✅ Forward: +1 only
@@ -130,6 +135,13 @@ DevelopmentTaskHandler:
   Status 2: Requires specification
   Status 3: Requires branchName (valid Git format)
   Status 4: Requires versionNumber (SemVer)
+
+AnalysisTaskHandler:
+  Status 2: Requires analysisReport
+
+TestingTaskHandler:
+  Status 2: Requires testCases > 0
+  Status 3: Requires coverage percentage and summary
 ```
 
 ### REST API Endpoints (9 total)
@@ -222,10 +234,11 @@ dotnet test --filter "HandlerTests"
    }
    ```
 
-2. **Register in Program.cs**
-   ```csharp
-   services.AddTransient<ITaskHandler, MyTaskHandler>();
-   ```
+2. **Make it discoverable**
+   - Put it in `DanTaskManager.Domain.Handlers`
+   - Use a concrete class name ending in `TaskHandler`
+   - Keep `TaskType` unique; matching is case-insensitive
+   - `Program.cs` already calls `AddTaskHandlersFromAssembly()`
 
 3. **Write tests**
    ```csharp
@@ -282,7 +295,7 @@ A: Yes! Use `change-status` with a lower status number (e.g., 3 → 2).
 A: Store handler-specific data (prices, receipt, specification, etc.) as JSON.
 
 ### Q: How do I add a new task type?
-A: Create a new ITaskHandler implementation and register it in Program.cs.
+A: Create a new `ITaskHandler` implementation in `DanTaskManager.Domain.Handlers` with a class name ending in `TaskHandler`; `AddTaskHandlersFromAssembly()` registers it automatically.
 
 ### Q: What if validation fails?
 A: The API returns 400 with an error message explaining what's wrong.

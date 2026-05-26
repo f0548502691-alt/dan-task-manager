@@ -164,7 +164,7 @@ DELETE /api/tasks/{id}               Delete
 ```
 📖 See: [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md)
 
-### Task Types (2 built-in)
+### Task Types (4 built-in)
 ```
 Procurement (Final: 3)
   Status 2: prices[]
@@ -174,6 +174,13 @@ Development (Final: 4)
   Status 2: specification
   Status 3: branchName
   Status 4: versionNumber
+
+Analysis (Final: 2)
+  Status 2: analysisReport
+
+Testing (Final: 3)
+  Status 2: testCases
+  Status 3: coverage + summary
 ```
 📖 See: [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md)
 

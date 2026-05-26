@@ -37,15 +37,14 @@
          │      יורשים         │
          ├──────────────────────┘
          │
-    ┌────┴───────┬──────────────────────┐
-    │            │                      │
-    ▼            ▼                      ▼
-┌─────────────────┐    ┌──────────────────────────────┐
-│  Procurement    │    │  Development                 │
-│  TaskHandler    │    │  TaskHandler                 │
-│                 │    │                              │
-│ FinalStatus: 3  │    │ FinalStatus: 4               │
-└─────────────────┘    └──────────────────────────────┘
+    ┌────┴───────┬──────────────────────┬──────────────────────┬──────────────────────┐
+    │            │                      │                      │                      │
+    ▼            ▼                      ▼                      ▼
+┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+│ Procurement     │ │ Development     │ │ Analysis        │ │ Testing         │
+│ TaskHandler     │ │ TaskHandler     │ │ TaskHandler     │ │ TaskHandler     │
+│ FinalStatus: 3  │ │ FinalStatus: 4  │ │ FinalStatus: 2  │ │ FinalStatus: 3  │
+└─────────────────┘ └─────────────────┘ └─────────────────┘ └─────────────────┘
 ```
 
 ---
@@ -111,7 +110,41 @@ public interface ITaskHandler
 
 ---
 
-### 4. **TaskHandlerFactory**
+### 4. **AnalysisTaskHandler**
+
+**סטטוס סופי:** 2
+
+| סטטוס | דרישה | דוגמה JSON |
+|-------|-------|-----------|
+| 0 | - | - |
+| 1 | - | - |
+| 2 | **דוח ניתוח** לא ריק | `{"analysisReport": "Reviewed scope and risks."}` |
+
+**וולידציה:**
+- בסטטוס 2: בדיקה שקיים שדה `analysisReport` מסוג מחרוזת ושאינו ריק.
+- ניסיון להתקדם מעבר לסטטוס 2 נכשל כי זהו ה-`FinalStatus`.
+
+---
+
+### 5. **TestingTaskHandler**
+
+**סטטוס סופי:** 3
+
+| סטטוס | דרישה | דוגמה JSON |
+|-------|-------|-----------|
+| 0 | - | - |
+| 1 | - | - |
+| 2 | מספר מקרי בדיקה גדול מ-0 | `{"testCases": 15}` |
+| 3 | אחוז כיסוי תקין וסיכום לא ריק | `{"coverage": "85%", "summary": "Regression completed"}` |
+
+**וולידציה:**
+- בסטטוס 2: בדיקה ש-`testCases` הוא מספר שלם גדול מ-0.
+- בסטטוס 3: בדיקה ש-`coverage` הוא מחרוזת בפורמט אחוזים בין 0% ל-100%, וש-`summary` הוא מחרוזת לא ריקה.
+- ניסיון להתקדם מעבר לסטטוס 3 נכשל כי זהו ה-`FinalStatus`.
+
+---
+
+### 6. **TaskHandlerFactory**
 
 ```csharp
 public class TaskHandlerFactory
@@ -128,10 +161,12 @@ public class TaskHandlerFactory
 - בונה מפה של `TaskType` → `ITaskHandler`
 - מחזירה את ה-Handler המתאים לפי סוג משימה
 - מעריכה case-insensitive (לא משנה רישיות)
+- אם אין Handler, `GetHandler()` מחזיר `null`; יצירת משימה ושינוי סטטוס דוחים סוגים לא רשומים במקום להריץ fallback בסיסי
+- `TaskType` כפול (גם בשינוי רישיות בלבד) יגרום לכשל בבניית המפה, ולכן כל Handler חייב שם ייחודי
 
 ---
 
-### 5. **ITaskStatusService**
+### 7. **ITaskStatusService**
 
 ```csharp
 public interface ITaskStatusService
@@ -178,10 +213,10 @@ public class TestingTaskHandler : ITaskHandler
     public ValidationResult ValidateStatusChange(...) { ... }
 }
 
-// 2. הרשמה בـ Program.cs
-builder.Services.AddTransient<ITaskHandler, TestingTaskHandler>();
+// 2. אין צורך לעדכן Program.cs אם המחלקה נמצאת ב-Domain.Handlers,
+//    מממשת ITaskHandler, אינה abstract, ושמה מסתיים ב-TaskHandler.
 
-// 3. זהו! TaskHandlerFactory ילקח אותו אוטומטי
+// 3. AddTaskHandlersFromAssembly יזהה אותה, ו-TaskHandlerFactory יקבל אותה דרך DI
 ```
 
 ---
@@ -204,17 +239,26 @@ builder.Services.AddTransient<ITaskHandler, TestingTaskHandler>();
 ## 💾 Dependency Injection - Program.cs
 
 ```csharp
-// הרשמה של כל ה-Handlers
-builder.Services.AddTransient<ITaskHandler, ProcurementTaskHandler>();
-builder.Services.AddTransient<ITaskHandler, DevelopmentTaskHandler>();
+// סריקה והרשמה של כל ה-Handlers מתוך assembly של Domain.Handlers
+builder.Services.AddTaskHandlersFromAssembly();
 
-// הרשמה של Factory (אוטומטי מזריק את כל ה-Handlers)
-builder.Services.AddSingleton(sp => 
-    new TaskHandlerFactory(sp.GetRequiredService<IEnumerable<ITaskHandler>>()));
+// הרשמה של Factory (מקבל IEnumerable<ITaskHandler> מה-DI)
+builder.Services.AddScoped<TaskHandlerFactory>();
 
 // הרשמה של Service
 builder.Services.AddScoped<ITaskStatusService, TaskStatusService>();
 ```
+
+### כללי גילוי אוטומטי
+
+`AddTaskHandlersFromAssembly()` רושם רק מחלקות שעומדות בכל התנאים הבאים:
+
+1. מממשות `ITaskHandler`.
+2. נמצאות באותו namespace של `ITaskHandler` (`DanTaskManager.Domain.Handlers`).
+3. הן concrete classes (`IsClass == true`, `IsAbstract == false`).
+4. שם המחלקה מסתיים ב-`TaskHandler`.
+
+אם מוסיפים Handler תחת namespace אחר או בשם שלא מסתיים ב-`TaskHandler`, הוא לא יירשם אוטומטית ו-API יציג אותו כסוג לא נתמך.
 
 ---
 
@@ -245,6 +289,27 @@ Content-Type: application/json
 ```json
 {
   "error": "'prices' חייב להכיל בדיוק 2 מחרוזות, נמצאו 1"
+}
+```
+
+### יצירת משימה עם סוג לא נתמך
+
+```http
+POST /api/tasks
+Content-Type: application/json
+
+{
+  "taskType": "Unknown",
+  "description": "משימה ללא Handler",
+  "assignedToUserId": 1
+}
+```
+
+**תוצאה בכישלון (400):**
+```json
+{
+  "error": "TaskType לא נתמך: Unknown",
+  "supportedTaskTypes": ["Analysis", "Development", "Procurement", "Testing"]
 }
 ```
 
@@ -291,10 +356,13 @@ Domain/
 ├── BaseTask.cs
 ├── AppUser.cs
 └── Handlers/
-    ├── ITaskHandler.cs                  // ממשק
-    ├── ProcurementTaskHandler.cs       // Implementation
-    ├── DevelopmentTaskHandler.cs       // Implementation
-    └── TaskHandlerFactory.cs           // Factory
+    ├── ITaskHandler.cs                         // ממשק
+    ├── ProcurementTaskHandler.cs               // Implementation
+    ├── DevelopmentTaskHandler.cs               // Implementation
+    ├── AnalysisTaskHandler.cs                  // Implementation
+    ├── TestingTaskHandler.cs                   // Implementation
+    ├── TaskHandlerFactory.cs                   // Factory
+    └── TaskHandlerRegistrationExtensions.cs    // DI auto-registration
 
 Services/
 ├── ITaskStatusService.cs               // ממשק
@@ -331,12 +399,16 @@ Controllers/
    - `FinalStatus` (לדוגמה: 2)
    - `ValidateStatusChange()` עם לוגיקה ספציפית
 
-3. **הוסף הרשמה ב-Program.cs**
-   ```csharp
-   builder.Services.AddTransient<ITaskHandler, TestingTaskHandler>();
-   ```
+3. **ודא שהמחלקה ניתנת לגילוי אוטומטי**
+   - namespace: `DanTaskManager.Domain.Handlers`
+   - שם מחלקה שמסתיים ב-`TaskHandler`
+   - concrete class שמממשת `ITaskHandler`
 
-4. **סיום!** TaskHandlerFactory וITaskStatusService יעבדו אוטומטי
+4. **הוסף בדיקות**
+   - בדיקות יחידה ל-Handler החדש
+   - בדיקת workflow לסוג לא נתמך או לנתונים חסרים אם יש סיכון תפעולי
+
+5. **סיום!** `AddTaskHandlersFromAssembly`, `TaskHandlerFactory` ו-`ITaskStatusService` יעבדו אוטומטית
 
 ---
 
@@ -346,6 +418,8 @@ Controllers/
 - **FinalStatus**: סטטוס סופי - משימה לא יכולה להתקדם מעבר לו
 - **Validation**: וולידציה מתבצעת בסטטוס מסוים, לא בכולם
 - **Case-insensitive**: TaskType מכופה case-insensitive
+- **Unsupported TaskType**: יצירת משימה ושינוי סטטוס נכשלים אם אין Handler רשום
+- **Auto-registration**: אין צורך לעדכן `Program.cs` עבור Handler חדש שעומד בכללי הגילוי
 
 ---
 

@@ -161,9 +161,8 @@ public class TestingTaskHandler : ITaskHandler
     public ValidationResult ValidateStatusChange(...) { ... }
 }
 
-// הרשמה
-builder.Services.AddTransient<ITaskHandler, TestingTaskHandler>();
-// זהו! TaskHandlerFactory יקח אותו אוטומטי
+// אין הרשמה ידנית: AddTaskHandlersFromAssembly מגלה Handler מתאים אוטומטית
+// בתנאי שהוא ב-DanTaskManager.Domain.Handlers ושמו מסתיים ב-TaskHandler
 ```
 
 ### Single Responsibility Principle ✅
@@ -227,7 +226,10 @@ Domain/
     ├── ValidationResult.cs
     ├── ProcurementTaskHandler.cs
     ├── DevelopmentTaskHandler.cs
-    └── TaskHandlerFactory.cs
+    ├── AnalysisTaskHandler.cs
+    ├── TestingTaskHandler.cs
+    ├── TaskHandlerFactory.cs
+    └── TaskHandlerRegistrationExtensions.cs
 
 Services/
 ├── ITaskStatusService.cs
@@ -269,6 +271,15 @@ Documentation/
 - ✅ Valid version (SemVer) → Pass
 - ✅ Valid version (numeric) → Pass
 - ✅ Invalid version format → Fail
+
+### AnalysisTaskHandler
+- ✅ Valid analysisReport → Pass
+- ✅ Missing analysisReport → Fail
+
+### TestingTaskHandler
+- ✅ Positive testCases → Pass
+- ✅ Valid coverage + summary → Pass
+- ✅ Invalid coverage → Fail
 
 ### TaskHandlerFactory
 - ✅ Get handler → Works
@@ -314,8 +325,9 @@ public class TestingTaskHandler : ITaskHandler
     }
 }
 
-// 2. Register in Program.cs
-builder.Services.AddTransient<ITaskHandler, TestingTaskHandler>();
+// 2. Make it discoverable
+// Namespace: DanTaskManager.Domain.Handlers
+// Class name suffix: TaskHandler
 
 // 3. Done! ✅
 ```

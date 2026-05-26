@@ -47,14 +47,15 @@
   - Uses TaskHandlerFactory for Handlers
   - Validates status changes
   - Returns detailed error messages
-  - Supports basic validation (when no handler found)
+  - Rejects unsupported task types when no handler is registered
 
 ## ✅ Controllers
 
 - [x] **TasksController.cs Updated**
-  - Injected: `ITaskStatusService`
-  - New Endpoint: `POST /api/tasks/{id}/change-status`
-  - Request: `ChangeStatusRequest` (nextStatus, newDataJson)
+  - Injected: `TaskHandlerFactory`
+  - Validates `TaskType` during create and returns `supportedTaskTypes` on failure
+  - Endpoint: `POST /api/tasks/{id}/change-status`
+  - Request: `ChangeStatusWorkflowRequest` (newStatus, newDataJson)
   - Response: Success or BadRequest with error message
 
 ## ✅ Dependency Injection
@@ -62,9 +63,8 @@
 - [x] **Program.cs Updated**
   - Added: `using DanTaskManager.Domain.Handlers;`
   - Added: `using DanTaskManager.Services;`
-  - Registered: `ProcurementTaskHandler` as `ITaskHandler`
-  - Registered: `DevelopmentTaskHandler` as `ITaskHandler`
-  - Registered: `TaskHandlerFactory` (singleton with DI)
+  - Registered: all discoverable handlers through `AddTaskHandlersFromAssembly()`
+  - Registered: `TaskHandlerFactory` (scoped with DI)
   - Registered: `ITaskStatusService` → `TaskStatusService`
 
 ## ✅ Unit Tests
@@ -89,7 +89,16 @@
     - Valid version SemVer → Pass
     - Valid version numeric → Pass
     - Invalid version format → Fail
-  
+
+  - AnalysisTaskHandler Tests
+    - Missing analysisReport → Fail
+    - Valid analysisReport → Pass
+
+  - TestingTaskHandler Tests
+    - Positive testCases → Pass
+    - Coverage and summary → Pass
+    - Invalid coverage → Fail
+
   - TaskHandlerFactory Tests (5 test methods)
     - Get handler → Works
     - Case insensitive → Works
@@ -102,7 +111,7 @@
 - [x] **STRATEGY_PATTERN_DOCS.md** - Comprehensive documentation
   - Architecture diagram
   - Interface descriptions
-  - Handler workflows (Procurement & Development)
+  - Handler workflows (Procurement, Development, Analysis, Testing)
   - SOLID principles
   - REST API examples
   - Unit test examples
@@ -162,7 +171,10 @@ Domain/
     ├── ITaskHandler.cs            ✅ NEW
     ├── ProcurementTaskHandler.cs  ✅ NEW
     ├── DevelopmentTaskHandler.cs  ✅ NEW
-    └── TaskHandlerFactory.cs      ✅ NEW
+    ├── AnalysisTaskHandler.cs     ✅ NEW
+    ├── TestingTaskHandler.cs      ✅ NEW
+    ├── TaskHandlerFactory.cs      ✅ NEW
+    └── TaskHandlerRegistrationExtensions.cs ✅ NEW
 
 Services/
 ├── ITaskStatusService.cs          ✅ NEW
@@ -191,7 +203,7 @@ QUICK_GUIDE.md                    ✅ NEW
 
 - [x] **Strategy Pattern**
   - ITaskHandler = Strategy interface
-  - ProcurementTaskHandler, DevelopmentTaskHandler = Concrete Strategies
+  - ProcurementTaskHandler, DevelopmentTaskHandler, AnalysisTaskHandler, TestingTaskHandler = Concrete Strategies
   - Each strategy handles validation differently
 
 - [x] **Factory Pattern**

@@ -240,7 +240,9 @@ dotnet test
 - ✅ ProcurementTaskHandlerTests: 7 בדיקות
 - ✅ DevelopmentTaskHandlerTests: 8 בדיקות
 - ✅ TaskHandlerFactoryTests: 5 בדיקות
-- **Total: 20 בדיקות**
+- ✅ AnalysisTaskHandlerTests
+- ✅ TestingTaskHandlerTests
+- **Total: 30+ בדיקות**
 
 ---
 
@@ -256,13 +258,14 @@ public class TestingTaskHandler : ITaskHandler
     public ValidationResult ValidateStatusChange(...) { ... }
 }
 
-// 2. Register in Program.cs
-builder.Services.AddTransient<ITaskHandler, TestingTaskHandler>();
+// 2. Make it discoverable
+// Namespace: DanTaskManager.Domain.Handlers
+// Class name suffix: TaskHandler
 
 // 3. Done! 🎉
 ```
 
-זהו! TaskHandlerFactory ילקח אותו אוטומטי.
+זהו! `AddTaskHandlersFromAssembly()` ירשום אותו, ו-`TaskHandlerFactory` יקבל אותו אוטומטית.
 
 ---
 
@@ -287,7 +290,10 @@ dan-task-manager/
 │       ├── ITaskHandler.cs
 │       ├── ProcurementTaskHandler.cs
 │       ├── DevelopmentTaskHandler.cs
-│       └── TaskHandlerFactory.cs
+│       ├── AnalysisTaskHandler.cs
+│       ├── TestingTaskHandler.cs
+│       ├── TaskHandlerFactory.cs
+│       └── TaskHandlerRegistrationExtensions.cs
 ├── Services/
 │   ├── ITaskStatusService.cs
 │   └── TaskStatusService.cs
@@ -325,8 +331,10 @@ dan-task-manager/
 | Dependency Injection | ✅ |
 | Procurement Handler | ✅ |
 | Development Handler | ✅ |
+| Analysis Handler | ✅ |
+| Testing Handler | ✅ |
 | REST API Endpoint | ✅ |
-| Unit Tests (20) | ✅ |
+| Unit Tests (30+) | ✅ |
 | Documentation | ✅ |
 | Setup Scripts | ✅ |
 | Open/Closed Principle | ✅ |
@@ -363,7 +371,7 @@ dan-task-manager/
 6. ✅ **Add New Handlers**
    - Follow the pattern
    - Implement ITaskHandler
-   - Register in Program.cs
+   - Use `DanTaskManager.Domain.Handlers` and a class name ending in `TaskHandler`
 
 ---
 

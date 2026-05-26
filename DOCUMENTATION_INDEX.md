@@ -144,7 +144,10 @@ Implementation:
 │       ├── ITaskHandler.cs
 │       ├── ProcurementTaskHandler.cs
 │       ├── DevelopmentTaskHandler.cs
-│       └── TaskHandlerFactory.cs
+│       ├── AnalysisTaskHandler.cs
+│       ├── TestingTaskHandler.cs
+│       ├── TaskHandlerFactory.cs
+│       └── TaskHandlerRegistrationExtensions.cs
 ├── Services/
 │   ├── ITaskWorkflowService.cs
 │   ├── TaskWorkflowService.cs
@@ -215,6 +218,8 @@ Test Cases:                35+
 ### Handler Types
 - **Procurement**: 3 statuses, validates prices & receipt
 - **Development**: 4 statuses, validates spec, branch, version
+- **Analysis**: 2 statuses, validates analysis report
+- **Testing**: 3 statuses, validates test cases, coverage, and summary
 
 ### Response Pattern
 - Success: 200/201 with data
@@ -227,7 +232,7 @@ Test Cases:                35+
 ## ✅ Project Completion
 
 - ✅ Domain models (2 classes)
-- ✅ Handler system (2 types + factory)
+- ✅ Handler system (4 types + factory + auto-registration)
 - ✅ Workflow service (4 methods)
 - ✅ REST API (9 endpoints)
 - ✅ Unit tests (35+ tests)
