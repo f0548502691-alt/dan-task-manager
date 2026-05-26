@@ -87,7 +87,7 @@ public class ApplicationDbContext : DbContext
 
         taskBuilder
             .Property(t => t.CurrentStatus)
-            .HasDefaultValue(0);
+            .HasDefaultValue(WorkflowConstants.CreatedStatus);
 
         taskBuilder
             .Property(t => t.Description)
@@ -193,7 +193,7 @@ public class ApplicationDbContext : DbContext
                 Id = 2,
                 TaskType = "Development",
                 Description = "פיתוח מודול ניהול משתמשים",
-                CurrentStatus = 0, // לא התחילה
+                CurrentStatus = WorkflowConstants.CreatedStatus, // Created
                 AssignedToUserId = 2,
                 CustomDataJson = "{\"priority\": \"medium\", \"deadline\": \"2026-07-01\", \"estimatedHours\": 16}",
                 CreatedAt = DateTime.UtcNow,
