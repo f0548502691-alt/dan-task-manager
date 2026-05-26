@@ -10,12 +10,11 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
 );
 
-// ✅ הרשמה של Task Handlers
-builder.Services.AddTransient<ITaskHandler, ProcurementTaskHandler>();
-builder.Services.AddTransient<ITaskHandler, DevelopmentTaskHandler>();
+// ✅ הרשמה אוטומטית של כל Task Handlers מתוך האסמבלי
+builder.Services.AddTaskHandlersFromAssembly();
 
 // ✅ הרשמה של TaskHandlerFactory
-builder.Services.AddSingleton(sp => new TaskHandlerFactory(sp.GetRequiredService<IEnumerable<ITaskHandler>>()));
+builder.Services.AddScoped<TaskHandlerFactory>();
 
 // ✅ הרשמה של Task Status Service
 builder.Services.AddScoped<ITaskStatusService, TaskStatusService>();

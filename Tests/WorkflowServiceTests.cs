@@ -159,6 +159,30 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         Assert.Equal(2, result.NewStatus);
     }
 
+    [Fact]
+    public async Task ChangeStatus_UnknownTaskType_ShouldFail()
+    {
+        // Arrange
+        var unknownTask = new BaseTask
+        {
+            Id = 99,
+            TaskType = "Unknown",
+            Description = "Unknown type task",
+            CurrentStatus = 0,
+            AssignedToUserId = 1,
+            CustomDataJson = "{}"
+        };
+        _context.Tasks.Add(unknownTask);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.ChangeStatusAsync(99, 1, "{}");
+
+        // Assert
+        Assert.False(result.Success);
+        Assert.Contains("לא נתמך", result.Message);
+    }
+
     // === Closed Status Tests ===
 
     [Fact]

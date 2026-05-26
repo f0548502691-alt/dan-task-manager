@@ -88,6 +88,14 @@ public class TaskWorkflowService : ITaskWorkflowService
 
         // 3. קבלת ה-Handler לבדיקת הוולידציה
         var handler = _handlerFactory.GetHandler(task.TaskType);
+        if (handler == null)
+        {
+            _logger.LogWarning(
+                "לא נמצא Handler עבור סוג משימה {TaskType} במשימה {TaskId}",
+                task.TaskType,
+                taskId);
+            return WorkflowResult.FailureResult($"סוג משימה לא נתמך: {task.TaskType}");
+        }
 
         // 4. בדיקת כללי תנועה
         var movementValidation = ValidateStatusMovement(task, newStatus, handler);
@@ -96,19 +104,16 @@ public class TaskWorkflowService : ITaskWorkflowService
             return WorkflowResult.FailureResult(movementValidation.Message);
         }
 
-        // 5. וולידציה ספציפית של Handler (אם קיים)
-        if (handler != null)
-        {
-            var handlerValidation = handler.ValidateStatusChange(
-                task.CustomDataJson,
-                task.CurrentStatus,
-                newStatus,
-                newDataJson);
+        // 5. וולידציה ספציפית של Handler
+        var handlerValidation = handler.ValidateStatusChange(
+            task.CustomDataJson,
+            task.CurrentStatus,
+            newStatus,
+            newDataJson);
 
-            if (!handlerValidation.IsValid)
-            {
-                return WorkflowResult.FailureResult(handlerValidation.Message);
-            }
+        if (!handlerValidation.IsValid)
+        {
+            return WorkflowResult.FailureResult(handlerValidation.Message);
         }
 
         // 6. עדכון המשימה

@@ -39,14 +39,12 @@ public class TaskStatusService : ITaskStatusService
         // קבלת Handler מתאים לפי סוג המשימה
         var handler = _handlerFactory.GetHandler(task.TaskType);
 
-        // אם אין Handler - בדיקה בסיסית בלבד
+        // אם אין Handler - לא מאפשרים שינוי סטטוס
         if (handler == null)
         {
-            _logger.LogWarning(
-                "לא נמצא Handler עבור סוג משימה: {TaskType}. מבצע וולידציה בסיסית בלבד",
-                task.TaskType);
-
-            return ValidateBasicStatusChange(task, nextStatus);
+            _logger.LogWarning("לא נמצא Handler עבור סוג משימה: {TaskType}", task.TaskType);
+            return TaskStatusChangeResult.FailureResult(
+                $"סוג משימה לא נתמך: {task.TaskType}");
         }
 
         // בדיקת סטטוס סופי
@@ -101,27 +99,4 @@ public class TaskStatusService : ITaskStatusService
         return handler?.FinalStatus;
     }
 
-    /// <summary>
-    /// וולידציה בסיסית בלבד (כאשר אין Handler ספציפי)
-    /// </summary>
-    private static TaskStatusChangeResult ValidateBasicStatusChange(BaseTask task, int nextStatus)
-    {
-        // בדיקה שהסטטוס עולה בהדרגה
-        if (nextStatus <= task.CurrentStatus)
-        {
-            return TaskStatusChangeResult.FailureResult(
-                "סטטוס חדש חייב להיות גבוה יותר מהסטטוס הנוכחי");
-        }
-
-        // לא ניתן לדלג יותר מ-1 סטטוס בבת אחת (בדיקה בסיסית)
-        if (nextStatus > task.CurrentStatus + 2)
-        {
-            return TaskStatusChangeResult.FailureResult(
-                "לא ניתן לדלג יותר מ-2 סטטוסים בבת אחת");
-        }
-
-        return TaskStatusChangeResult.SuccessResult(
-            nextStatus,
-            $"סטטוס עודכן בהצלחה מ-{task.CurrentStatus} ל-{nextStatus}");
-    }
 }

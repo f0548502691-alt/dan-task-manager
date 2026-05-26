@@ -1,5 +1,6 @@
 using DanTaskManager.Data;
 using DanTaskManager.Domain;
+using DanTaskManager.Domain.Handlers;
 using DanTaskManager.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,18 +16,18 @@ namespace DanTaskManager.Controllers;
 public class TasksController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
-    private readonly ITaskStatusService _taskStatusService;
+    private readonly TaskHandlerFactory _handlerFactory;
     private readonly ITaskWorkflowService _workflowService;
     private readonly ILogger<TasksController> _logger;
 
     public TasksController(
         ApplicationDbContext context,
-        ITaskStatusService taskStatusService,
+        TaskHandlerFactory handlerFactory,
         ITaskWorkflowService workflowService,
         ILogger<TasksController> logger)
     {
         _context = context;
-        _taskStatusService = taskStatusService;
+        _handlerFactory = handlerFactory;
         _workflowService = workflowService;
         _logger = logger;
     }
@@ -99,6 +100,16 @@ public class TasksController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.TaskType))
         {
             return BadRequest(new { error = "TaskType נדרש" });
+        }
+
+        if (!_handlerFactory.HasHandler(request.TaskType))
+        {
+            var allowedTypes = _handlerFactory.GetRegisteredTaskTypes().OrderBy(t => t).ToArray();
+            return BadRequest(new
+            {
+                error = $"TaskType לא נתמך: {request.TaskType}",
+                supportedTaskTypes = allowedTypes
+            });
         }
 
         if (string.IsNullOrWhiteSpace(request.Description))
