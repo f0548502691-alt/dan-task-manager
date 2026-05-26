@@ -3,14 +3,24 @@
 ## 📖 Table of Contents
 
 1. [Adding New Handler Type](#adding-new-handler-type)
-2. [Adding New Endpoint](#adding-new-endpoint)
-3. [Adding Validation Rule](#adding-validation-rule)
-4. [Common Extension Scenarios](#common-extension-scenarios)
-5. [Testing Extensions](#testing-extensions)
+2. [Adding or Updating Task Type Metadata](#adding-or-updating-task-type-metadata)
+3. [Adding New Endpoint](#adding-new-endpoint)
+4. [Adding Validation Rule](#adding-validation-rule)
+5. [Common Extension Scenarios](#common-extension-scenarios)
+6. [Testing Extensions](#testing-extensions)
 
 ---
 
 ## 🎯 Adding New Handler Type
+
+Use a handler when validation must stay in code. For configurable task types, prefer metadata through
+`POST /api/task-types` and field definitions through `POST /api/task-types/{taskType}/fields`.
+
+Current workflow constraints apply to both approaches:
+- `FinalStatus` must be present, greater than or equal to `1`, and less than `99`.
+- Status `99` is reserved for closed tasks and can only be reached through `POST /api/tasks/{id}/close`.
+- Status `0` is not a valid workflow status.
+- Status changes and close operations must include a valid `nextAssignedToUserId`.
 
 ### Step 1: Create Handler Class
 
@@ -132,17 +142,17 @@ public class QATaskHandler : ITaskHandler
 }
 ```
 
-### Step 2: Register Handler
+### Step 2: Handler Discovery
+
+Handlers are registered by assembly scanning in `Program.cs`:
 
 ```csharp
-// Program.cs
-builder.Services.AddTransient<ITaskHandler, QATaskHandler>();
-
-// Full example:
-services.AddTransient<ITaskHandler, ProcurementTaskHandler>();
-services.AddTransient<ITaskHandler, DevelopmentTaskHandler>();
-services.AddTransient<ITaskHandler, QATaskHandler>(); // NEW
+builder.Services.AddTaskHandlersFromAssembly(typeof(ITaskHandler).Assembly);
 ```
+
+To be discovered, the handler must be a public, non-abstract class implementing `ITaskHandler` in the
+assembly that contains `ITaskHandler`. `TaskHandlerFactory` indexes handlers by `TaskType` using
+case-insensitive keys.
 
 ### Step 3: Write Tests
 
@@ -244,6 +254,95 @@ curl -X POST http://localhost:5000/api/tasks \
     "description": "Test new feature",
     "assignedToUserId": 1
   }'
+```
+
+---
+
+## 🧾 Adding or Updating Task Type Metadata
+
+Metadata-backed task types are served by `TaskTypesController` and validated by
+`TaskTypeValidationService`. Metadata providers have higher workflow priority than handlers, so a
+database/configured task type with the same `TaskType` wins over handler validation.
+
+### Create or update a task type
+
+```http
+POST /api/task-types
+Content-Type: application/json
+
+{
+  "taskType": "QA",
+  "displayName": "QA",
+  "finalStatus": 3,
+  "isActive": true
+}
+```
+
+Constraints enforced by `UpsertTaskType`:
+- `taskType` is required.
+- `finalStatus` is required.
+- `finalStatus >= WorkflowConstants.CreatedStatus` (`1`).
+- `finalStatus < WorkflowConstants.ClosedStatus` (`99`).
+
+### Add a field rule
+
+```http
+POST /api/task-types/QA/fields
+Content-Type: application/json
+
+{
+  "field": "testResults",
+  "type": "string",
+  "required": true,
+  "appliesFromStatus": 3,
+  "appliesToStatus": 3,
+  "allowedValues": ["PASSED", "FAILED", "PARTIAL"]
+}
+```
+
+Field status constraints:
+- `appliesFromStatus <= appliesToStatus` when both are provided.
+- `appliesFromStatus` and `appliesToStatus` must be `>= 1`.
+- Neither applies bound can exceed the task type `finalStatus`.
+
+Supported field types include `string`, `number`, `array`, `object`, `boolean`, and `stringOrNumber`.
+Patterns can be a regex, `valid_git_branch`, or `semantic_version`.
+
+### Use the metadata-backed task type
+
+```http
+POST /api/tasks
+Content-Type: application/json
+
+{
+  "taskType": "QA",
+  "description": "Verify checkout flow",
+  "assignedToUserId": 1,
+  "customFields": {}
+}
+```
+
+```http
+POST /api/tasks/42/change-status
+Content-Type: application/json
+
+{
+  "newStatus": 2,
+  "nextAssignedToUserId": 1,
+  "customFields": {}
+}
+```
+
+The close operation must also carry the assignee that should own the closed task:
+
+```http
+POST /api/tasks/42/close
+Content-Type: application/json
+
+{
+  "nextAssignedToUserId": 1,
+  "finalNotes": "QA complete"
+}
 ```
 
 ---
@@ -371,7 +470,11 @@ private async Task<ValidationResult> ValidateUniqueTaskTypeAsync(int userId, str
 
 ```csharp
 // In ChangeStatusAsync or appropriate place
-public async Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, string newDataJson)
+public async Task<WorkflowResult> ChangeStatusAsync(
+    int taskId,
+    int newStatus,
+    int nextAssignedToUserId,
+    string newDataJson)
 {
     var task = await _context.Tasks.FindAsync(taskId);
     
@@ -393,15 +496,15 @@ public async Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, s
 public async Task ChangeStatus_WithDuplicateTaskType_ShouldFail()
 {
     // Arrange: Two Procurement tasks for same user
-    var task1 = new BaseTask { TaskType = "Procurement", AssignedToUserId = 1, CurrentStatus = 0 };
-    var task2 = new BaseTask { TaskType = "Procurement", AssignedToUserId = 1, CurrentStatus = 0 };
+    var task1 = new BaseTask { TaskType = "Procurement", AssignedToUserId = 1, CurrentStatus = 1 };
+    var task2 = new BaseTask { TaskType = "Procurement", AssignedToUserId = 1, CurrentStatus = 1 };
     
     _context.Tasks.Add(task1);
     _context.Tasks.Add(task2);
     await _context.SaveChangesAsync();
 
-    // Act: Try to move second task to Status 1
-    var result = await _service.ChangeStatusAsync(task2.Id, 1, "{}");
+    // Act: Try to move second task to Status 2
+    var result = await _service.ChangeStatusAsync(task2.Id, 2, 1, "{\"prices\":[\"5000\",\"4800\"]}");
 
     // Assert
     Assert.False(result.Success);
@@ -613,7 +716,7 @@ public async Task FullWorkflow_WithNewFeature_ShouldPass()
 
 To extend the system:
 
-1. **New Handler**: Implement ITaskHandler, register in Program.cs
+1. **New Handler**: Implement `ITaskHandler`; assembly scanning registers it automatically
 2. **New Endpoint**: Add to interface, implement in service, add to controller
 3. **New Validation**: Add validation method, integrate into workflow
 4. **New Datatype**: Add handler with appropriate validation

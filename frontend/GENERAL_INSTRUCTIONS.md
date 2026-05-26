@@ -51,3 +51,55 @@ Use the following checklist as the default baseline for client-side task workflo
 - [OK] Closing a task from the UI is implemented in `task-workflow-board` via `submitCloseTask()`.
 - [OK] Hard-coded user ID wiring is implemented in `TaskWorkflowBoardComponent` (`DEFAULT_CURRENT_USER_ID = 1` + `setCurrentUserId` on init).
 - [OK] Strict mode is explicitly configured in `frontend/tsconfig.json` (`"strict": true`).
+
+## Task Workflow UI Contract
+
+Source map:
+- `src/app/tasks/task.interfaces.ts`: shared DTOs, status constants, and final-status mapping.
+- `src/app/tasks/task.service.ts`: API calls and signal-owned task state.
+- `src/app/tasks/task-workflow-board.component.ts`: create, change-status, rollback, and close flows.
+- `src/app/tasks/task-workflow-adapters.ts`: task-type payload builders for Procurement and Development.
+- `src/app/tasks/procurement-fields.component.ts` and `development-fields.component.ts`: status-specific validators.
+
+Backend-aligned constraints:
+- Status `1` is the first selectable workflow status. Do not reintroduce a `0`/Backlog option in the UI.
+- Status `99` is closed and is reached only through `TaskService.closeTask()`, not `changeTaskStatus()`.
+- `ChangeStatusWorkflowRequest` must send:
+  ```ts
+  {
+    newStatus: number;
+    nextAssignedToUserId: number;
+    customFields: Record<string, unknown>;
+  }
+  ```
+- `CloseTaskRequest` must send both `nextAssignedToUserId` and `finalNotes`.
+- The current MVP keeps reassignment stable by using the selected task's `assignedToUserId` as
+  `nextAssignedToUserId` for status changes and close operations.
+- `customFields` must be an object. The fallback JSON editor should reject arrays/scalars and set the
+  `invalidJson` error before calling the service.
+
+Payload examples:
+```ts
+// Procurement, status 2
+{ prices: ['5000', '4800'] }
+
+// Procurement, status 3
+{ receipt: 'REC-001' }
+
+// Development, status 2
+{ specification: 'Detailed implementation plan' }
+
+// Development, status 3
+{ branchName: 'feature/workflow-hardening' }
+
+// Development, status 4
+{ versionNumber: '1.2.0' }
+```
+
+Common pitfalls:
+- List endpoints return paged task summaries; use the returned task from workflow responses or fetch task
+  details when `customDataJson` is needed.
+- Keep `TASK_FINAL_STATUS_BY_TYPE` in sync with backend metadata for hard-coded task types until the UI
+  consumes `/api/task-types` dynamically.
+- If a future UI supports reassignment, source `nextAssignedToUserId` from an explicit user picker and keep
+  the value greater than zero.

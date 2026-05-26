@@ -6,11 +6,19 @@
 
 ```
 dan-task-manager/
+├── Controllers/
+│   ├── TasksController.cs      # REST API למשימות ול-workflow
+│   └── TaskTypesController.cs  # API ל-metadata של סוגי משימות
 ├── Domain/
-│   ├── AppUser.cs          # מחלקה המייצגת משתמש
-│   └── BaseTask.cs         # מחלקה למשימה בסיסית
+│   ├── AppUser.cs              # מחלקה המייצגת משתמש
+│   ├── BaseTask.cs             # מחלקה למשימה בסיסית
+│   └── Handlers/               # ITaskHandler ומימושי fallback
 ├── Data/
 │   └── ApplicationDbContext.cs  # DbContext עם הגדרות EF Core
+├── Services/
+│   ├── TaskApplicationService.cs
+│   ├── TaskWorkflowService.cs
+│   └── TaskTypeValidationService.cs
 ├── DanTaskManager.csproj   # קובץ הפרויקט
 └── README.md
 ```
@@ -29,7 +37,7 @@ dan-task-manager/
 ייצוג משימה עם תמיכה בנתונים משתנים:
 - `Id`: מזהה ייחודי
 - `TaskType`: סוג המשימה (Analysis, Development, Testing, וכו')
-- `CurrentStatus`: סטטוס כמספר (0=לא התחילה, 1=בתהליך, 2=הושלמה, 3=ביוטלה)
+- `CurrentStatus`: סטטוס workflow כמספר. `1` הוא סטטוס יצירה/התחלה, `99` הוא סגור.
 - `AssignedToUserId`: מזהה המשתמש המופקד
 - `AssignedToUser`: קשר למשתמש
 - `Description`: תיאור המשימה
@@ -60,7 +68,8 @@ taskBuilder
 5. **איתן ברק** (eitan@example.com)
 6. **מיכל גל** (michal@example.com)
 
-וכן 3 משימות לדוגמה עם `CustomDataJson` שונה לכל אחת.
+וכן משימות וסוגי משימות לדוגמה. סוגי המשימות `Procurement` ו-`Development` כוללים metadata
+לסטטוס סופי ולשדות חובה לפי סטטוס.
 
 ## 🔧 Setup והגדרה
 
@@ -109,6 +118,17 @@ var task = new BaseTask
 context.Tasks.Add(task);
 await context.SaveChangesAsync();
 ```
+
+## 🔁 Workflow API - כללים עיקריים
+
+- יצירת משימה מתחילה ב-`CurrentStatus = 1`.
+- שינוי סטטוס מתבצע דרך `POST /api/tasks/{id}/change-status` עם `newStatus`,
+  `nextAssignedToUserId` ו-`customFields` כאובייקט JSON.
+- תנועה קדימה חייבת להיות בדיוק +1; rollback מותר לכל סטטוס נמוך יותר כל עוד הוא `>= 1`.
+- סגירה מתבצעת רק דרך `POST /api/tasks/{id}/close` ודורשת `nextAssignedToUserId` ו-`finalNotes`.
+- `FinalStatus` של סוג משימה חייב להיות בין `1` ל-`98`; `99` שמור למשימות סגורות.
+
+ראו פירוט מלא ב-[WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md).
 
 ## 📖 הערות חשובות
 

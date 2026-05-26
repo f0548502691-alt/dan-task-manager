@@ -12,6 +12,33 @@
 
 ---
 
+## Response shape
+
+- Request validation failures return `400 Bad Request` with `{ "error": "..." }`.
+- Workflow business-rule failures are thrown as `WorkflowValidationException` and returned by
+  `GlobalExceptionMiddleware` as `{ "error": "...", "code": "workflow_validation_failed" }`.
+- Unhandled server errors return `{ "error": "אירעה שגיאה בלתי צפויה בשרת", "code": "internal_server_error" }`.
+
+Current task workflow requests use `customFields` as an object and require `nextAssignedToUserId`
+for both status changes and close operations:
+
+```json
+{
+  "newStatus": 2,
+  "nextAssignedToUserId": 1,
+  "customFields": { "prices": ["5000", "4800"] }
+}
+```
+
+```json
+{
+  "nextAssignedToUserId": 1,
+  "finalNotes": "Done"
+}
+```
+
+---
+
 ## Error Messages
 
 ### Movement Validation Errors
@@ -32,7 +59,8 @@ Status: 400 Bad Request
 
 Response:
 {
-  "error": "אותו סטטוס - לא ניתן לבקש שינוי לסטטוס זהה"
+  "error": "סטטוס חדש זהה לסטטוס הנוכחי",
+  "code": "workflow_validation_failed"
 }
 ```
 
@@ -42,7 +70,8 @@ Status: 400 Bad Request
 
 Response:
 {
-  "error": "משימה סגורה - לא ניתן לשנות סטטוס"
+  "error": "משימה סגורה - לא ניתן לשנות סטטוס",
+  "code": "workflow_validation_failed"
 }
 ```
 
@@ -52,13 +81,82 @@ Status: 400 Bad Request
 
 Response:
 {
-  "error": "משימה הגיעה לסטטוס סופי: 3. לא ניתן להעביר לסטטוס: 4"
+  "error": "משימה כבר הגיעה לסטטוס סופי (3)",
+  "code": "workflow_validation_failed"
+}
+```
+
+#### ❌ Status Below CreatedStatus
+```
+Status: 400 Bad Request
+
+Response:
+{
+  "error": "סטטוס חייב להיות 1 ומעלה",
+  "code": "workflow_validation_failed"
+}
+```
+
+#### ❌ Closing Through Change Status
+```
+Status: 400 Bad Request
+
+Response:
+{
+  "error": "סגירת משימה מתבצעת רק דרך CloseTask",
+  "code": "workflow_validation_failed"
 }
 ```
 
 ---
 
-### Handler Validation Errors
+### Assignment and Payload Validation Errors
+
+#### ❌ Missing Next Assignee
+```
+Status: 400 Bad Request
+
+Response:
+{
+  "error": "NextAssignedToUserId נדרש"
+}
+```
+
+#### ❌ Next Assignee Does Not Exist
+```
+Status: 400 Bad Request
+
+Response:
+{
+  "error": "המשתמש הבא לא קיים",
+  "code": "workflow_validation_failed"
+}
+```
+
+#### ❌ Missing or Non-Object Custom Fields
+```
+Status: 400 Bad Request
+
+Response:
+{
+  "error": "CustomFields נדרש"
+}
+```
+
+Or:
+
+```
+Status: 400 Bad Request
+
+Response:
+{
+  "error": "CustomFields חייב להיות אובייקט JSON"
+}
+```
+
+---
+
+### Task-Type Field Validation Errors
 
 #### ❌ Procurement - Missing Prices
 ```
@@ -66,7 +164,8 @@ Status: 400 Bad Request
 
 Response:
 {
-  "error": "'prices' חייב להכיל בדיוק 2 מחרוזות, לא נמצא שדה"
+  "error": "בסטטוס 2, נדרש שדה 'prices'",
+  "code": "workflow_validation_failed"
 }
 ```
 
@@ -76,7 +175,8 @@ Status: 400 Bad Request
 
 Response:
 {
-  "error": "'prices' חייב להכיל בדיוק 2 מחרוזות, נמצאו 1"
+  "error": "השדה 'prices' חייב להכיל בדיוק 2 פריטים",
+  "code": "workflow_validation_failed"
 }
 ```
 
@@ -86,7 +186,8 @@ Status: 400 Bad Request
 
 Response:
 {
-  "error": "כל מחיר ב-'prices' חייב להיות מחרוזת לא ריקה"
+  "error": "כל הערכים בשדה 'prices' חייבים להיות מחרוזות לא ריקות",
+  "code": "workflow_validation_failed"
 }
 ```
 
@@ -96,7 +197,8 @@ Status: 400 Bad Request
 
 Response:
 {
-  "error": "'receipt' חייב להיות מחרוזת לא ריקה"
+  "error": "השדה 'receipt' לא יכול להיות ריק",
+  "code": "workflow_validation_failed"
 }
 ```
 
@@ -106,7 +208,8 @@ Status: 400 Bad Request
 
 Response:
 {
-  "error": "'specification' חייב להיות מחרוזת עם לפחות 10 תווים"
+  "error": "בסטטוס 2, נדרש שדה 'specification'",
+  "code": "workflow_validation_failed"
 }
 ```
 
@@ -116,7 +219,8 @@ Status: 400 Bad Request
 
 Response:
 {
-  "error": "'specification' חייב להיות לפחות 10 תווים, נמצאו 5"
+  "error": "השדה 'specification' חייב להכיל לפחות 10 תווים",
+  "code": "workflow_validation_failed"
 }
 ```
 
@@ -126,21 +230,8 @@ Status: 400 Bad Request
 
 Response:
 {
-  "error": "'branchName' אינו שם תקין של branch: 'feature//invalid' - לא יכול להכיל //"
-}
-```
-
-Or:
-```
-{
-  "error": "'branchName' אינו שם תקין של branch: 'feature/test/' - לא יכול להסתיים ב-/"
-}
-```
-
-Or:
-```
-{
-  "error": "'branchName' אינו שם תקין של branch: 'feature test' - לא יכול להכיל רווחים"
+  "error": "השדה 'branchName' אינו שם branch תקין",
+  "code": "workflow_validation_failed"
 }
 ```
 
@@ -150,7 +241,59 @@ Status: 400 Bad Request
 
 Response:
 {
-  "error": "'versionNumber' חייב להיות בפורמט SemVer (major.minor.patch), קיבלנו: '1.2'"
+  "error": "השדה 'versionNumber' חייב להיות בפורמט גרסה תקין (לדוגמה: 1.0.0)",
+  "code": "workflow_validation_failed"
+}
+```
+
+---
+
+### Task Type Metadata Errors
+
+The metadata API (`POST /api/task-types`, `POST /api/task-types/{taskType}/fields`) enforces the
+same status range used by workflow transitions.
+
+#### ❌ Missing or Out-of-Range Final Status
+```
+Status: 400 Bad Request
+
+Response:
+{
+  "error": "FinalStatus is required"
+}
+```
+
+Or:
+
+```
+{
+  "error": "FinalStatus must be greater than or equal to 1"
+}
+```
+
+Or:
+
+```
+{
+  "error": "FinalStatus must be less than 99"
+}
+```
+
+#### ❌ Field Rule Outside Workflow Range
+```
+Status: 400 Bad Request
+
+Response:
+{
+  "error": "AppliesFromStatus must be greater than or equal to 1"
+}
+```
+
+Or:
+
+```
+{
+  "error": "AppliesToStatus cannot be greater than FinalStatus (3)"
 }
 ```
 
@@ -174,7 +317,7 @@ Status: 400 Bad Request
 
 Response:
 {
-  "error": "משתמש עם ID 999 לא קיים"
+  "error": "משתמש לא קיים"
 }
 ```
 
@@ -188,7 +331,7 @@ Status: 400 Bad Request
 
 Response:
 {
-  "error": "TaskType חייב להיות מחרוזת לא ריקה"
+  "error": "TaskType נדרש"
 }
 ```
 
@@ -198,7 +341,7 @@ Status: 400 Bad Request
 
 Response:
 {
-  "error": "Description חייב להיות מחרוזת לא ריקה"
+  "error": "Description נדרש"
 }
 ```
 
@@ -208,7 +351,8 @@ Status: 400 Bad Request
 
 Response:
 {
-  "error": "TaskType 'Unknown' לא רשום בהנדלרים"
+  "error": "סוג משימה לא נתמך: Unknown",
+  "supportedTaskTypes": ["Development", "Procurement"]
 }
 ```
 
@@ -246,12 +390,12 @@ Response:
 {
   "success": true,
   "message": "משימה סגורה בהצלחה",
-  "newStatus": 99,
   "task": {
     "id": 1,
     "taskType": "Procurement",
     "description": "רכישת חומרים",
     "currentStatus": 99,
+    "assignedToUserId": 1,
     "customDataJson": "{\"prices\": [...], \"receipt\": \"...\", \"finalNotes\": \"משימה הושלמה בהצלחה\", \"closedAt\": \"2026-05-25T10:10:00Z\"}",
     "createdAt": "2026-05-25T10:00:00Z",
     "updatedAt": "2026-05-25T10:10:00Z"
@@ -268,7 +412,7 @@ Response:
   "id": 1,
   "taskType": "Procurement",
   "description": "רכישת חומרים",
-  "currentStatus": 0,
+  "currentStatus": 1,
   "assignedToUserId": 1,
   "customDataJson": "{}",
   "createdAt": "2026-05-25T10:00:00Z",
@@ -298,24 +442,21 @@ Response:
 Status: 200 OK
 
 Response:
-[
-  {
-    "id": 1,
-    "taskType": "Procurement",
-    "description": "רכישת חומרים",
-    "currentStatus": 2,
-    "assignedToUserId": 1,
-    "customDataJson": "{\"prices\": [\"5000\", \"4800\"]}"
-  },
-  {
-    "id": 2,
-    "taskType": "Development",
-    "description": "פיתוח API",
-    "currentStatus": 1,
-    "assignedToUserId": 1,
-    "customDataJson": "{}"
-  }
-]
+{
+  "items": [
+    {
+      "id": 1,
+      "taskType": "Procurement",
+      "description": "רכישת חומרים",
+      "currentStatus": 2,
+      "assignedToUserId": 1
+    }
+  ],
+  "totalCount": 1,
+  "page": 1,
+  "pageSize": 20,
+  "totalPages": 1
+}
 ```
 
 ---
@@ -327,7 +468,7 @@ Response:
 ```
 🔴 Request
 POST /api/tasks/1/change-status
-{ "newStatus": 3, "newDataJson": "{}" }
+{ "newStatus": 3, "nextAssignedToUserId": 1, "customFields": {} }
 
 Current Status: 1
 
@@ -339,7 +480,7 @@ Status: 400 Bad Request
 
 ✅ Solution: Move to status 2 first
 POST /api/tasks/1/change-status
-{ "newStatus": 2, "newDataJson": "{...}" }
+{ "newStatus": 2, "nextAssignedToUserId": 1, "customFields": { "prices": ["5000", "4800"] } }
 ```
 
 ### Scenario 2: Missing Handler Data
@@ -347,7 +488,7 @@ POST /api/tasks/1/change-status
 ```
 🔴 Request
 POST /api/tasks/1/change-status
-{ "newStatus": 2, "newDataJson": "{}" }
+{ "newStatus": 2, "nextAssignedToUserId": 1, "customFields": {} }
 
 Current Task: Procurement, Status 1
 
@@ -361,7 +502,8 @@ Status: 400 Bad Request
 POST /api/tasks/1/change-status
 {
   "newStatus": 2,
-  "newDataJson": "{\"prices\": [\"5000\", \"4800\"]}"
+  "nextAssignedToUserId": 1,
+  "customFields": { "prices": ["5000", "4800"] }
 }
 ```
 
@@ -370,7 +512,7 @@ POST /api/tasks/1/change-status
 ```
 🔴 Request
 POST /api/tasks/1/change-status
-{ "newStatus": 1, "newDataJson": "{}" }
+{ "newStatus": 1, "nextAssignedToUserId": 1, "customFields": {} }
 
 Task Status: 99 (Closed)
 
@@ -390,7 +532,8 @@ Status: 400 Bad Request
 POST /api/tasks/1/change-status
 {
   "newStatus": 2,
-  "newDataJson": "{not valid json}"
+  "nextAssignedToUserId": 1,
+  "customFields": []
 }
 
 Current Task: Procurement, Status 1
@@ -398,14 +541,15 @@ Current Task: Procurement, Status 1
 🔴 Response
 Status: 400 Bad Request
 {
-  "error": "JSON לא תקין ב-newDataJson"
+  "error": "CustomFields חייב להיות אובייקט JSON"
 }
 
 ✅ Solution: Use valid JSON
 POST /api/tasks/1/change-status
 {
   "newStatus": 2,
-  "newDataJson": "{\"prices\": [\"5000\", \"4800\"]}"
+  "nextAssignedToUserId": 1,
+  "customFields": { "prices": ["5000", "4800"] }
 }
 ```
 
@@ -423,7 +567,7 @@ public async Task ChangeStatus_InvalidMovement_ShouldReturnError()
     task!.CurrentStatus = 1;
 
     // Act
-    var result = await _service.ChangeStatusAsync(1, 3, "{}");
+    var result = await _service.ChangeStatusAsync(1, 3, 1, "{}");
 
     // Assert
     Assert.False(result.Success);
