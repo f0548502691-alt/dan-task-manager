@@ -18,7 +18,8 @@
 | Document | Focus | Best For |
 |----------|-------|----------|
 | [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md) | Handler design & extensibility | Understanding the pattern |
-| [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) | State machine & workflow rules | API usage & workflows |
+| [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) | State machine, rule providers & workflow rules | API usage & workflows |
+| [../frontend/GENERAL_INSTRUCTIONS.md](../frontend/GENERAL_INSTRUCTIONS.md) | Angular task workflow form architecture | Client workflow changes |
 | [BEST_PRACTICES.md](BEST_PRACTICES.md) | Code conventions & patterns | Maintaining code quality |
 
 ### 🔌 API Reference
@@ -58,6 +59,7 @@
 
 #### ➕ **Add new features**
 → Check [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md) for patterns  
+→ Review workflow provider guidance in [EXTENSION_GUIDE.md](EXTENSION_GUIDE.md)  
 → Review handler examples in [STRATEGY_EXAMPLES.cs](STRATEGY_EXAMPLES.cs)
 
 #### 🧪 **Run tests**
@@ -148,8 +150,9 @@ Implementation:
 ├── Services/
 │   ├── ITaskWorkflowService.cs
 │   ├── TaskWorkflowService.cs
-│   ├── ITaskStatusService.cs
-│   └── TaskStatusService.cs
+│   ├── TaskWorkflowRuleProviders.cs
+│   ├── TaskApplicationService.cs
+│   └── TaskTypeValidationService.cs
 ├── Controllers/
 │   ├── TasksController.cs
 │   └── UsersController.cs
@@ -175,6 +178,8 @@ Implementation:
 | API Endpoints | [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) - REST API Endpoints section |
 | Error Messages | [API_ERROR_CODES.md](API_ERROR_CODES.md) |
 | Workflow Rules | [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) - Workflow Rules section |
+| Workflow Rule Providers | [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) and [EXTENSION_GUIDE.md](EXTENSION_GUIDE.md) |
+| Angular Task Forms | [../frontend/GENERAL_INSTRUCTIONS.md](../frontend/GENERAL_INSTRUCTIONS.md) |
 | Handler Validation | [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md) |
 | Code Examples | [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs) or [STRATEGY_EXAMPLES.cs](STRATEGY_EXAMPLES.cs) |
 | Best Practices | [BEST_PRACTICES.md](BEST_PRACTICES.md) |
@@ -208,9 +213,9 @@ Test Cases:                35+
 
 ### Workflow Rules
 - ✅ Forward movement: +1 only
-- ✅ Backward movement: to any lower status
+- ✅ Backward movement: to any lower status at or above CreatedStatus
 - ✅ Closed status: 99 (permanent)
-- ✅ Final status: handler-specific
+- ✅ Final status: rule-provider-specific
 
 ### Handler Types
 - **Procurement**: 3 statuses, validates prices & receipt

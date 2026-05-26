@@ -3,10 +3,29 @@
 ## 📖 Table of Contents
 
 1. [Adding New Handler Type](#adding-new-handler-type)
-2. [Adding New Endpoint](#adding-new-endpoint)
-3. [Adding Validation Rule](#adding-validation-rule)
-4. [Common Extension Scenarios](#common-extension-scenarios)
-5. [Testing Extensions](#testing-extensions)
+2. [Workflow Rule Providers](#workflow-rule-providers)
+3. [Adding New Endpoint](#adding-new-endpoint)
+4. [Adding Validation Rule](#adding-validation-rule)
+5. [Common Extension Scenarios](#common-extension-scenarios)
+6. [Testing Extensions](#testing-extensions)
+
+---
+
+## Current Extension Model
+
+Task workflow extensibility is split into two layers:
+
+- `TaskWorkflowService` owns generic rules: task lookup, closed-task checks, assignee validation, JSON-object validation, forward/backward movement, final-status enforcement, and persistence.
+- `ITaskWorkflowRuleProvider` owns task-type-specific final status and `customFields` validation.
+
+Built-in providers are resolved by ascending `Priority`:
+
+| Provider | Priority | Handles | Notes |
+|----------|----------|---------|-------|
+| `MetadataTaskWorkflowRuleProvider` | `0` | Task types present in `ITaskTypeValidationService` / task type metadata | Metadata rules override handler rules for the same task type. |
+| `HandlerTaskWorkflowRuleProvider` | `100` | Task types with an `ITaskHandler` | Fallback for handler-only task types. |
+
+Prefer metadata when validation can be expressed as field rules. Use an `ITaskHandler` when validation requires custom C# logic. Add a new rule provider only when the source of rules is neither metadata nor handlers.
 
 ---
 
@@ -132,17 +151,21 @@ public class QATaskHandler : ITaskHandler
 }
 ```
 
-### Step 2: Register Handler
+### Step 2: Let DI discover the handler
 
 ```csharp
-// Program.cs
-builder.Services.AddTransient<ITaskHandler, QATaskHandler>();
-
-// Full example:
-services.AddTransient<ITaskHandler, ProcurementTaskHandler>();
-services.AddTransient<ITaskHandler, DevelopmentTaskHandler>();
-services.AddTransient<ITaskHandler, QATaskHandler>(); // NEW
+// Program.cs already scans the handlers assembly.
+builder.Services.AddTaskHandlersFromAssembly(typeof(ITaskHandler).Assembly);
 ```
+
+No manual `Program.cs` registration is needed for a normal handler. The class must be:
+
+- `public`
+- non-abstract
+- assignable to `ITaskHandler`
+- in the scanned handlers assembly (`DanTaskManager.Domain.Handlers`)
+
+`TaskHandlerFactory` builds a case-insensitive map by `TaskType`. Do not add another handler with the same task type unless you also change the factory behavior.
 
 ### Step 3: Write Tests
 
@@ -245,6 +268,50 @@ curl -X POST http://localhost:5000/api/tasks \
     "assignedToUserId": 1
   }'
 ```
+
+---
+
+## Workflow Rule Providers
+
+Implement `ITaskWorkflowRuleProvider` only when a new rule source is needed. For example, use this when validation comes from a remote policy service or tenant-specific rule store instead of local metadata or `ITaskHandler` implementations.
+
+```csharp
+public class TenantWorkflowRuleProvider : ITaskWorkflowRuleProvider
+{
+    public int Priority => 50;
+
+    public bool CanHandle(string taskType)
+    {
+        return taskType.StartsWith("Tenant-", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public int? GetFinalStatus(string taskType)
+    {
+        return 4;
+    }
+
+    public ValidationResult ValidateStatusChange(BaseTask task, int nextStatus, string newDataJson)
+    {
+        // Validate newDataJson against the provider's rule source.
+        return ValidationResult.Success();
+    }
+}
+```
+
+Register the provider in `Program.cs`:
+
+```csharp
+builder.Services.AddScoped<ITaskWorkflowRuleProvider, TenantWorkflowRuleProvider>();
+```
+
+Provider constraints:
+
+- Lower `Priority` wins. Choose a priority between `0` and `100` only if it should run after metadata and before handlers.
+- `CanHandle` must be deterministic and should not throw for unknown task types.
+- `GetFinalStatus` must return a value for closable task types; `CloseTaskAsync` rejects task types without a final status.
+- `ValidateStatusChange` receives an already parsed workflow context: the task exists, is not closed, `newDataJson` is a JSON object, and generic movement rules already passed.
+
+Add focused tests similar to `WorkflowServiceTests.CreateRuleProviders(...)` so the service receives providers in the same shape as production DI.
 
 ---
 
@@ -371,9 +438,14 @@ private async Task<ValidationResult> ValidateUniqueTaskTypeAsync(int userId, str
 
 ```csharp
 // In ChangeStatusAsync or appropriate place
-public async Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, string newDataJson)
+public async Task<WorkflowResult> ChangeStatusAsync(
+    int taskId,
+    int newStatus,
+    int nextAssignedToUserId,
+    string newDataJson,
+    CancellationToken cancellationToken = default)
 {
-    var task = await _context.Tasks.FindAsync(taskId);
+    var task = await _context.Tasks.FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
     
     // ... existing validations ...
     
@@ -393,8 +465,8 @@ public async Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, s
 public async Task ChangeStatus_WithDuplicateTaskType_ShouldFail()
 {
     // Arrange: Two Procurement tasks for same user
-    var task1 = new BaseTask { TaskType = "Procurement", AssignedToUserId = 1, CurrentStatus = 0 };
-    var task2 = new BaseTask { TaskType = "Procurement", AssignedToUserId = 1, CurrentStatus = 0 };
+    var task1 = new BaseTask { TaskType = "Procurement", AssignedToUserId = 1, CurrentStatus = WorkflowConstants.CreatedStatus };
+    var task2 = new BaseTask { TaskType = "Procurement", AssignedToUserId = 1, CurrentStatus = WorkflowConstants.CreatedStatus };
     
     _context.Tasks.Add(task1);
     _context.Tasks.Add(task2);
@@ -509,6 +581,8 @@ if (task.Deadline.HasValue && task.Deadline < DateTime.UtcNow.AddDays(1))
 ### Unit Test Template
 
 ```csharp
+using Microsoft.Extensions.Options;
+
 public class ExtensionFeatureTests : IAsyncLifetime
 {
     private readonly DbContextOptions<ApplicationDbContext> _options;
@@ -525,9 +599,18 @@ public class ExtensionFeatureTests : IAsyncLifetime
         await _context.Database.EnsureCreatedAsync();
         
         var handlers = new ITaskHandler[] { new YourNewHandler() };
+        var handlerFactory = new TaskHandlerFactory(handlers);
+        var validationService = new TaskTypeValidationService(
+            Options.Create(new TaskTypeValidationOptions()));
+        var providers = new ITaskWorkflowRuleProvider[]
+        {
+            new MetadataTaskWorkflowRuleProvider(validationService),
+            new HandlerTaskWorkflowRuleProvider(handlerFactory)
+        };
+
         _service = new TaskWorkflowService(
             _context,
-            new TaskHandlerFactory(handlers),
+            providers,
             new MockLogger());
     }
 
@@ -613,10 +696,11 @@ public async Task FullWorkflow_WithNewFeature_ShouldPass()
 
 To extend the system:
 
-1. **New Handler**: Implement ITaskHandler, register in Program.cs
-2. **New Endpoint**: Add to interface, implement in service, add to controller
-3. **New Validation**: Add validation method, integrate into workflow
-4. **New Datatype**: Add handler with appropriate validation
+1. **New Handler**: Implement `ITaskHandler`; DI discovers public handler classes from the handlers assembly.
+2. **Metadata Validation**: Add or update task type metadata when field rules are enough.
+3. **New Rule Source**: Implement `ITaskWorkflowRuleProvider` and register it with a clear priority.
+4. **New Endpoint**: Add to interface, implement in service, add to controller.
+5. **New Datatype**: Add a handler or metadata definition with appropriate validation.
 
 All extensions follow the same patterns and principles as the existing code.
 
