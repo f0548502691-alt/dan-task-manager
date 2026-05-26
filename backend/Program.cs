@@ -56,6 +56,8 @@ using (var scope = app.Services.CreateScope())
     {
         dbContext.Database.EnsureCreated();
     }
+
+    HybridSchemaBootstrapper.EnsureSchema(dbContext);
 }
 
 // Configure the HTTP request pipeline.
