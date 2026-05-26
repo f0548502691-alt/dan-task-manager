@@ -58,7 +58,7 @@
 → Study [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs)
 
 #### ➕ **Add new features**
-→ Start with [EXTENSION_GUIDE.md](EXTENSION_GUIDE.md) for config-driven custom fields and handler fallback  
+→ Start with [EXTENSION_GUIDE.md](EXTENSION_GUIDE.md) for config-driven custom fields and handler fallback
 → Check [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md) for handler patterns
 
 #### 🧪 **Run tests**
