@@ -48,7 +48,7 @@ public class UserApplicationServiceTests
 
         var service = new UserApplicationService(context);
 
-        var page = await service.GetAllAsync(new PageRequest(page: 1, pageSize: 1));
+        var page = await service.GetAllAsync(new PageRequest(Page: 1, PageSize: 1));
         var betaDetails = await service.GetByIdAsync(beta.Id);
 
         Assert.Equal(2, page.TotalCount);
@@ -129,7 +129,7 @@ public class TaskApplicationServiceTests
         var service = TestDb.CreateTaskService(context);
 
         var result = await service.CreateAsync(
-            new TaskCreateCommand("Development", "Build feature", assignedToUserId: 404, "{}"));
+            new TaskCreateCommand("Development", "Build feature", AssignedToUserId: 404, "{}"));
 
         Assert.False(result.Success);
         Assert.Contains("משתמש", result.Message);
@@ -170,7 +170,7 @@ public class TaskApplicationServiceTests
 
         var service = TestDb.CreateTaskService(context);
 
-        var result = await service.GetOpenByUserAsync(owner.Id, new PageRequest(page: 1, pageSize: 10));
+        var result = await service.GetOpenByUserAsync(owner.Id, new PageRequest(Page: 1, PageSize: 10));
 
         Assert.Equal(2, result.TotalCount);
         Assert.Equal(1, result.TotalPages);
