@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "outDir": "./out-tsc/spec",
+    "rootDir": "./src",
+    "types": ["node"]
+  },
+  "include": [
+    "src/app/tasks/task.interfaces.ts",
+    "src/app/tasks/task-workflow-board.logic.ts",
+    "src/app/tasks/task-workflow-board.logic.spec.ts"
+  ]
+}
