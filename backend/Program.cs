@@ -16,7 +16,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddTaskHandlersFromAssembly(typeof(ITaskHandler).Assembly);
 
 // ✅ הרשמה של TaskHandlerFactory
-builder.Services.AddSingleton(sp => new TaskHandlerFactory(sp.GetRequiredService<IEnumerable<ITaskHandler>>()));
+builder.Services.AddScoped<TaskHandlerFactory>();
 
 // ✅ הרשמה של Task Workflow Service
 builder.Services.AddScoped<ITaskWorkflowService, TaskWorkflowService>();

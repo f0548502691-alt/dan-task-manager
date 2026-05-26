@@ -122,6 +122,10 @@ public class TaskWorkflowService : ITaskWorkflowService
         var handler = _handlerFactory.GetHandler(task.TaskType);
         if (handler == null)
         {
+            _logger.LogWarning(
+                "לא נמצא Handler עבור סוג משימה {TaskType} במשימה {TaskId}",
+                task.TaskType,
+                taskId);
             return WorkflowResult.FailureResult($"סוג משימה לא נתמך: {task.TaskType}");
         }
 
