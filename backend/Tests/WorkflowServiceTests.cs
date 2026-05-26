@@ -168,6 +168,56 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ChangeStatus_WithUnknownNextAssignee_ShouldFailWithoutChangingTask()
+    {
+        // Arrange
+        var task = await _context.Tasks.FindAsync(1);
+        task!.CurrentStatus = 1;
+        task.AssignedToUserId = 1;
+        task.CustomDataJson = "{}";
+        _context.Tasks.Update(task);
+        await _context.SaveChangesAsync();
+
+        var priceData = JsonSerializer.Serialize(new { prices = new[] { "5000", "4800" } });
+
+        // Act
+        var result = await _service.ChangeStatusAsync(1, 2, 999, priceData);
+
+        // Assert
+        Assert.False(result.Success);
+        Assert.Contains("המשתמש הבא לא קיים", result.Message);
+
+        var unchangedTask = await _context.Tasks.AsNoTracking().SingleAsync(t => t.Id == 1);
+        Assert.Equal(1, unchangedTask.CurrentStatus);
+        Assert.Equal(1, unchangedTask.AssignedToUserId);
+        Assert.Equal("{}", unchangedTask.CustomDataJson);
+    }
+
+    [Fact]
+    public async Task ChangeStatus_WithNonObjectJsonPayload_ShouldFailWithoutChangingTask()
+    {
+        // Arrange
+        var task = await _context.Tasks.FindAsync(1);
+        task!.CurrentStatus = 1;
+        task.AssignedToUserId = 1;
+        task.CustomDataJson = "{}";
+        _context.Tasks.Update(task);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.ChangeStatusAsync(1, 2, 2, "[]");
+
+        // Assert
+        Assert.False(result.Success);
+        Assert.Contains("customFields", result.Message);
+
+        var unchangedTask = await _context.Tasks.AsNoTracking().SingleAsync(t => t.Id == 1);
+        Assert.Equal(1, unchangedTask.CurrentStatus);
+        Assert.Equal(1, unchangedTask.AssignedToUserId);
+        Assert.Equal("{}", unchangedTask.CustomDataJson);
+    }
+
+    [Fact]
     public async Task ChangeStatus_UsesConfiguredRules_InsteadOfHandlerValidation()
     {
         // Arrange - relaxed configuration for Procurement status 2 without required fields.
