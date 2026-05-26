@@ -21,6 +21,13 @@
 | [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) | State machine & workflow rules | API usage & workflows |
 | [BEST_PRACTICES.md](BEST_PRACTICES.md) | Code conventions & patterns | Maintaining code quality |
 
+> Current handler registration and create-task error behavior are documented in
+> [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md) and
+> [API_ERROR_CODES.md](API_ERROR_CODES.md). Older summary files are useful for
+> historical context, but these references are the source of truth for
+> `TaskHandlerFactory`, automatic handler discovery, and `supportedTaskTypes`
+> responses.
+
 ### 🔌 API Reference
 | Document | Contains | Usage |
 |----------|----------|-------|
@@ -142,14 +149,20 @@ Implementation:
 │   ├── BaseTask.cs
 │   └── Handlers/
 │       ├── ITaskHandler.cs
+│       ├── StatusValidationTaskHandlerBase.cs
+│       ├── AnalysisTaskHandler.cs
 │       ├── ProcurementTaskHandler.cs
 │       ├── DevelopmentTaskHandler.cs
+│       ├── TestingTaskHandler.cs
 │       └── TaskHandlerFactory.cs
 ├── Services/
+│   ├── TaskHandlerRegistrationExtensions.cs
+│   ├── ITaskApplicationService.cs
+│   ├── TaskApplicationService.cs
 │   ├── ITaskWorkflowService.cs
 │   ├── TaskWorkflowService.cs
-│   ├── ITaskStatusService.cs
-│   └── TaskStatusService.cs
+│   ├── IUserApplicationService.cs
+│   └── UserApplicationService.cs
 ├── Controllers/
 │   ├── TasksController.cs
 │   └── UsersController.cs
@@ -176,6 +189,8 @@ Implementation:
 | Error Messages | [API_ERROR_CODES.md](API_ERROR_CODES.md) |
 | Workflow Rules | [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) - Workflow Rules section |
 | Handler Validation | [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md) |
+| Handler auto-registration | [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md) - Dependency Injection section |
+| Unsupported task type response | [API_ERROR_CODES.md](API_ERROR_CODES.md) - Unknown Task Type |
 | Code Examples | [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs) or [STRATEGY_EXAMPLES.cs](STRATEGY_EXAMPLES.cs) |
 | Best Practices | [BEST_PRACTICES.md](BEST_PRACTICES.md) |
 | Project Status | [IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md) |
@@ -213,8 +228,10 @@ Test Cases:                35+
 - ✅ Final status: handler-specific
 
 ### Handler Types
+- **Analysis**: final status 2, validates analysis report
 - **Procurement**: 3 statuses, validates prices & receipt
 - **Development**: 4 statuses, validates spec, branch, version
+- **Testing**: 3 statuses, validates test cases, coverage & summary
 
 ### Response Pattern
 - Success: 200/201 with data
@@ -227,7 +244,7 @@ Test Cases:                35+
 ## ✅ Project Completion
 
 - ✅ Domain models (2 classes)
-- ✅ Handler system (2 types + factory)
+- ✅ Handler system (4 types + factory + auto-discovery)
 - ✅ Workflow service (4 methods)
 - ✅ REST API (9 endpoints)
 - ✅ Unit tests (35+ tests)

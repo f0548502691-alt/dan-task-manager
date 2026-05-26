@@ -11,6 +11,8 @@
 ```
 REST API (TasksController)
     ↓
+ITaskApplicationService
+    ↓
 ITaskWorkflowService
     ↓
 TaskWorkflowService
@@ -43,7 +45,7 @@ if (task.CurrentStatus == 99)  // ClosedStatus
 ```
 3 → 2 ✅ (rollback)
 3 → 1 ✅ (rollback)
-3 → 0 ✅ (rollback)
+2 → 1 ✅ (minimum workflow status)
 ```
 
 #### ללא תנועה: ❌
@@ -64,13 +66,14 @@ var handlerValidation = handler.ValidateStatusChange(
 ### 4. **בדיקת סטטוס סופי**
 ```csharp
 // אי אפשר להעבור את סטטוס סופי של Handler
-if (finalStatus.HasValue && currentStatus >= finalStatus && newStatus > currentStatus)
+if (currentStatus >= handler.FinalStatus && newStatus > currentStatus)
     return Failure("משימה הגיעה לסטטוס סופי");
 ```
 
 ### 5. **עדכון נתונים**
 ```csharp
 task.CurrentStatus = newStatus;
+task.AssignedToUserId = nextAssignedToUserId;
 task.CustomDataJson = newDataJson;
 task.UpdatedAt = DateTime.UtcNow;
 ```
@@ -82,9 +85,7 @@ task.UpdatedAt = DateTime.UtcNow;
 ### Procurement Task
 
 ```
-Status 0: התחלה
-   ↓ +1 (forward)
-Status 1: בתהליך
+Status 1: Created
    ↓ +1 (forward)
 Status 2: בחירת ספקים ⭐
    Requires: {"prices": ["5000", "4800"]}
@@ -96,15 +97,12 @@ Status 99: Closed (סגור לנצח)
 
 ** אפשר להחזור:**
 Status 2 → Status 1 ← (rollback)
-Status 1 → Status 0 ← (rollback)
 ```
 
 ### Development Task
 
 ```
-Status 0: התחלה
-   ↓ +1
-Status 1: בתהליך
+Status 1: Created
    ↓ +1
 Status 2: אפיון ⭐
    Requires: {"specification": "..."}
@@ -120,7 +118,6 @@ Status 99: Closed (סגור לנצח)
 ** אפשר להחזור:**
 Status 3 → Status 2 ← (rollback)
 Status 2 → Status 1 ← (rollback)
-Status 2 → Status 0 ← (rollback)
 ```
 
 ---
@@ -133,16 +130,33 @@ Status 2 → Status 0 ← (rollback)
 public interface ITaskWorkflowService
 {
     // שינוי סטטוס עם כללי workflow
-    Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, string newDataJson);
+    Task<WorkflowResult> ChangeStatusAsync(
+        int taskId,
+        int newStatus,
+        int nextAssignedToUserId,
+        string newDataJson,
+        CancellationToken cancellationToken = default);
     
     // סגירת משימה
-    Task<WorkflowResult> CloseTaskAsync(int taskId, string finalNotes);
+    Task<WorkflowResult> CloseTaskAsync(
+        int taskId,
+        string finalNotes,
+        CancellationToken cancellationToken = default);
+
+    // בדיקה האם מותר לעדכן/למחוק משימה שאינה סגורה
+    Task<WorkflowResult> EnsureTaskMutableAsync(
+        int taskId,
+        CancellationToken cancellationToken = default);
     
-    // קבלת משימות של משתמש (לא סגורות)
-    Task<IEnumerable<BaseTask>> GetUserTasksAsync(int userId);
+    // קבלת משימות של משתמש
+    Task<IEnumerable<BaseTask>> GetUserTasksAsync(
+        int userId,
+        CancellationToken cancellationToken = default);
     
     // קבלת משימה עם פרטים
-    Task<BaseTask?> GetTaskAsync(int taskId);
+    Task<BaseTask?> GetTaskAsync(
+        int taskId,
+        CancellationToken cancellationToken = default);
 }
 ```
 
@@ -182,12 +196,27 @@ Content-Type: application/json
   "id": 1,
   "taskType": "Procurement",
   "description": "רכישת רכיבים לשרת",
-  "currentStatus": 0,
+  "currentStatus": 1,
   "assignedToUserId": 1,
   "customDataJson": "{}",
   "createdAt": "2026-05-25T10:00:00Z"
 }
 ```
+
+**Response (400) - Unsupported task type:**
+```json
+{
+  "error": "סוג משימה לא נתמך: UnknownType",
+  "supportedTaskTypes": [
+    "Analysis",
+    "Development",
+    "Procurement",
+    "Testing"
+  ]
+}
+```
+
+`supportedTaskTypes` is included only when the create failure is caused by an unregistered `taskType`; user validation and JSON validation errors return the regular `{ "error": "..." }` shape.
 
 ---
 
@@ -198,8 +227,9 @@ POST /api/tasks/1/change-status
 Content-Type: application/json
 
 {
-  "newStatus": 1,
-  "newDataJson": "{}"
+  "newStatus": 2,
+  "nextAssignedToUserId": 2,
+  "newDataJson": "{\"prices\": [\"5000\", \"4800\"]}"
 }
 ```
 
@@ -207,8 +237,8 @@ Content-Type: application/json
 ```json
 {
   "success": true,
-  "message": "סטטוס עודכן בהצלחה ל-1",
-  "newStatus": 1,
+  "message": "סטטוס עודכן בהצלחה ל-2",
+  "newStatus": 2,
   "task": { ... }
 }
 ```
@@ -270,25 +300,31 @@ GET /api/tasks/user/1
 
 **Response (200):**
 ```json
-[
-  {
-    "id": 1,
-    "taskType": "Procurement",
-    "description": "רכישת רכיבים",
-    "currentStatus": 2,
-    "assignedToUserId": 1,
-    "customDataJson": "{\"prices\": [\"5000\", \"4800\"]}"
-  },
-  {
-    "id": 2,
-    "taskType": "Development",
-    "description": "פיתוח API",
-    "currentStatus": 1,
-    "assignedToUserId": 1,
-    "customDataJson": "{}"
-  }
-]
+{
+  "items": [
+    {
+      "id": 1,
+      "taskType": "Procurement",
+      "description": "רכישת רכיבים",
+      "currentStatus": 2,
+      "assignedToUserId": 1,
+      "createdAt": "2026-05-25T10:00:00Z",
+      "updatedAt": "2026-05-25T10:05:00Z",
+      "assignedToUser": {
+        "id": 1,
+        "name": "דן כהן",
+        "email": "dan@example.com"
+      }
+    }
+  ],
+  "page": 1,
+  "pageSize": 20,
+  "totalCount": 1,
+  "totalPages": 1
+}
 ```
+
+List endpoints return `TaskSummaryDto`; `customDataJson` is only present on detail responses (`GET /api/tasks/{id}` and create/status/close responses that embed a task detail).
 
 ---
 
@@ -359,6 +395,7 @@ POST /api/tasks/1/change-status
 
 {
   "newStatus": 2,
+  "nextAssignedToUserId": 2,
   "newDataJson": "{\"prices\": [\"5000 ₪\", \"4800 ₪\"]}"
 }
 
@@ -377,6 +414,7 @@ POST /api/tasks/1/change-status
 
 {
   "newStatus": 1,
+  "nextAssignedToUserId": 1,
   "newDataJson": "{}"
 }
 
@@ -395,6 +433,7 @@ POST /api/tasks/1/change-status
 
 {
   "newStatus": 3,
+  "nextAssignedToUserId": 2,
   "newDataJson": "{}"
 }
 
@@ -432,62 +471,60 @@ Response:
 ### Scenario 1: Procurement Workflow
 
 ```bash
-# 1. Create task (Status 0)
+# 1. Create task (Status 1)
 POST /api/tasks
 {
   "taskType": "Procurement",
   "description": "רכישת חומרים",
   "assignedToUserId": 1
 }
-→ ID: 1, Status: 0 ✅
+→ ID: 1, Status: 1 ✅
 
-# 2. Move to Status 1
-POST /api/tasks/1/change-status
-{"newStatus": 1, "newDataJson": "{}"}
-→ Status: 1 ✅
-
-# 3. Move to Status 2 with prices
+# 2. Move to Status 2 with prices
 POST /api/tasks/1/change-status
 {
   "newStatus": 2,
+  "nextAssignedToUserId": 2,
   "newDataJson": "{\"prices\": [\"5000\", \"4800\"]}"
 }
 → Status: 2 ✅
 
-# 4. Rollback to Status 1
+# 3. Rollback to Status 1
 POST /api/tasks/1/change-status
-{"newStatus": 1, "newDataJson": "{}"}
+{"newStatus": 1, "nextAssignedToUserId": 1, "newDataJson": "{}"}
 → Status: 1 ✅
 
-# 5. Move forward again
+# 4. Move forward again
 POST /api/tasks/1/change-status
 {
   "newStatus": 2,
+  "nextAssignedToUserId": 2,
   "newDataJson": "{\"prices\": [\"5500\", \"5200\"]}"
 }
 → Status: 2 ✅
 
-# 6. Move to Status 3 (Final)
+# 5. Move to Status 3 (Final)
 POST /api/tasks/1/change-status
 {
   "newStatus": 3,
+  "nextAssignedToUserId": 2,
   "newDataJson": "{\"prices\": [...], \"receipt\": \"REC-001\"}"
 }
 → Status: 3 ✅ (FinalStatus)
 
-# 7. Try to move beyond (should fail)
+# 6. Try to move beyond (should fail)
 POST /api/tasks/1/change-status
-{"newStatus": 4, "newDataJson": "{}"}
+{"newStatus": 4, "nextAssignedToUserId": 2, "newDataJson": "{}"}
 → Error: "משימה הגיעה לסטטוס סופי" ❌
 
-# 8. Close task
+# 7. Close task
 POST /api/tasks/1/close
 {"finalNotes": "הושלם בהצלחה"}
 → Status: 99 ✅
 
-# 9. Try to change closed task (should fail)
+# 8. Try to change closed task (should fail)
 POST /api/tasks/1/change-status
-{"newStatus": 2, "newDataJson": "{}"}
+{"newStatus": 2, "nextAssignedToUserId": 2, "newDataJson": "{}"}
 → Error: "משימה סגורה" ❌
 ```
 

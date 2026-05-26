@@ -132,16 +132,34 @@ public class QATaskHandler : ITaskHandler
 }
 ```
 
-### Step 2: Register Handler
+### Step 2: Make Handler Discoverable
 
 ```csharp
-// Program.cs
-builder.Services.AddTransient<ITaskHandler, QATaskHandler>();
+// Program.cs already contains:
+builder.Services.AddTaskHandlersFromAssembly(typeof(ITaskHandler).Assembly);
+```
 
-// Full example:
-services.AddTransient<ITaskHandler, ProcurementTaskHandler>();
-services.AddTransient<ITaskHandler, DevelopmentTaskHandler>();
-services.AddTransient<ITaskHandler, QATaskHandler>(); // NEW
+`AddTaskHandlersFromAssembly` automatically registers public, non-abstract `ITaskHandler`
+implementations in the exact namespace `DanTaskManager.Domain.Handlers`.
+
+Constraints:
+- Keep the handler class in `Domain/Handlers` with namespace `DanTaskManager.Domain.Handlers`.
+- Ensure `TaskType` is unique case-insensitively; `TaskHandlerFactory` builds a case-insensitive map.
+- Do not add one-off `AddTransient<ITaskHandler, ...>()` registrations unless the discovery rule changes for all handlers.
+- If a client calls `POST /api/tasks` with an unregistered `taskType`, the API returns HTTP 400 with `supportedTaskTypes`.
+
+Example unsupported-type response:
+
+```json
+{
+  "error": "סוג משימה לא נתמך: UnknownType",
+  "supportedTaskTypes": [
+    "Analysis",
+    "Development",
+    "Procurement",
+    "Testing"
+  ]
+}
 ```
 
 ### Step 3: Write Tests
@@ -371,9 +389,14 @@ private async Task<ValidationResult> ValidateUniqueTaskTypeAsync(int userId, str
 
 ```csharp
 // In ChangeStatusAsync or appropriate place
-public async Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, string newDataJson)
+public async Task<WorkflowResult> ChangeStatusAsync(
+    int taskId,
+    int newStatus,
+    int nextAssignedToUserId,
+    string newDataJson,
+    CancellationToken cancellationToken = default)
 {
-    var task = await _context.Tasks.FindAsync(taskId);
+    var task = await _context.Tasks.FindAsync(new object[] { taskId }, cancellationToken);
     
     // ... existing validations ...
     
@@ -393,15 +416,19 @@ public async Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, s
 public async Task ChangeStatus_WithDuplicateTaskType_ShouldFail()
 {
     // Arrange: Two Procurement tasks for same user
-    var task1 = new BaseTask { TaskType = "Procurement", AssignedToUserId = 1, CurrentStatus = 0 };
-    var task2 = new BaseTask { TaskType = "Procurement", AssignedToUserId = 1, CurrentStatus = 0 };
+    var task1 = new BaseTask { TaskType = "Procurement", AssignedToUserId = 1, CurrentStatus = WorkflowConstants.CreatedStatus };
+    var task2 = new BaseTask { TaskType = "Procurement", AssignedToUserId = 1, CurrentStatus = WorkflowConstants.CreatedStatus };
     
     _context.Tasks.Add(task1);
     _context.Tasks.Add(task2);
     await _context.SaveChangesAsync();
 
-    // Act: Try to move second task to Status 1
-    var result = await _service.ChangeStatusAsync(task2.Id, 1, "{}");
+    // Act: Try to move second task to Status 2
+    var result = await _service.ChangeStatusAsync(
+        task2.Id,
+        2,
+        1,
+        "{\"prices\": [\"5000\", \"4800\"]}");
 
     // Assert
     Assert.False(result.Success);
@@ -613,7 +640,7 @@ public async Task FullWorkflow_WithNewFeature_ShouldPass()
 
 To extend the system:
 
-1. **New Handler**: Implement ITaskHandler, register in Program.cs
+1. **New Handler**: Implement `ITaskHandler` under `DanTaskManager.Domain.Handlers` so automatic discovery registers it
 2. **New Endpoint**: Add to interface, implement in service, add to controller
 3. **New Validation**: Add validation method, integrate into workflow
 4. **New Datatype**: Add handler with appropriate validation

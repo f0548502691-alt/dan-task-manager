@@ -208,9 +208,20 @@ Status: 400 Bad Request
 
 Response:
 {
-  "error": "TaskType 'Unknown' לא רשום בהנדלרים"
+  "error": "סוג משימה לא נתמך: UnknownType",
+  "supportedTaskTypes": [
+    "Analysis",
+    "Development",
+    "Procurement",
+    "Testing"
+  ]
 }
 ```
+
+Notes:
+- The list is emitted by `TaskApplicationService.CreateAsync` only for unsupported `taskType` failures.
+- Values come from `TaskHandlerFactory.GetRegisteredTaskTypes()` and are sorted case-insensitively before reaching the API response.
+- Validation errors such as missing `TaskType`, invalid JSON, or missing users do not include `supportedTaskTypes`.
 
 ---
 
@@ -268,7 +279,7 @@ Response:
   "id": 1,
   "taskType": "Procurement",
   "description": "רכישת חומרים",
-  "currentStatus": 0,
+  "currentStatus": 1,
   "assignedToUserId": 1,
   "customDataJson": "{}",
   "createdAt": "2026-05-25T10:00:00Z",
@@ -298,25 +309,26 @@ Response:
 Status: 200 OK
 
 Response:
-[
-  {
-    "id": 1,
-    "taskType": "Procurement",
-    "description": "רכישת חומרים",
-    "currentStatus": 2,
-    "assignedToUserId": 1,
-    "customDataJson": "{\"prices\": [\"5000\", \"4800\"]}"
-  },
-  {
-    "id": 2,
-    "taskType": "Development",
-    "description": "פיתוח API",
-    "currentStatus": 1,
-    "assignedToUserId": 1,
-    "customDataJson": "{}"
-  }
-]
+{
+  "items": [
+    {
+      "id": 1,
+      "taskType": "Procurement",
+      "description": "רכישת חומרים",
+      "currentStatus": 2,
+      "assignedToUserId": 1,
+      "createdAt": "2026-05-25T10:00:00Z",
+      "updatedAt": "2026-05-25T10:05:00Z"
+    }
+  ],
+  "page": 1,
+  "pageSize": 20,
+  "totalCount": 1,
+  "totalPages": 1
+}
 ```
+
+List responses use `TaskSummaryDto` and do not include `customDataJson`; fetch a single task by ID for full task details.
 
 ---
 
@@ -327,7 +339,7 @@ Response:
 ```
 🔴 Request
 POST /api/tasks/1/change-status
-{ "newStatus": 3, "newDataJson": "{}" }
+{ "newStatus": 3, "nextAssignedToUserId": 2, "newDataJson": "{}" }
 
 Current Status: 1
 
@@ -339,7 +351,7 @@ Status: 400 Bad Request
 
 ✅ Solution: Move to status 2 first
 POST /api/tasks/1/change-status
-{ "newStatus": 2, "newDataJson": "{...}" }
+{ "newStatus": 2, "nextAssignedToUserId": 2, "newDataJson": "{...}" }
 ```
 
 ### Scenario 2: Missing Handler Data
@@ -347,7 +359,7 @@ POST /api/tasks/1/change-status
 ```
 🔴 Request
 POST /api/tasks/1/change-status
-{ "newStatus": 2, "newDataJson": "{}" }
+{ "newStatus": 2, "nextAssignedToUserId": 2, "newDataJson": "{}" }
 
 Current Task: Procurement, Status 1
 
@@ -361,6 +373,7 @@ Status: 400 Bad Request
 POST /api/tasks/1/change-status
 {
   "newStatus": 2,
+  "nextAssignedToUserId": 2,
   "newDataJson": "{\"prices\": [\"5000\", \"4800\"]}"
 }
 ```
@@ -370,7 +383,7 @@ POST /api/tasks/1/change-status
 ```
 🔴 Request
 POST /api/tasks/1/change-status
-{ "newStatus": 1, "newDataJson": "{}" }
+{ "newStatus": 1, "nextAssignedToUserId": 1, "newDataJson": "{}" }
 
 Task Status: 99 (Closed)
 
@@ -390,6 +403,7 @@ Status: 400 Bad Request
 POST /api/tasks/1/change-status
 {
   "newStatus": 2,
+  "nextAssignedToUserId": 2,
   "newDataJson": "{not valid json}"
 }
 
@@ -398,13 +412,14 @@ Current Task: Procurement, Status 1
 🔴 Response
 Status: 400 Bad Request
 {
-  "error": "JSON לא תקין ב-newDataJson"
+  "error": "NewDataJson חייב להיות JSON תקין"
 }
 
 ✅ Solution: Use valid JSON
 POST /api/tasks/1/change-status
 {
   "newStatus": 2,
+  "nextAssignedToUserId": 2,
   "newDataJson": "{\"prices\": [\"5000\", \"4800\"]}"
 }
 ```
