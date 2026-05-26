@@ -44,6 +44,21 @@ public class BaseTask
     public string CustomDataJson { get; set; } = "{}";
 
     /// <summary>
+    /// שדה מחושב לאינדוקס/סינון על עדיפות.
+    /// </summary>
+    public string? PriorityIndex { get; private set; }
+
+    /// <summary>
+    /// שדה מחושב לאינדוקס/סינון על branch name.
+    /// </summary>
+    public string? BranchNameIndex { get; private set; }
+
+    /// <summary>
+    /// שדה מחושב לאינדוקס/סינון על deadline בתאריך UTC.
+    /// </summary>
+    public DateTime? DeadlineUtcIndex { get; private set; }
+
+    /// <summary>
     /// תאריך יצירת המשימה
     /// </summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

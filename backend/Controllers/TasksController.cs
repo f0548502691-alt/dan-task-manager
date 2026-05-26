@@ -2,6 +2,7 @@ using DanTaskManager.Domain;
 using DanTaskManager.Services;
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
 
 namespace DanTaskManager.Controllers;
 
@@ -114,7 +115,7 @@ public class TasksController : ControllerBase
                 request.TaskType,
                 request.Description,
                 request.AssignedToUserId,
-                request.CustomDataJson ?? "{}"),
+                ExtractCustomFieldsJson(request.CustomFields)),
             HttpContext.RequestAborted);
 
         if (!result.Success)
@@ -160,7 +161,7 @@ public class TasksController : ControllerBase
             id,
             request.NewStatus,
             request.NextAssignedToUserId,
-            request.NewDataJson,
+            ExtractCustomFieldsJson(request.CustomFields),
             HttpContext.RequestAborted);
 
         if (!result.Success)
@@ -266,6 +267,18 @@ public class TasksController : ControllerBase
         return NoContent();
     }
 
+    private static string ExtractCustomFieldsJson(JsonElement? customFields)
+    {
+        if (!customFields.HasValue)
+        {
+            return "{}";
+        }
+
+        return customFields.Value.ValueKind == JsonValueKind.Object
+            ? customFields.Value.GetRawText()
+            : "{}";
+    }
+
     private static string BuildValidationErrorMessage(IEnumerable<string> errors)
     {
         return string.Join("; ", errors.Where(e => !string.IsNullOrWhiteSpace(e)).Distinct());
@@ -293,9 +306,9 @@ public class CreateTaskRequest
     public int AssignedToUserId { get; set; }
 
     /// <summary>
-    /// JSON מותאם עם נתונים ספציפיים לסוג המשימה
+    /// אובייקט customFields עם נתונים ספציפיים לסוג המשימה
     /// </summary>
-    public string? CustomDataJson { get; set; }
+    public JsonElement? CustomFields { get; set; }
 }
 
 /// <summary>
@@ -325,9 +338,9 @@ public class ChangeStatusWorkflowRequest
     public int NextAssignedToUserId { get; set; }
 
     /// <summary>
-    /// JSON חדש עם נתונים מעודכנים
+    /// customFields חדשים עם נתונים מעודכנים
     /// </summary>
-    public string NewDataJson { get; set; } = "{}";
+    public JsonElement? CustomFields { get; set; }
 }
 
 /// <summary>

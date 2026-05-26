@@ -3,6 +3,7 @@ using DanTaskManager.Domain;
 using DanTaskManager.Domain.Handlers;
 using DanTaskManager.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System.Text.Json;
 
 namespace DanTaskManager.Tests;
@@ -36,7 +37,11 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
             new DevelopmentTaskHandler()
         };
         _factory = new TaskHandlerFactory(handlers);
-        _service = new TaskWorkflowService(_context, _factory, new MockLogger());
+        _service = new TaskWorkflowService(
+            _context,
+            _factory,
+            CreateValidationService(),
+            new MockLogger());
 
         // Seed data
         var user = new AppUser { Id = 1, Name = "Test User", Email = "test@test.com" };
@@ -156,6 +161,41 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
 
         // Act
         var result = await _service.ChangeStatusAsync(1, 2, 2, priceData);
+
+        // Assert
+        Assert.True(result.Success);
+        Assert.Equal(2, result.NewStatus);
+    }
+
+    [Fact]
+    public async Task ChangeStatus_UsesConfiguredRules_InsteadOfHandlerValidation()
+    {
+        // Arrange - relaxed configuration for Procurement status 2 without required fields.
+        var relaxedValidationService = new TaskTypeValidationService(Options.Create(new TaskTypeValidationOptions
+        {
+            TaskTypes = new List<TaskTypeDefinition>
+            {
+                new()
+                {
+                    TaskType = "Procurement",
+                    FinalStatus = 3
+                }
+            }
+        }));
+
+        var relaxedService = new TaskWorkflowService(
+            _context,
+            _factory,
+            relaxedValidationService,
+            new MockLogger());
+
+        var task = await _context.Tasks.FindAsync(1);
+        task!.CurrentStatus = 1;
+        _context.Tasks.Update(task);
+        await _context.SaveChangesAsync();
+
+        // Act - without config this payload would fail on handler "prices" validation.
+        var result = await relaxedService.ChangeStatusAsync(1, 2, 2, "{}");
 
         // Assert
         Assert.True(result.Success);
@@ -369,6 +409,103 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         public bool IsEnabled(LogLevel logLevel) => true;
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) { }
     }
+
+    private static ITaskTypeValidationService CreateValidationService()
+    {
+        var options = Options.Create(new TaskTypeValidationOptions
+        {
+            TaskTypes = new List<TaskTypeDefinition>
+            {
+                new()
+                {
+                    TaskType = "Procurement",
+                    FinalStatus = 3,
+                    StatusRules = new List<TaskStatusRuleDefinition>
+                    {
+                        new()
+                        {
+                            Status = 2,
+                            Fields = new List<FieldRuleDefinition>
+                            {
+                                new()
+                                {
+                                    Field = "prices",
+                                    Type = "array",
+                                    ArrayLength = 2,
+                                    ElementType = "string"
+                                }
+                            }
+                        },
+                        new()
+                        {
+                            Status = 3,
+                            Fields = new List<FieldRuleDefinition>
+                            {
+                                new()
+                                {
+                                    Field = "receipt",
+                                    Type = "string",
+                                    Required = true
+                                }
+                            }
+                        }
+                    }
+                },
+                new()
+                {
+                    TaskType = "Development",
+                    FinalStatus = 4,
+                    StatusRules = new List<TaskStatusRuleDefinition>
+                    {
+                        new()
+                        {
+                            Status = 2,
+                            Fields = new List<FieldRuleDefinition>
+                            {
+                                new()
+                                {
+                                    Field = "specification",
+                                    Type = "string",
+                                    Required = true,
+                                    MinLength = 10
+                                }
+                            }
+                        },
+                        new()
+                        {
+                            Status = 3,
+                            Fields = new List<FieldRuleDefinition>
+                            {
+                                new()
+                                {
+                                    Field = "branchName",
+                                    Type = "string",
+                                    Required = true,
+                                    Pattern = "valid_git_branch"
+                                }
+                            }
+                        },
+                        new()
+                        {
+                            Status = 4,
+                            Fields = new List<FieldRuleDefinition>
+                            {
+                                new()
+                                {
+                                    Field = "versionNumber",
+                                    Type = "stringOrNumber",
+                                    Required = true,
+                                    Pattern = "semantic_version"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        return new TaskTypeValidationService(options);
+    }
 }
 
 /// <summary>
@@ -400,6 +537,7 @@ public class TaskWorkflowIntegrationTests : IAsyncLifetime
         _service = new TaskWorkflowService(
             _context,
             new TaskHandlerFactory(handlers),
+            CreateValidationService(),
             new MockLogger());
 
         var user = new AppUser { Id = 1, Name = "Test", Email = "test@test.com" };
@@ -443,6 +581,58 @@ public class TaskWorkflowIntegrationTests : IAsyncLifetime
         var close = await _service.CloseTaskAsync(task.Id, "Done");
         Assert.True(close.Success);
         Assert.Equal(99, close.NewStatus);
+    }
+
+    private static ITaskTypeValidationService CreateValidationService()
+    {
+        var options = Options.Create(new TaskTypeValidationOptions
+        {
+            TaskTypes = new List<TaskTypeDefinition>
+            {
+                new()
+                {
+                    TaskType = "Procurement",
+                    FinalStatus = 3,
+                    StatusRules = new List<TaskStatusRuleDefinition>
+                    {
+                        new()
+                        {
+                            Status = 2,
+                            Fields = new List<FieldRuleDefinition>
+                            {
+                                new()
+                                {
+                                    Field = "prices",
+                                    Type = "array",
+                                    ArrayLength = 2,
+                                    ElementType = "string"
+                                }
+                            }
+                        },
+                        new()
+                        {
+                            Status = 3,
+                            Fields = new List<FieldRuleDefinition>
+                            {
+                                new()
+                                {
+                                    Field = "receipt",
+                                    Type = "string",
+                                    Required = true
+                                }
+                            }
+                        }
+                    }
+                },
+                new()
+                {
+                    TaskType = "Development",
+                    FinalStatus = 4
+                }
+            }
+        });
+
+        return new TaskTypeValidationService(options);
     }
 
     private class MockLogger : ILogger<TaskWorkflowService>

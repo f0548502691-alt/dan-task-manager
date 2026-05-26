@@ -3,6 +3,7 @@ using DanTaskManager.Domain;
 using DanTaskManager.Domain.Handlers;
 using DanTaskManager.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace DanTaskManager.Tests;
 
@@ -39,6 +40,7 @@ public class TaskApplicationServiceTests
             context,
             new NoOpWorkflowService(),
             new TaskHandlerFactory(handlers),
+            new TaskTypeValidationService(Options.Create(new TaskTypeValidationOptions())),
             new MockLogger());
 
         var result = await service.CreateAsync(

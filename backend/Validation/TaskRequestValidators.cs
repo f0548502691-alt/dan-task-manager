@@ -20,28 +20,19 @@ public class CreateTaskRequestValidator : AbstractValidator<CreateTaskRequest>
             .GreaterThan(0)
             .WithMessage("AssignedToUserId חייב להיות גדול מ-0");
 
-        RuleFor(x => x.CustomDataJson)
-            .Must(BeValidJson)
-            .When(x => !string.IsNullOrWhiteSpace(x.CustomDataJson))
-            .WithMessage("CustomDataJson חייב להיות JSON תקין");
+        RuleFor(x => x.CustomFields)
+            .Must(BeValidCustomFields)
+            .WithMessage("CustomFields חייב להיות אובייקט JSON");
     }
 
-    private static bool BeValidJson(string? value)
+    private static bool BeValidCustomFields(JsonElement? value)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (!value.HasValue)
         {
             return true;
         }
 
-        try
-        {
-            using var _ = JsonDocument.Parse(value);
-            return true;
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
+        return value.Value.ValueKind == JsonValueKind.Object;
     }
 }
 
@@ -57,29 +48,21 @@ public class ChangeStatusWorkflowRequestValidator : AbstractValidator<ChangeStat
             .GreaterThan(0)
             .WithMessage("NextAssignedToUserId נדרש");
 
-        RuleFor(x => x.NewDataJson)
-            .NotEmpty()
-            .WithMessage("NewDataJson נדרש")
-            .Must(BeValidJson)
-            .WithMessage("NewDataJson חייב להיות JSON תקין");
+        RuleFor(x => x.CustomFields)
+            .NotNull()
+            .WithMessage("CustomFields נדרש")
+            .Must(BeValidCustomFields)
+            .WithMessage("CustomFields חייב להיות אובייקט JSON");
     }
 
-    private static bool BeValidJson(string? value)
+    private static bool BeValidCustomFields(JsonElement? value)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (!value.HasValue)
         {
             return false;
         }
 
-        try
-        {
-            using var _ = JsonDocument.Parse(value);
-            return true;
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
+        return value.Value.ValueKind == JsonValueKind.Object;
     }
 }
 
