@@ -1,5 +1,5 @@
 <div [formGroup]="form" [ngSwitch]="status">
-  <ng-container *ngSwitchCase="2">
+  <ng-container *ngSwitchCase="TASK_STATUS.READY_FOR_REVIEW">
     <label for="priceA">Supplier price #1</label>
     <input id="priceA" type="text" formControlName="priceA" />
     <small *ngIf="isInvalid('priceA')">Price #1 is required.</small>
@@ -9,7 +9,7 @@
     <small *ngIf="isInvalid('priceB')">Price #2 is required.</small>
   </ng-container>
 
-  <ng-container *ngSwitchCase="3">
+  <ng-container *ngSwitchCase="TASK_STATUS.DONE">
     <label for="receipt">Receipt reference</label>
     <input id="receipt" type="text" formControlName="receipt" />
     <small *ngIf="isInvalid('receipt')">Receipt is required.</small>

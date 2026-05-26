@@ -37,10 +37,10 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
             new DevelopmentTaskHandler()
         };
         _factory = new TaskHandlerFactory(handlers);
+        var validationService = CreateValidationService();
         _service = new TaskWorkflowService(
             _context,
-            _factory,
-            CreateValidationService(),
+            CreateRuleProviders(_factory, validationService),
             new MockLogger());
 
         // Seed data
@@ -185,8 +185,7 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
 
         var relaxedService = new TaskWorkflowService(
             _context,
-            _factory,
-            relaxedValidationService,
+            CreateRuleProviders(_factory, relaxedValidationService),
             new MockLogger());
 
         var task = await _context.Tasks.FindAsync(1);
@@ -506,6 +505,17 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
 
         return new TaskTypeValidationService(options);
     }
+
+    private static IEnumerable<ITaskWorkflowRuleProvider> CreateRuleProviders(
+        TaskHandlerFactory handlerFactory,
+        ITaskTypeValidationService validationService)
+    {
+        return new ITaskWorkflowRuleProvider[]
+        {
+            new MetadataTaskWorkflowRuleProvider(validationService),
+            new HandlerTaskWorkflowRuleProvider(handlerFactory)
+        };
+    }
 }
 
 /// <summary>
@@ -536,8 +546,9 @@ public class TaskWorkflowIntegrationTests : IAsyncLifetime
         };
         _service = new TaskWorkflowService(
             _context,
-            new TaskHandlerFactory(handlers),
-            CreateValidationService(),
+            CreateRuleProviders(
+                new TaskHandlerFactory(handlers),
+                CreateValidationService()),
             new MockLogger());
 
         var user = new AppUser { Id = 1, Name = "Test", Email = "test@test.com" };
@@ -633,6 +644,17 @@ public class TaskWorkflowIntegrationTests : IAsyncLifetime
         });
 
         return new TaskTypeValidationService(options);
+    }
+
+    private static IEnumerable<ITaskWorkflowRuleProvider> CreateRuleProviders(
+        TaskHandlerFactory handlerFactory,
+        ITaskTypeValidationService validationService)
+    {
+        return new ITaskWorkflowRuleProvider[]
+        {
+            new MetadataTaskWorkflowRuleProvider(validationService),
+            new HandlerTaskWorkflowRuleProvider(handlerFactory)
+        };
     }
 
     private class MockLogger : ILogger<TaskWorkflowService>

@@ -13,6 +13,7 @@ public class TaskApplicationService : ITaskApplicationService
     private readonly ITaskWorkflowService _workflowService;
     private readonly TaskHandlerFactory _handlerFactory;
     private readonly ITaskTypeValidationService _taskTypeValidationService;
+    private readonly ITaskTypeMetadataService _taskTypeMetadataService;
     private readonly ILogger<TaskApplicationService> _logger;
 
     public TaskApplicationService(
@@ -20,12 +21,14 @@ public class TaskApplicationService : ITaskApplicationService
         ITaskWorkflowService workflowService,
         TaskHandlerFactory handlerFactory,
         ITaskTypeValidationService taskTypeValidationService,
+        ITaskTypeMetadataService taskTypeMetadataService,
         ILogger<TaskApplicationService> logger)
     {
         _context = context;
         _workflowService = workflowService;
         _handlerFactory = handlerFactory;
         _taskTypeValidationService = taskTypeValidationService;
+        _taskTypeMetadataService = taskTypeMetadataService;
         _logger = logger;
     }
 
@@ -311,10 +314,9 @@ public class TaskApplicationService : ITaskApplicationService
     private IReadOnlyCollection<string> GetSupportedTaskTypes()
     {
         var handlerTypes = _handlerFactory.GetRegisteredTaskTypes();
-        var metadataTypes = (_taskTypeValidationService as ITaskTypeMetadataService)?
+        var metadataTypes = _taskTypeMetadataService
             .GetTaskTypes()
-            .Select(taskType => taskType.TaskType)
-            ?? Enumerable.Empty<string>();
+            .Select(taskType => taskType.TaskType);
 
         return handlerTypes
             .Concat(metadataTypes)
