@@ -1,4 +1,8 @@
+using DanTaskManager.Data;
+using DanTaskManager.Domain;
 using DanTaskManager.Domain.Handlers;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using System.Globalization;
 using System.Text.Json;
@@ -13,6 +17,63 @@ public interface ITaskTypeValidationService
     ValidationResult ValidateStatusData(string taskType, int status, string payloadJson);
 }
 
+public interface ITaskTypeMetadataService
+{
+    IReadOnlyCollection<TaskTypeSchemaDto> GetTaskTypes();
+    TaskTypeSchemaDto? GetTaskType(string taskType);
+    MetadataOperationResult UpsertTaskType(UpsertTaskTypeCommand command);
+    MetadataOperationResult UpsertFieldDefinition(string taskType, UpsertFieldDefinitionCommand command);
+}
+
+public record UpsertTaskTypeCommand(
+    string TaskType,
+    string? DisplayName,
+    int? FinalStatus,
+    bool IsActive = true);
+
+public class UpsertFieldDefinitionCommand
+{
+    public string Field { get; init; } = string.Empty;
+    public string Type { get; init; } = "string";
+    public bool Required { get; init; } = true;
+    public int? MinLength { get; init; }
+    public int? MaxLength { get; init; }
+    public decimal? MinValue { get; init; }
+    public decimal? MaxValue { get; init; }
+    public int? ArrayLength { get; init; }
+    public int? MinItems { get; init; }
+    public int? MaxItems { get; init; }
+    public string? ElementType { get; init; }
+    public string? Pattern { get; init; }
+    public int? AppliesFromStatus { get; init; }
+    public int? AppliesToStatus { get; init; }
+    public List<string>? AllowedValues { get; init; }
+    public bool IsIndexed { get; init; }
+}
+
+public class MetadataOperationResult
+{
+    public bool Success { get; init; }
+    public string Message { get; init; } = string.Empty;
+    public TaskTypeSchemaDto? TaskType { get; init; }
+
+    public static MetadataOperationResult SuccessResult(TaskTypeSchemaDto taskType, string message = "")
+        => new() { Success = true, Message = message, TaskType = taskType };
+
+    public static MetadataOperationResult FailureResult(string message)
+        => new() { Success = false, Message = message };
+}
+
+public class TaskTypeSchemaDto
+{
+    public string TaskType { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public int? FinalStatus { get; init; }
+    public bool IsActive { get; init; }
+    public int Version { get; init; }
+    public IReadOnlyList<FieldRuleDefinition> Fields { get; init; } = Array.Empty<FieldRuleDefinition>();
+}
+
 public class TaskTypeValidationOptions
 {
     public const string SectionName = "TaskTypeValidation";
@@ -25,6 +86,7 @@ public class TaskTypeDefinition
     public string TaskType { get; set; } = string.Empty;
     public int? FinalStatus { get; set; }
     public List<TaskStatusRuleDefinition> StatusRules { get; set; } = [];
+    public List<FieldRuleDefinition> FieldRules { get; set; } = [];
 }
 
 public class TaskStatusRuleDefinition
@@ -40,22 +102,40 @@ public class FieldRuleDefinition
     public bool Required { get; set; } = true;
     public int? MinLength { get; set; }
     public int? MaxLength { get; set; }
+    public decimal? MinValue { get; set; }
+    public decimal? MaxValue { get; set; }
     public int? ArrayLength { get; set; }
     public int? MinItems { get; set; }
     public int? MaxItems { get; set; }
     public string? ElementType { get; set; }
     public string? Pattern { get; set; }
+    public int? AppliesFromStatus { get; set; }
+    public int? AppliesToStatus { get; set; }
+    public List<string>? AllowedValues { get; set; }
+    public bool IsIndexed { get; set; }
 }
 
-public class TaskTypeValidationService : ITaskTypeValidationService
+public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMetadataService
 {
-    private readonly IReadOnlyDictionary<string, TaskTypeDefinition> _taskTypeMap;
+    private const string CachePrefix = "task-type-validation::";
+
+    private readonly ApplicationDbContext? _context;
+    private readonly IMemoryCache? _cache;
+    private readonly IReadOnlyDictionary<string, TaskTypeDefinition>? _inMemoryTaskTypeMap;
+
+    public TaskTypeValidationService(
+        ApplicationDbContext context,
+        IMemoryCache cache)
+    {
+        _context = context;
+        _cache = cache;
+    }
 
     public TaskTypeValidationService(IOptions<TaskTypeValidationOptions> options)
     {
         var configTaskTypes = options.Value.TaskTypes ?? [];
 
-        _taskTypeMap = configTaskTypes
+        _inMemoryTaskTypeMap = configTaskTypes
             .Where(definition => !string.IsNullOrWhiteSpace(definition.TaskType))
             .GroupBy(definition => definition.TaskType, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.Last(), StringComparer.OrdinalIgnoreCase);
@@ -63,28 +143,24 @@ public class TaskTypeValidationService : ITaskTypeValidationService
 
     public bool HasTaskType(string taskType)
     {
-        return !string.IsNullOrWhiteSpace(taskType) && _taskTypeMap.ContainsKey(taskType);
+        return GetTaskDefinition(taskType) != null;
     }
 
     public int? GetFinalStatus(string taskType)
     {
-        if (!_taskTypeMap.TryGetValue(taskType, out var definition))
-        {
-            return null;
-        }
-
-        return definition.FinalStatus;
+        return GetTaskDefinition(taskType)?.FinalStatus;
     }
 
     public ValidationResult ValidateStatusData(string taskType, int status, string payloadJson)
     {
-        if (!_taskTypeMap.TryGetValue(taskType, out var taskDefinition))
+        var taskDefinition = GetTaskDefinition(taskType);
+        if (taskDefinition == null)
         {
             return ValidationResult.Success();
         }
 
-        var statusRule = taskDefinition.StatusRules.FirstOrDefault(rule => rule.Status == status);
-        if (statusRule == null || statusRule.Fields.Count == 0)
+        var fieldRules = ResolveFieldRules(taskDefinition, status);
+        if (fieldRules.Count == 0)
         {
             return ValidationResult.Success();
         }
@@ -94,7 +170,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService
             using var jsonDoc = JsonDocument.Parse(payloadJson);
             var root = jsonDoc.RootElement;
 
-            foreach (var fieldRule in statusRule.Fields)
+            foreach (var fieldRule in fieldRules)
             {
                 var fieldResult = ValidateField(root, status, fieldRule);
                 if (!fieldResult.IsValid)
@@ -109,6 +185,388 @@ public class TaskTypeValidationService : ITaskTypeValidationService
         }
 
         return ValidationResult.Success();
+    }
+
+    public IReadOnlyCollection<TaskTypeSchemaDto> GetTaskTypes()
+    {
+        if (_context == null)
+        {
+            return (_inMemoryTaskTypeMap ?? new Dictionary<string, TaskTypeDefinition>(StringComparer.OrdinalIgnoreCase))
+                .Values
+                .Select(MapToSchemaDto)
+                .OrderBy(schema => schema.TaskType, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        return _context.TaskTypes
+            .AsNoTracking()
+            .Include(taskType => taskType.FieldDefinitions)
+            .OrderBy(taskType => taskType.Code)
+            .ToList()
+            .Select(MapToSchemaDto)
+            .ToList();
+    }
+
+    public TaskTypeSchemaDto? GetTaskType(string taskType)
+    {
+        if (string.IsNullOrWhiteSpace(taskType))
+        {
+            return null;
+        }
+
+        var normalizedTaskType = taskType.Trim();
+        var normalizedTaskTypeLower = normalizedTaskType.ToLowerInvariant();
+
+        if (_context == null)
+        {
+            if (_inMemoryTaskTypeMap == null ||
+                !_inMemoryTaskTypeMap.TryGetValue(normalizedTaskType, out var definition))
+            {
+                return null;
+            }
+
+            return MapToSchemaDto(definition);
+        }
+
+        var taskTypeEntity = _context.TaskTypes
+            .AsNoTracking()
+            .Include(item => item.FieldDefinitions)
+            .FirstOrDefault(item => item.Code.ToLower() == normalizedTaskTypeLower);
+
+        return taskTypeEntity == null ? null : MapToSchemaDto(taskTypeEntity);
+    }
+
+    public MetadataOperationResult UpsertTaskType(UpsertTaskTypeCommand command)
+    {
+        if (_context == null)
+        {
+            return MetadataOperationResult.FailureResult("Database-backed metadata updates are not available");
+        }
+
+        var code = command.TaskType.Trim();
+        var codeLower = code.ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return MetadataOperationResult.FailureResult("TaskType is required");
+        }
+
+        var entity = _context.TaskTypes
+            .Include(taskType => taskType.FieldDefinitions)
+            .FirstOrDefault(taskType => taskType.Code.ToLower() == codeLower);
+
+        if (entity == null)
+        {
+            entity = new TaskTypeMetadata
+            {
+                Code = code,
+                DisplayName = string.IsNullOrWhiteSpace(command.DisplayName) ? code : command.DisplayName.Trim(),
+                FinalStatus = command.FinalStatus,
+                IsActive = command.IsActive,
+                Version = 1,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            _context.TaskTypes.Add(entity);
+        }
+        else
+        {
+            entity.DisplayName = string.IsNullOrWhiteSpace(command.DisplayName) ? entity.DisplayName : command.DisplayName.Trim();
+            entity.FinalStatus = command.FinalStatus;
+            entity.IsActive = command.IsActive;
+            entity.Version += 1;
+            entity.UpdatedAt = DateTime.UtcNow;
+        }
+
+        _context.SaveChanges();
+        RemoveCacheEntry(code);
+
+        var reloaded = _context.TaskTypes
+            .AsNoTracking()
+            .Include(taskType => taskType.FieldDefinitions)
+            .First(taskType => taskType.Code.ToLower() == codeLower);
+
+        return MetadataOperationResult.SuccessResult(
+            MapToSchemaDto(reloaded),
+            "Task type metadata saved");
+    }
+
+    public MetadataOperationResult UpsertFieldDefinition(string taskType, UpsertFieldDefinitionCommand command)
+    {
+        if (_context == null)
+        {
+            return MetadataOperationResult.FailureResult("Database-backed metadata updates are not available");
+        }
+
+        if (string.IsNullOrWhiteSpace(taskType))
+        {
+            return MetadataOperationResult.FailureResult("TaskType is required");
+        }
+
+        var normalizedTaskType = taskType.Trim();
+        var normalizedTaskTypeLower = normalizedTaskType.ToLowerInvariant();
+
+        if (string.IsNullOrWhiteSpace(command.Field))
+        {
+            return MetadataOperationResult.FailureResult("Field is required");
+        }
+
+        if (command.AppliesFromStatus.HasValue &&
+            command.AppliesToStatus.HasValue &&
+            command.AppliesFromStatus.Value > command.AppliesToStatus.Value)
+        {
+            return MetadataOperationResult.FailureResult("AppliesFromStatus must be less than or equal to AppliesToStatus");
+        }
+
+        var taskTypeEntity = _context.TaskTypes
+            .Include(item => item.FieldDefinitions)
+            .FirstOrDefault(item => item.Code.ToLower() == normalizedTaskTypeLower);
+
+        if (taskTypeEntity == null)
+        {
+            return MetadataOperationResult.FailureResult($"Task type '{taskType}' not found");
+        }
+
+        var fieldKey = command.Field.Trim();
+        var fieldDefinition = taskTypeEntity.FieldDefinitions
+            .FirstOrDefault(item => item.FieldKey.Equals(fieldKey, StringComparison.OrdinalIgnoreCase));
+
+        if (fieldDefinition == null)
+        {
+            fieldDefinition = new TaskFieldDefinition
+            {
+                TaskTypeMetadataId = taskTypeEntity.Id,
+                FieldKey = fieldKey,
+                CreatedAt = DateTime.UtcNow
+            };
+            taskTypeEntity.FieldDefinitions.Add(fieldDefinition);
+        }
+
+        fieldDefinition.DataType = string.IsNullOrWhiteSpace(command.Type) ? "string" : command.Type.Trim();
+        fieldDefinition.IsRequired = command.Required;
+        fieldDefinition.MinLength = command.MinLength;
+        fieldDefinition.MaxLength = command.MaxLength;
+        fieldDefinition.MinValue = command.MinValue;
+        fieldDefinition.MaxValue = command.MaxValue;
+        fieldDefinition.ArrayLength = command.ArrayLength;
+        fieldDefinition.MinItems = command.MinItems;
+        fieldDefinition.MaxItems = command.MaxItems;
+        fieldDefinition.ElementType = command.ElementType;
+        fieldDefinition.RegexPattern = command.Pattern;
+        fieldDefinition.AppliesFromStatus = command.AppliesFromStatus;
+        fieldDefinition.AppliesToStatus = command.AppliesToStatus;
+        fieldDefinition.IsIndexed = command.IsIndexed;
+        fieldDefinition.AllowedValuesJson = command.AllowedValues is { Count: > 0 }
+            ? JsonSerializer.Serialize(command.AllowedValues)
+            : null;
+        fieldDefinition.UpdatedAt = DateTime.UtcNow;
+
+        taskTypeEntity.Version += 1;
+        taskTypeEntity.UpdatedAt = DateTime.UtcNow;
+
+        _context.SaveChanges();
+        RemoveCacheEntry(taskTypeEntity.Code);
+
+        var reloaded = _context.TaskTypes
+            .AsNoTracking()
+            .Include(item => item.FieldDefinitions)
+            .First(item => item.Id == taskTypeEntity.Id);
+
+        return MetadataOperationResult.SuccessResult(
+            MapToSchemaDto(reloaded),
+            "Field definition saved");
+    }
+
+    private TaskTypeDefinition? GetTaskDefinition(string taskType)
+    {
+        if (string.IsNullOrWhiteSpace(taskType))
+        {
+            return null;
+        }
+
+        if (_inMemoryTaskTypeMap != null)
+        {
+            _inMemoryTaskTypeMap.TryGetValue(taskType, out var inMemoryDefinition);
+            return inMemoryDefinition;
+        }
+
+        if (_context == null || _cache == null)
+        {
+            return null;
+        }
+
+        var cacheKey = $"{CachePrefix}{taskType.Trim().ToLowerInvariant()}";
+        if (_cache.TryGetValue(cacheKey, out TaskTypeDefinition? cachedDefinition))
+        {
+            return cachedDefinition;
+        }
+
+        var normalizedTaskType = taskType.Trim();
+        var normalizedTaskTypeLower = normalizedTaskType.ToLowerInvariant();
+
+        var entity = _context.TaskTypes
+            .AsNoTracking()
+            .Include(item => item.FieldDefinitions)
+            .FirstOrDefault(item => item.Code.ToLower() == normalizedTaskTypeLower && item.IsActive);
+
+        if (entity == null)
+        {
+            return null;
+        }
+
+        var mappedDefinition = MapToDefinition(entity);
+        _cache.Set(cacheKey, mappedDefinition, TimeSpan.FromMinutes(5));
+        return mappedDefinition;
+    }
+
+    private static TaskTypeDefinition MapToDefinition(TaskTypeMetadata entity)
+    {
+        var fieldRules = entity.FieldDefinitions
+            .OrderBy(field => field.FieldKey, StringComparer.OrdinalIgnoreCase)
+            .Select(field => new FieldRuleDefinition
+            {
+                Field = field.FieldKey,
+                Type = field.DataType,
+                Required = field.IsRequired,
+                MinLength = field.MinLength,
+                MaxLength = field.MaxLength,
+                MinValue = field.MinValue,
+                MaxValue = field.MaxValue,
+                ArrayLength = field.ArrayLength,
+                MinItems = field.MinItems,
+                MaxItems = field.MaxItems,
+                ElementType = field.ElementType,
+                Pattern = field.RegexPattern,
+                AppliesFromStatus = field.AppliesFromStatus,
+                AppliesToStatus = field.AppliesToStatus,
+                AllowedValues = ParseAllowedValues(field.AllowedValuesJson),
+                IsIndexed = field.IsIndexed
+            })
+            .ToList();
+
+        return new TaskTypeDefinition
+        {
+            TaskType = entity.Code,
+            FinalStatus = entity.FinalStatus,
+            FieldRules = fieldRules
+        };
+    }
+
+    private static TaskTypeSchemaDto MapToSchemaDto(TaskTypeMetadata entity)
+    {
+        return new TaskTypeSchemaDto
+        {
+            TaskType = entity.Code,
+            DisplayName = entity.DisplayName,
+            FinalStatus = entity.FinalStatus,
+            IsActive = entity.IsActive,
+            Version = entity.Version,
+            Fields = entity.FieldDefinitions
+                .OrderBy(field => field.FieldKey, StringComparer.OrdinalIgnoreCase)
+                .Select(field => new FieldRuleDefinition
+                {
+                    Field = field.FieldKey,
+                    Type = field.DataType,
+                    Required = field.IsRequired,
+                    MinLength = field.MinLength,
+                    MaxLength = field.MaxLength,
+                    MinValue = field.MinValue,
+                    MaxValue = field.MaxValue,
+                    ArrayLength = field.ArrayLength,
+                    MinItems = field.MinItems,
+                    MaxItems = field.MaxItems,
+                    ElementType = field.ElementType,
+                    Pattern = field.RegexPattern,
+                    AppliesFromStatus = field.AppliesFromStatus,
+                    AppliesToStatus = field.AppliesToStatus,
+                    AllowedValues = ParseAllowedValues(field.AllowedValuesJson),
+                    IsIndexed = field.IsIndexed
+                })
+                .ToList()
+        };
+    }
+
+    private static TaskTypeSchemaDto MapToSchemaDto(TaskTypeDefinition definition)
+    {
+        return new TaskTypeSchemaDto
+        {
+            TaskType = definition.TaskType,
+            DisplayName = definition.TaskType,
+            FinalStatus = definition.FinalStatus,
+            IsActive = true,
+            Version = 1,
+            Fields = definition.FieldRules.Count > 0
+                ? definition.FieldRules
+                : definition.StatusRules.SelectMany(rule =>
+                    rule.Fields.Select(field => new FieldRuleDefinition
+                    {
+                        Field = field.Field,
+                        Type = field.Type,
+                        Required = field.Required,
+                        MinLength = field.MinLength,
+                        MaxLength = field.MaxLength,
+                        MinValue = field.MinValue,
+                        MaxValue = field.MaxValue,
+                        ArrayLength = field.ArrayLength,
+                        MinItems = field.MinItems,
+                        MaxItems = field.MaxItems,
+                        ElementType = field.ElementType,
+                        Pattern = field.Pattern,
+                        AppliesFromStatus = field.AppliesFromStatus ?? rule.Status,
+                        AppliesToStatus = field.AppliesToStatus ?? rule.Status,
+                        AllowedValues = field.AllowedValues,
+                        IsIndexed = field.IsIndexed
+                    }))
+                .ToList()
+        };
+    }
+
+    private void RemoveCacheEntry(string taskType)
+    {
+        if (_cache == null || string.IsNullOrWhiteSpace(taskType))
+        {
+            return;
+        }
+
+        var cacheKey = $"{CachePrefix}{taskType.Trim().ToLowerInvariant()}";
+        _cache.Remove(cacheKey);
+    }
+
+    private static IReadOnlyList<FieldRuleDefinition> ResolveFieldRules(TaskTypeDefinition taskDefinition, int status)
+    {
+        var explicitRules = taskDefinition.FieldRules.Count > 0
+            ? taskDefinition.FieldRules
+            : taskDefinition.StatusRules
+                .SelectMany(rule => rule.Fields.Select(field => new FieldRuleDefinition
+                {
+                    Field = field.Field,
+                    Type = field.Type,
+                    Required = field.Required,
+                    MinLength = field.MinLength,
+                    MaxLength = field.MaxLength,
+                    MinValue = field.MinValue,
+                    MaxValue = field.MaxValue,
+                    ArrayLength = field.ArrayLength,
+                    MinItems = field.MinItems,
+                    MaxItems = field.MaxItems,
+                    ElementType = field.ElementType,
+                    Pattern = field.Pattern,
+                    AppliesFromStatus = field.AppliesFromStatus ?? rule.Status,
+                    AppliesToStatus = field.AppliesToStatus ?? rule.Status,
+                    AllowedValues = field.AllowedValues,
+                    IsIndexed = field.IsIndexed
+                }))
+                .ToList();
+
+        return explicitRules
+            .Where(rule => IsRuleApplicableForStatus(rule, status))
+            .ToList();
+    }
+
+    private static bool IsRuleApplicableForStatus(FieldRuleDefinition rule, int status)
+    {
+        var from = rule.AppliesFromStatus ?? int.MinValue;
+        var to = rule.AppliesToStatus ?? int.MaxValue;
+        return status >= from && status <= to;
     }
 
     private static ValidationResult ValidateField(
@@ -160,6 +618,12 @@ public class TaskTypeValidationService : ITaskTypeValidationService
                     $"השדה '{fieldRule.Field}' לא יכול להכיל יותר מ-{fieldRule.MaxLength.Value} תווים");
             }
 
+            var allowedValuesResult = ValidateAllowedValues(fieldRule, stringValue);
+            if (!allowedValuesResult.IsValid)
+            {
+                return allowedValuesResult;
+            }
+
             var patternResult = ValidatePattern(fieldRule, stringValue);
             if (!patternResult.IsValid)
             {
@@ -167,7 +631,8 @@ public class TaskTypeValidationService : ITaskTypeValidationService
             }
         }
 
-        if (fieldRule.Type.Equals("stringOrNumber", StringComparison.OrdinalIgnoreCase))
+        if (fieldRule.Type.Equals("stringOrNumber", StringComparison.OrdinalIgnoreCase) ||
+            fieldElement.ValueKind == JsonValueKind.Number)
         {
             var normalizedValue = GetScalarAsString(fieldElement);
             if (fieldRule.Required && string.IsNullOrWhiteSpace(normalizedValue))
@@ -179,6 +644,18 @@ public class TaskTypeValidationService : ITaskTypeValidationService
             if (!patternResult.IsValid)
             {
                 return patternResult;
+            }
+
+            var numericResult = ValidateNumericBoundaries(fieldRule, normalizedValue);
+            if (!numericResult.IsValid)
+            {
+                return numericResult;
+            }
+
+            var allowedValuesResult = ValidateAllowedValues(fieldRule, normalizedValue);
+            if (!allowedValuesResult.IsValid)
+            {
+                return allowedValuesResult;
             }
         }
 
@@ -225,6 +702,54 @@ public class TaskTypeValidationService : ITaskTypeValidationService
                     }
                 }
             }
+        }
+
+        return ValidationResult.Success();
+    }
+
+    private static ValidationResult ValidateAllowedValues(FieldRuleDefinition fieldRule, string scalarValue)
+    {
+        if (fieldRule.AllowedValues == null || fieldRule.AllowedValues.Count == 0)
+        {
+            return ValidationResult.Success();
+        }
+
+        if (fieldRule.AllowedValues.Contains(scalarValue, StringComparer.Ordinal))
+        {
+            return ValidationResult.Success();
+        }
+
+        return ValidationResult.Failure(
+            $"השדה '{fieldRule.Field}' חייב להיות אחד מהערכים המותרים");
+    }
+
+    private static ValidationResult ValidateNumericBoundaries(FieldRuleDefinition fieldRule, string normalizedValue)
+    {
+        if (!fieldRule.MinValue.HasValue && !fieldRule.MaxValue.HasValue)
+        {
+            return ValidationResult.Success();
+        }
+
+        if (!decimal.TryParse(
+                normalizedValue,
+                NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint,
+                CultureInfo.InvariantCulture,
+                out var numericValue))
+        {
+            return ValidationResult.Failure(
+                $"השדה '{fieldRule.Field}' חייב להיות מספר כדי לעמוד בערכי min/max");
+        }
+
+        if (fieldRule.MinValue.HasValue && numericValue < fieldRule.MinValue.Value)
+        {
+            return ValidationResult.Failure(
+                $"השדה '{fieldRule.Field}' חייב להיות גדול או שווה ל-{fieldRule.MinValue.Value}");
+        }
+
+        if (fieldRule.MaxValue.HasValue && numericValue > fieldRule.MaxValue.Value)
+        {
+            return ValidationResult.Failure(
+                $"השדה '{fieldRule.Field}' חייב להיות קטן או שווה ל-{fieldRule.MaxValue.Value}");
         }
 
         return ValidationResult.Success();
@@ -312,5 +837,22 @@ public class TaskTypeValidationService : ITaskTypeValidationService
             JsonValueKind.False => "false",
             _ => element.GetRawText()
         };
+    }
+
+    private static List<string>? ParseAllowedValues(string? allowedValuesJson)
+    {
+        if (string.IsNullOrWhiteSpace(allowedValuesJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(allowedValuesJson);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 }

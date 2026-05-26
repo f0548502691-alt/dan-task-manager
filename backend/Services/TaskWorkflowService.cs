@@ -104,7 +104,7 @@ public class TaskWorkflowService : ITaskWorkflowService
 
         if (!IsValidJsonPayload(newDataJson))
         {
-            return WorkflowResult.FailureResult("NewDataJson חייב להיות JSON תקין");
+            return WorkflowResult.FailureResult("customFields חייב להיות אובייקט JSON תקין");
         }
 
         // 3. קבלת ה-Handler לבדיקת הוולידציה
@@ -298,8 +298,8 @@ public class TaskWorkflowService : ITaskWorkflowService
 
         try
         {
-            using var _ = System.Text.Json.JsonDocument.Parse(payload);
-            return true;
+            using var document = System.Text.Json.JsonDocument.Parse(payload);
+            return document.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object;
         }
         catch (System.Text.Json.JsonException)
         {

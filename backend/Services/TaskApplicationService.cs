@@ -63,13 +63,19 @@ public class TaskApplicationService : ITaskApplicationService
         return QueryTaskSummariesAsync(query, pageRequest, cancellationToken);
     }
 
-    public Task<TaskDetailsDto?> GetByIdAsync(int taskId, CancellationToken cancellationToken = default)
+    public async Task<TaskDetailsDto?> GetByIdAsync(int taskId, CancellationToken cancellationToken = default)
     {
-        return _context.Tasks
+        var task = await _context.Tasks
             .AsNoTracking()
-            .Where(t => t.Id == taskId)
-            .Select(MapToTaskDetails())
-            .FirstOrDefaultAsync(cancellationToken);
+            .Include(t => t.AssignedToUser)
+            .FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
+
+        if (task == null)
+        {
+            return null;
+        }
+
+        return MapToTaskDetails(task, task.AssignedToUser);
     }
 
     public Task<bool> UserExistsAsync(int userId, CancellationToken cancellationToken = default)
@@ -223,9 +229,9 @@ public class TaskApplicationService : ITaskApplicationService
         };
     }
 
-    private static Expression<Func<BaseTask, TaskDetailsDto>> MapToTaskDetails()
+    private static TaskDetailsDto MapToTaskDetails(BaseTask task, AppUser? assignedToUser)
     {
-        return task => new TaskDetailsDto
+        return new TaskDetailsDto
         {
             Id = task.Id,
             TaskType = task.TaskType,
@@ -234,14 +240,14 @@ public class TaskApplicationService : ITaskApplicationService
             Description = task.Description,
             CreatedAt = task.CreatedAt,
             UpdatedAt = task.UpdatedAt,
-            CustomDataJson = task.CustomDataJson,
-            AssignedToUser = task.AssignedToUser == null
+            CustomFields = ParseCustomFields(task.CustomDataJson),
+            AssignedToUser = assignedToUser == null
                 ? null
                 : new UserBriefDto
                 {
-                    Id = task.AssignedToUser.Id,
-                    Name = task.AssignedToUser.Name,
-                    Email = task.AssignedToUser.Email
+                    Id = assignedToUser.Id,
+                    Name = assignedToUser.Name,
+                    Email = assignedToUser.Email
                 }
         };
     }
@@ -257,6 +263,13 @@ public class TaskApplicationService : ITaskApplicationService
         try
         {
             using var doc = JsonDocument.Parse(candidate);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                normalizedJson = "{}";
+                errorMessage = "customFields חייב להיות אובייקט JSON";
+                return false;
+            }
+
             normalizedJson = doc.RootElement.GetRawText();
             return true;
         }
@@ -265,6 +278,19 @@ public class TaskApplicationService : ITaskApplicationService
             normalizedJson = "{}";
             errorMessage = $"JSON לא תקין: {ex.Message}";
             return false;
+        }
+    }
+
+    private static JsonElement ParseCustomFields(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
+            return doc.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return JsonSerializer.SerializeToElement(new Dictionary<string, object?>());
         }
     }
 }

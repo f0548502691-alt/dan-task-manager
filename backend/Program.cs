@@ -17,10 +17,13 @@ builder.Services.AddTaskHandlersFromAssembly(typeof(ITaskHandler).Assembly);
 // ✅ הרשמה של TaskHandlerFactory
 builder.Services.AddSingleton(sp => new TaskHandlerFactory(sp.GetRequiredService<IEnumerable<ITaskHandler>>()));
 
-// ✅ הרשמת חוקיות Task Types מתוך קונפיגורציה
-builder.Services.Configure<TaskTypeValidationOptions>(
-    builder.Configuration.GetSection(TaskTypeValidationOptions.SectionName));
-builder.Services.AddSingleton<ITaskTypeValidationService, TaskTypeValidationService>();
+// ✅ cache לחוקיות מסוגי משימות
+builder.Services.AddMemoryCache();
+
+// ✅ הרשמת שירות metadata + ולידציה מבוססי DB
+builder.Services.AddScoped<TaskTypeValidationService>();
+builder.Services.AddScoped<ITaskTypeValidationService>(sp => sp.GetRequiredService<TaskTypeValidationService>());
+builder.Services.AddScoped<ITaskTypeMetadataService>(sp => sp.GetRequiredService<TaskTypeValidationService>());
 
 // ✅ הרשמה של Task Status Service
 builder.Services.AddScoped<ITaskStatusService, TaskStatusService>();
@@ -45,7 +48,14 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    dbContext.Database.Migrate();
+    if (dbContext.Database.GetMigrations().Any())
+    {
+        dbContext.Database.Migrate();
+    }
+    else
+    {
+        dbContext.Database.EnsureCreated();
+    }
 }
 
 // Configure the HTTP request pipeline.

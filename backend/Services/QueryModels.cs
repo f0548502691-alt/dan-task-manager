@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace DanTaskManager.Services;
 
 public record PageRequest(int Page = 1, int PageSize = 20)
@@ -59,7 +61,7 @@ public class TaskSummaryDto
 
 public class TaskDetailsDto : TaskSummaryDto
 {
-    public string CustomDataJson { get; init; } = "{}";
+    public JsonElement CustomFields { get; init; } = JsonSerializer.SerializeToElement(new Dictionary<string, object?>());
 }
 
 public class UserSummaryDto

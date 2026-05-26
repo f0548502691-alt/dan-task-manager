@@ -1,6 +1,7 @@
 using DanTaskManager.Domain;
 using DanTaskManager.Services;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
 
 namespace DanTaskManager.Controllers;
 
@@ -109,7 +110,7 @@ public class TasksController : ControllerBase
                 request.TaskType,
                 request.Description,
                 request.AssignedToUserId,
-                request.CustomDataJson ?? "{}"),
+                ExtractCustomFieldsJson(request.CustomFields)),
             HttpContext.RequestAborted);
 
         if (!result.Success)
@@ -136,15 +137,20 @@ public class TasksController : ControllerBase
     [HttpPost("{id}/change-status")]
     public async Task<IActionResult> ChangeStatusWorkflow(int id, ChangeStatusWorkflowRequest request)
     {
-        if (string.IsNullOrEmpty(request.NewDataJson))
+        if (!request.CustomFields.HasValue)
         {
-            return BadRequest(new { error = "NewDataJson נדרש" });
+            return BadRequest(new { error = "customFields נדרש" });
+        }
+
+        if (request.CustomFields.Value.ValueKind != JsonValueKind.Object)
+        {
+            return BadRequest(new { error = "customFields חייב להיות אובייקט JSON" });
         }
 
         var result = await _taskService.ChangeStatusAsync(
             id,
             request.NewStatus,
-            request.NewDataJson,
+            request.CustomFields.Value.GetRawText(),
             HttpContext.RequestAborted);
 
         if (!result.Success)
@@ -236,6 +242,18 @@ public class TasksController : ControllerBase
 
         return NoContent();
     }
+
+    private static string ExtractCustomFieldsJson(JsonElement? customFields)
+    {
+        if (!customFields.HasValue)
+        {
+            return "{}";
+        }
+
+        return customFields.Value.ValueKind == JsonValueKind.Object
+            ? customFields.Value.GetRawText()
+            : "{}";
+    }
 }
 
 /// <summary>
@@ -259,9 +277,9 @@ public class CreateTaskRequest
     public int AssignedToUserId { get; set; }
 
     /// <summary>
-    /// JSON מותאם עם נתונים ספציפיים לסוג המשימה
+    /// אובייקט customFields עם נתונים ספציפיים לסוג המשימה
     /// </summary>
-    public string? CustomDataJson { get; set; }
+    public JsonElement? CustomFields { get; set; }
 }
 
 /// <summary>
@@ -286,9 +304,9 @@ public class ChangeStatusWorkflowRequest
     public int NewStatus { get; set; }
 
     /// <summary>
-    /// JSON חדש עם נתונים מעודכנים
+    /// customFields חדשים עם נתונים מעודכנים
     /// </summary>
-    public string NewDataJson { get; set; } = "{}";
+    public JsonElement? CustomFields { get; set; }
 }
 
 /// <summary>
