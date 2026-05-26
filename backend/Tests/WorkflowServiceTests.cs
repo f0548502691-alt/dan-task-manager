@@ -199,6 +199,68 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         Assert.Equal(2, result.NewStatus);
     }
 
+    [Fact]
+    public async Task ChangeStatus_ConfiguredTaskTypeWithoutHandler_ValidatesConfiguredFields()
+    {
+        // Arrange - Support has no registered handler, so config is the only validation source.
+        var validationService = new TaskTypeValidationService(Options.Create(new TaskTypeValidationOptions
+        {
+            TaskTypes = new List<TaskTypeDefinition>
+            {
+                new()
+                {
+                    TaskType = "Support",
+                    FinalStatus = 2,
+                    StatusRules = new List<TaskStatusRuleDefinition>
+                    {
+                        new()
+                        {
+                            Status = 1,
+                            Fields = new List<FieldRuleDefinition>
+                            {
+                                new()
+                                {
+                                    Field = "ticketCode",
+                                    Type = "string",
+                                    Pattern = "^SUP-[0-9]{4}$"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }));
+
+        var configuredService = new TaskWorkflowService(
+            _context,
+            _factory,
+            validationService,
+            new MockLogger());
+
+        _context.Tasks.Add(new BaseTask
+        {
+            Id = 42,
+            TaskType = "Support",
+            Description = "Support ticket",
+            CurrentStatus = 0,
+            AssignedToUserId = 1,
+            CustomDataJson = "{}"
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var missingRequiredField = await configuredService.ChangeStatusAsync(42, 1, "{}");
+        var validJson = JsonSerializer.Serialize(new { ticketCode = "SUP-1234" });
+        var validTransition = await configuredService.ChangeStatusAsync(42, 1, validJson);
+
+        // Assert
+        Assert.False(missingRequiredField.Success);
+        Assert.Contains("ticketCode", missingRequiredField.Message);
+        Assert.True(validTransition.Success);
+        Assert.Equal(1, validTransition.NewStatus);
+        Assert.Equal(validJson, validTransition.UpdatedTask!.CustomDataJson);
+    }
+
     // === Closed Status Tests ===
 
     [Fact]
