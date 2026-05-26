@@ -59,6 +59,23 @@ taskBuilder
 
 וכן 3 משימות לדוגמה עם `CustomDataJson` שונה לכל אחת.
 
+### User API - קריאה בלבד
+
+ה-API הציבורי למשתמשים מיועד לשליפת משתמשים קיימים ולצפייה במשימות שלהם. אין endpoint ציבורי ליצירת משתמשים, ואין מתודת `CreateAsync` ב-`IUserApplicationService`.
+
+| Method | Endpoint | שימוש |
+|--------|----------|-------|
+| `GET` | `/api/users?page=1&pageSize=20` | רשימת משתמשים ממוינת לפי שם |
+| `GET` | `/api/users/{id}` | פרטי משתמש לפי מזהה |
+| `GET` | `/api/users/{id}/tasks?page=1&pageSize=20` | משימות של משתמש, מהחדשות לישנות |
+
+דגשים למפתחים:
+- `page` קטן מ-1 מנורמל ל-1.
+- `pageSize` קטן מ-1 מנורמל ל-20, ומוגבל למקסימום 100.
+- התשובה היא `PagedResult<T>` עם `items`, `page`, `pageSize`, `totalCount`, ו-`totalPages`.
+- `OpenTasksCount` לא סופר משימות סגורות (`CurrentStatus = 99`).
+- כדי להוסיף משתמשים לסביבת פיתוח, עדכנו seed/migration או הוסיפו workflow ייעודי; אל תניחו שקיים `POST /api/users`.
+
 ## 🔧 Setup והגדרה
 
 ### 1. התקנת Packages
@@ -116,11 +133,10 @@ await context.SaveChangesAsync();
 
 ## 🚀 שלבים הבאים
 
-1. יצירת Controllers לקבלת בקשות API
-2. הוספת Business Logic שכבה
-3. מימוש סינון וחיפוש משימות לפי סוג וסטטוס
-4. הוספת Validation ל-CustomDataJson
-5. יצירת Migration ו-seed לנתונים נוספים
+1. הרחבת endpoints קיימים לפי צורך עסקי
+2. הוספת סינון וחיפוש משימות לפי סוג וסטטוס
+3. הוספת Validation ל-CustomDataJson
+4. יצירת Migration ו-seed לנתונים נוספים
 
 ---
 

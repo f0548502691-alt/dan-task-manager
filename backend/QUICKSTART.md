@@ -20,7 +20,7 @@
 
 ### 🎮 Controllers (Bonus)
 - [Controllers/TasksController.cs](Controllers/TasksController.cs) - REST API for Tasks
-- [Controllers/UsersController.cs](Controllers/UsersController.cs) - REST API for Users
+- [Controllers/UsersController.cs](Controllers/UsersController.cs) - read-only REST API for seeded users and their tasks
 
 ### 📚 דוקומנטציה
 - [README.md](README.md) - תיעוד מלא בעברית
@@ -110,7 +110,11 @@ task.CustomDataJson = JsonSerializer.Serialize(customData);
 - `POST /api/tasks` - יצירת משימה חדשה
 - `PUT /api/tasks/{id}` - עדכון משימה
 - `DELETE /api/tasks/{id}` - מחיקת משימה
-- `GET /api/users/{id}/tasks` - משימות של משתמש
+- `GET /api/users?page=1&pageSize=20` - קבלת משתמשים קיימים
+- `GET /api/users/{id}` - פרטי משתמש קיים
+- `GET /api/users/{id}/tasks?page=1&pageSize=20` - משימות של משתמש
+
+> אין `POST /api/users`: משתמשים מגיעים מ-seed/migrations או מ-workflow ייעודי שתוסיפו במפורש.
 
 ---
 
@@ -133,6 +137,11 @@ task.CustomDataJson = JsonSerializer.Serialize(customData);
    - 3 משתמשים נטועים באופן אוטומטי
    - 3 משימות לדוגמה
    - רץ בעת `database update`
+
+5. **Users API**:
+   - מיועד לקריאה בלבד
+   - pagination משתמש ב-`page` ו-`pageSize`
+   - `pageSize` מוגבל ל-100 ומנורמל ל-20 אם נשלח ערך קטן מ-1
 
 ---
 
