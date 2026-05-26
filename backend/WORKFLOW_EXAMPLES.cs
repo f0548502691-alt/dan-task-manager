@@ -32,6 +32,7 @@ public class WorkflowScenarios
         var result1 = await _workflowService.ChangeStatusAsync(
             taskId: 1,
             newStatus: 1,
+            nextAssignedToUserId: 1,
             newDataJson: "{}");
         Console.WriteLine($"   Result: {(result1.Success ? "✅" : "❌")} - {result1.Message}");
 
@@ -41,6 +42,7 @@ public class WorkflowScenarios
         var result2 = await _workflowService.ChangeStatusAsync(
             taskId: 1,
             newStatus: 2,
+            nextAssignedToUserId: 1,
             newDataJson: prices2);
         Console.WriteLine($"   Result: {(result2.Success ? "✅" : "❌")} - {result2.Message}");
 
@@ -49,6 +51,7 @@ public class WorkflowScenarios
         var resultFail = await _workflowService.ChangeStatusAsync(
             taskId: 1,
             newStatus: 4,
+            nextAssignedToUserId: 1,
             newDataJson: "{}");
         Console.WriteLine($"   Result: {(resultFail.Success ? "✅" : "❌")} - {resultFail.Message}");
 
@@ -62,6 +65,7 @@ public class WorkflowScenarios
         var result3 = await _workflowService.ChangeStatusAsync(
             taskId: 1,
             newStatus: 3,
+            nextAssignedToUserId: 1,
             newDataJson: receipt);
         Console.WriteLine($"   Result: {(result3.Success ? "✅" : "❌")} - {result3.Message}");
 
@@ -70,6 +74,7 @@ public class WorkflowScenarios
         var resultBeyond = await _workflowService.ChangeStatusAsync(
             taskId: 1,
             newStatus: 4,
+            nextAssignedToUserId: 1,
             newDataJson: "{}");
         Console.WriteLine($"   Result: {(resultBeyond.Success ? "✅" : "❌")} - {resultBeyond.Message}");
 
@@ -85,6 +90,7 @@ public class WorkflowScenarios
         var resultClosed = await _workflowService.ChangeStatusAsync(
             taskId: 1,
             newStatus: 2,
+            nextAssignedToUserId: 1,
             newDataJson: "{}");
         Console.WriteLine($"   Result: {(resultClosed.Success ? "✅" : "❌")} - {resultClosed.Message}");
     }
@@ -105,6 +111,7 @@ public class WorkflowScenarios
         var result1 = await _workflowService.ChangeStatusAsync(
             taskId: 1,
             newStatus: 2,
+            nextAssignedToUserId: 1,
             newDataJson: "{}");
         Console.WriteLine($"Result: {(result1.Success ? "✅" : "❌")} {result1.Message}");
 
@@ -113,6 +120,7 @@ public class WorkflowScenarios
         var result2 = await _workflowService.ChangeStatusAsync(
             taskId: 1,
             newStatus: 1,
+            nextAssignedToUserId: 1,
             newDataJson: "{}");
         Console.WriteLine($"Result: {(result2.Success ? "✅" : "❌")} {result2.Message}");
 
@@ -120,7 +128,8 @@ public class WorkflowScenarios
         Console.WriteLine("Rollback: 1 → 0");
         var result3 = await _workflowService.ChangeStatusAsync(
             taskId: 1,
-            newStatus: 0,
+            newStatus: 1,
+            nextAssignedToUserId: 1,
             newDataJson: "{}");
         Console.WriteLine($"Result: {(result3.Success ? "✅" : "❌")} {result3.Message}");
     }
@@ -135,7 +144,7 @@ public class WorkflowScenarios
 
         // סטטוס 0 → 1
         Console.WriteLine("1. 0 → 1");
-        var res1 = await _workflowService.ChangeStatusAsync(1, 1, "{}");
+        var res1 = await _workflowService.ChangeStatusAsync(1, 1, 1, "{}");
         Console.WriteLine($"   {(res1.Success ? "✅" : "❌")}");
 
         // סטטוס 1 → 2 (עם specification)
@@ -144,7 +153,7 @@ public class WorkflowScenarios
         { 
             specification = "יש לפתח API לניהול משתמשים עם JWT authentication וSwagger documentation"
         });
-        var res2 = await _workflowService.ChangeStatusAsync(1, 2, spec);
+        var res2 = await _workflowService.ChangeStatusAsync(1, 2, 1, spec);
         Console.WriteLine($"   {(res2.Success ? "✅" : "❌")} {res2.Message}");
 
         // סטטוס 2 → 3 (עם branchName)
@@ -154,7 +163,7 @@ public class WorkflowScenarios
             specification = "...",
             branchName = "feature/user-management-api"
         });
-        var res3 = await _workflowService.ChangeStatusAsync(1, 3, branch);
+        var res3 = await _workflowService.ChangeStatusAsync(1, 3, 1, branch);
         Console.WriteLine($"   {(res3.Success ? "✅" : "❌")} {res3.Message}");
 
         // סטטוס 3 → 4 (עם versionNumber)
@@ -165,7 +174,7 @@ public class WorkflowScenarios
             branchName = "feature/user-management-api",
             versionNumber = "1.0.0"
         });
-        var res4 = await _workflowService.ChangeStatusAsync(1, 4, version);
+        var res4 = await _workflowService.ChangeStatusAsync(1, 4, 1, version);
         Console.WriteLine($"   {(res4.Success ? "✅" : "❌")} {res4.Message}");
 
         // סגירה
@@ -205,6 +214,7 @@ public class WorkflowScenarios
         var result = await _workflowService.ChangeStatusAsync(
             taskId: 1,
             newStatus: 2,
+            nextAssignedToUserId: 1,
             newDataJson: invalidData);
         
         Console.WriteLine($"Result: {(result.Success ? "✅" : "❌")}");
@@ -225,6 +235,7 @@ public class WorkflowScenarios
         var result = await _workflowService.ChangeStatusAsync(
             taskId: 1,
             newStatus: 3,
+            nextAssignedToUserId: 1,
             newDataJson: "{}");
         
         Console.WriteLine($"Result: {(result.Success ? "✅" : "❌")}");

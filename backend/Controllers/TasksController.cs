@@ -67,7 +67,7 @@ public class TasksController : ControllerBase
     }
 
     /// <summary>
-    /// קבלת משימות של משתמש מסוים (לא סגורות)
+    /// קבלת משימות של משתמש מסוים
     /// </summary>
     [HttpGet("user/{userId}")]
     public async Task<ActionResult<PagedResult<TaskSummaryDto>>> GetUserTasks(
@@ -80,7 +80,7 @@ public class TasksController : ControllerBase
             return NotFound("משתמש לא קיים");
         }
 
-        var tasks = await _taskService.GetOpenByUserAsync(
+        var tasks = await _taskService.GetByUserAsync(
             userId,
             pagination.ToPageRequest(),
             HttpContext.RequestAborted);
@@ -136,6 +136,11 @@ public class TasksController : ControllerBase
     [HttpPost("{id}/change-status")]
     public async Task<IActionResult> ChangeStatusWorkflow(int id, ChangeStatusWorkflowRequest request)
     {
+        if (request.NextAssignedToUserId <= 0)
+        {
+            return BadRequest(new { error = "NextAssignedToUserId נדרש" });
+        }
+
         if (string.IsNullOrEmpty(request.NewDataJson))
         {
             return BadRequest(new { error = "NewDataJson נדרש" });
@@ -144,6 +149,7 @@ public class TasksController : ControllerBase
         var result = await _taskService.ChangeStatusAsync(
             id,
             request.NewStatus,
+            request.NextAssignedToUserId,
             request.NewDataJson,
             HttpContext.RequestAborted);
 
@@ -214,7 +220,13 @@ public class TasksController : ControllerBase
             HttpContext.RequestAborted);
         if (!updated)
         {
-            return NotFound();
+            var task = await _taskService.GetByIdAsync(id, HttpContext.RequestAborted);
+            if (task == null)
+            {
+                return NotFound();
+            }
+
+            throw new WorkflowValidationException("משימה סגורה היא immutable ולא ניתן לעדכן אותה");
         }
 
         return NoContent();
@@ -229,7 +241,13 @@ public class TasksController : ControllerBase
         var deleted = await _taskService.DeleteAsync(id, HttpContext.RequestAborted);
         if (!deleted)
         {
-            return NotFound();
+            var task = await _taskService.GetByIdAsync(id, HttpContext.RequestAborted);
+            if (task == null)
+            {
+                return NotFound();
+            }
+
+            throw new WorkflowValidationException("משימה סגורה היא immutable ולא ניתן למחוק אותה");
         }
 
         _logger.LogInformation("משימה {TaskId} נמחקה", id);
@@ -284,6 +302,11 @@ public class ChangeStatusWorkflowRequest
     /// הסטטוס החדש (תנועה קדימה: בדיוק +1, תנועה אחורה: לכל סטטוס נמוך)
     /// </summary>
     public int NewStatus { get; set; }
+
+    /// <summary>
+    /// המשתמש שאליו המשימה תוקצה לאחר שינוי הסטטוס
+    /// </summary>
+    public int NextAssignedToUserId { get; set; }
 
     /// <summary>
     /// JSON חדש עם נתונים מעודכנים

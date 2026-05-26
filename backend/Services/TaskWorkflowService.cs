@@ -16,6 +16,7 @@ public interface ITaskWorkflowService
     Task<WorkflowResult> ChangeStatusAsync(
         int taskId,
         int newStatus,
+        int nextAssignedToUserId,
         string newDataJson,
         CancellationToken cancellationToken = default);
 
@@ -67,9 +68,6 @@ public class TaskWorkflowService : ITaskWorkflowService
     private readonly TaskHandlerFactory _handlerFactory;
     private readonly ILogger<TaskWorkflowService> _logger;
 
-    // סטטוס סגירה (משימה סגורה לא יכולה להשתנות)
-    private const int ClosedStatus = 99;
-
     public TaskWorkflowService(
         ApplicationDbContext context,
         TaskHandlerFactory handlerFactory,
@@ -83,6 +81,7 @@ public class TaskWorkflowService : ITaskWorkflowService
     public async Task<WorkflowResult> ChangeStatusAsync(
         int taskId,
         int newStatus,
+        int nextAssignedToUserId,
         string newDataJson,
         CancellationToken cancellationToken = default)
     {
@@ -94,9 +93,17 @@ public class TaskWorkflowService : ITaskWorkflowService
         }
 
         // 2. בדיקה שהמשימה לא סגורה
-        if (task.CurrentStatus == ClosedStatus)
+        if (task.CurrentStatus == WorkflowConstants.ClosedStatus)
         {
             return WorkflowResult.FailureResult("משימה סגורה - לא ניתן לשנות סטטוס");
+        }
+
+        var nextAssigneeExists = await _context.Users
+            .AsNoTracking()
+            .AnyAsync(u => u.Id == nextAssignedToUserId, cancellationToken);
+        if (!nextAssigneeExists)
+        {
+            return WorkflowResult.FailureResult("המשתמש הבא לא קיים");
         }
 
         if (!IsValidJsonPayload(newDataJson))
@@ -106,6 +113,10 @@ public class TaskWorkflowService : ITaskWorkflowService
 
         // 3. קבלת ה-Handler לבדיקת הוולידציה
         var handler = _handlerFactory.GetHandler(task.TaskType);
+        if (handler == null)
+        {
+            return WorkflowResult.FailureResult($"סוג משימה לא נתמך: {task.TaskType}");
+        }
 
         // 4. בדיקת כללי תנועה
         var movementValidation = ValidateStatusMovement(task, newStatus, handler);
@@ -114,34 +125,35 @@ public class TaskWorkflowService : ITaskWorkflowService
             return WorkflowResult.FailureResult(movementValidation.Message);
         }
 
-        // 5. וולידציה ספציפית של Handler (אם קיים)
-        if (handler != null)
-        {
-            var handlerValidation = handler.ValidateStatusChange(
-                task.CustomDataJson,
-                task.CurrentStatus,
-                newStatus,
-                newDataJson);
+        // 5. וולידציה ספציפית של Handler
+        var handlerValidation = handler.ValidateStatusChange(
+            task.CustomDataJson,
+            task.CurrentStatus,
+            newStatus,
+            newDataJson);
 
-            if (!handlerValidation.IsValid)
-            {
-                return WorkflowResult.FailureResult(handlerValidation.Message);
-            }
+        if (!handlerValidation.IsValid)
+        {
+            return WorkflowResult.FailureResult(handlerValidation.Message);
         }
 
         // 6. עדכון המשימה
         var oldStatus = task.CurrentStatus;
+        var oldAssignee = task.AssignedToUserId;
         task.CurrentStatus = newStatus;
+        task.AssignedToUserId = nextAssignedToUserId;
         task.CustomDataJson = newDataJson;
         task.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "משימה {TaskId} עודכנה מסטטוס {OldStatus} ל-{NewStatus}",
+            "משימה {TaskId} עודכנה מסטטוס {OldStatus} ל-{NewStatus}, הקצאה {OldAssignee}->{NewAssignee}",
             taskId,
             oldStatus,
-            newStatus);
+            newStatus,
+            oldAssignee,
+            nextAssignedToUserId);
 
         return WorkflowResult.SuccessResult(
             newStatus,
@@ -160,9 +172,21 @@ public class TaskWorkflowService : ITaskWorkflowService
             return WorkflowResult.FailureResult("משימה לא קיימת");
         }
 
-        if (task.CurrentStatus == ClosedStatus)
+        if (task.CurrentStatus == WorkflowConstants.ClosedStatus)
         {
             return WorkflowResult.FailureResult("משימה כבר סגורה");
+        }
+
+        var handler = _handlerFactory.GetHandler(task.TaskType);
+        if (handler == null)
+        {
+            return WorkflowResult.FailureResult($"סוג משימה לא נתמך: {task.TaskType}");
+        }
+
+        if (task.CurrentStatus != handler.FinalStatus)
+        {
+            return WorkflowResult.FailureResult(
+                $"ניתן לסגור משימה מסוג {task.TaskType} רק מסטטוס סופי {handler.FinalStatus}");
         }
 
         // עדכון JSON עם הערות סופיות
@@ -183,7 +207,7 @@ public class TaskWorkflowService : ITaskWorkflowService
             });
         }
 
-        task.CurrentStatus = ClosedStatus;
+        task.CurrentStatus = WorkflowConstants.ClosedStatus;
         task.CustomDataJson = updatedJson;
         task.UpdatedAt = DateTime.UtcNow;
 
@@ -195,7 +219,7 @@ public class TaskWorkflowService : ITaskWorkflowService
             finalNotes);
 
         return WorkflowResult.SuccessResult(
-            ClosedStatus,
+            WorkflowConstants.ClosedStatus,
             task,
             "משימה סגורה בהצלחה");
     }
@@ -206,7 +230,7 @@ public class TaskWorkflowService : ITaskWorkflowService
     {
         return await _context.Tasks
             .AsNoTracking()
-            .Where(t => t.AssignedToUserId == userId && t.CurrentStatus != ClosedStatus)
+            .Where(t => t.AssignedToUserId == userId)
             .Include(t => t.AssignedToUser)
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync(cancellationToken);
@@ -223,21 +247,26 @@ public class TaskWorkflowService : ITaskWorkflowService
     /// <summary>
     /// וולידציה של כללי תנועה בין סטטוסים
     /// </summary>
-    private StatusMovementValidation ValidateStatusMovement(BaseTask task, int newStatus, ITaskHandler? handler)
+    private StatusMovementValidation ValidateStatusMovement(BaseTask task, int newStatus, ITaskHandler handler)
     {
-        // בדיקה בסיסית - סטטוס לא יכול להיות שלילי
-        if (newStatus < 0)
+        if (newStatus == WorkflowConstants.ClosedStatus)
         {
-            return new() { IsValid = false, Message = "סטטוס לא יכול להיות שלילי" };
+            return new() { IsValid = false, Message = "סגירת משימה מתבצעת רק דרך CloseTask" };
         }
 
-        // קבלת הסטטוס הסופי (אם קיים Handler)
-        int? finalStatus = handler?.FinalStatus;
+        // בדיקה בסיסית - הסטטוס חייב להתחיל מ-1
+        if (newStatus < WorkflowConstants.CreatedStatus)
+        {
+            return new() { IsValid = false, Message = $"סטטוס חייב להיות {WorkflowConstants.CreatedStatus} ומעלה" };
+        }
+
+        // קבלת הסטטוס הסופי
+        var finalStatus = handler.FinalStatus;
 
         // בדיקה - אי אפשר להעבור את הסטטוס הסופי
-        if (finalStatus.HasValue && task.CurrentStatus >= finalStatus.Value && newStatus > task.CurrentStatus)
+        if (task.CurrentStatus >= finalStatus && newStatus > task.CurrentStatus)
         {
-            return new() { IsValid = false, Message = $"משימה כבר הגיעה לסטטוס סופי ({finalStatus.Value})" };
+            return new() { IsValid = false, Message = $"משימה כבר הגיעה לסטטוס סופי ({finalStatus})" };
         }
 
         // כללי תנועה: קדימה או אחורה?

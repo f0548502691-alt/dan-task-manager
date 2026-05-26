@@ -40,14 +40,15 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
 
         // Seed data
         var user = new AppUser { Id = 1, Name = "Test User", Email = "test@test.com" };
-        _context.Users.Add(user);
+        var user2 = new AppUser { Id = 2, Name = "Reviewer", Email = "reviewer@test.com" };
+        _context.Users.AddRange(user, user2);
 
         var task = new BaseTask
         {
             Id = 1,
             TaskType = "Procurement",
             Description = "Test procurement",
-            CurrentStatus = 0,
+            CurrentStatus = WorkflowConstants.CreatedStatus,
             AssignedToUserId = 1,
             CustomDataJson = "{}"
         };
@@ -66,20 +67,22 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
     [Fact]
     public async Task ChangeStatus_ForwardMovement_Plus1_ShouldSucceed()
     {
-        // Arrange & Act (0 → 1)
-        var result = await _service.ChangeStatusAsync(1, 1, "{}");
+        // Arrange & Act (1 → 2)
+        var priceData = JsonSerializer.Serialize(new { prices = new[] { "5000", "4800" } });
+        var result = await _service.ChangeStatusAsync(1, 2, 2, priceData);
 
         // Assert
         Assert.True(result.Success);
-        Assert.Equal(1, result.NewStatus);
+        Assert.Equal(2, result.NewStatus);
         Assert.NotNull(result.UpdatedTask);
+        Assert.Equal(2, result.UpdatedTask.AssignedToUserId);
     }
 
     [Fact]
     public async Task ChangeStatus_ForwardMovement_Plus2_ShouldFail()
     {
-        // Arrange & Act (0 → 2 - invalid jump)
-        var result = await _service.ChangeStatusAsync(1, 2, "{}");
+        // Arrange & Act (1 → 3 - invalid jump)
+        var result = await _service.ChangeStatusAsync(1, 3, 2, "{}");
 
         // Assert
         Assert.False(result.Success);
@@ -98,7 +101,7 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         await _context.SaveChangesAsync();
 
         // Act (2 → 1)
-        var result = await _service.ChangeStatusAsync(1, 1, "{}");
+        var result = await _service.ChangeStatusAsync(1, 1, 1, "{}");
 
         // Assert
         Assert.True(result.Success);
@@ -106,7 +109,7 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ChangeStatus_BackwardToMuchLowerStatus_ShouldSucceed()
+    public async Task ChangeStatus_BackwardToCreatedStatus_ShouldSucceed()
     {
         // Arrange
         var task = await _context.Tasks.FindAsync(1);
@@ -114,12 +117,12 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         _context.Tasks.Update(task);
         await _context.SaveChangesAsync();
 
-        // Act (3 → 0)
-        var result = await _service.ChangeStatusAsync(1, 0, "{}");
+        // Act (3 → 1)
+        var result = await _service.ChangeStatusAsync(1, 1, 1, "{}");
 
         // Assert
         Assert.True(result.Success);
-        Assert.Equal(0, result.NewStatus);
+        Assert.Equal(1, result.NewStatus);
     }
 
     // === Validation Tests ===
@@ -133,7 +136,7 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         _context.Tasks.Update(task);
         await _context.SaveChangesAsync();
 
-        var result = await _service.ChangeStatusAsync(1, 2, "{}");
+        var result = await _service.ChangeStatusAsync(1, 2, 1, "{}");
 
         // Assert
         Assert.False(result.Success);
@@ -152,7 +155,7 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         var priceData = JsonSerializer.Serialize(new { prices = new[] { "5000", "4800" } });
 
         // Act
-        var result = await _service.ChangeStatusAsync(1, 2, priceData);
+        var result = await _service.ChangeStatusAsync(1, 2, 2, priceData);
 
         // Assert
         Assert.True(result.Success);
@@ -171,7 +174,7 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         await _context.SaveChangesAsync();
 
         // Act
-        var result = await _service.ChangeStatusAsync(1, 0, "{}");
+        var result = await _service.ChangeStatusAsync(1, 1, 1, "{}");
 
         // Assert
         Assert.False(result.Success);
@@ -183,6 +186,12 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
     [Fact]
     public async Task CloseTask_WithNotes_ShouldSucceed()
     {
+        // Arrange
+        var task = await _context.Tasks.FindAsync(1);
+        task!.CurrentStatus = 3;
+        _context.Tasks.Update(task);
+        await _context.SaveChangesAsync();
+
         // Act
         var result = await _service.CloseTaskAsync(1, "Completed successfully");
 
@@ -197,6 +206,10 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
     public async Task CloseTask_AlreadyClosed_ShouldFail()
     {
         // Arrange
+        var task = await _context.Tasks.FindAsync(1);
+        task!.CurrentStatus = 3;
+        _context.Tasks.Update(task);
+        await _context.SaveChangesAsync();
         await _service.CloseTaskAsync(1, "First close");
         
         // Act
@@ -208,8 +221,25 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task CloseTask_WhenNotInFinalStatus_ShouldFail()
+    {
+        // Act
+        var result = await _service.CloseTaskAsync(1, "Early close");
+
+        // Assert
+        Assert.False(result.Success);
+        Assert.Contains("רק מסטטוס סופי", result.Message);
+    }
+
+    [Fact]
     public async Task CloseTask_AddsNotesAndTimestampToJson()
     {
+        // Arrange
+        var task = await _context.Tasks.FindAsync(1);
+        task!.CurrentStatus = 3;
+        _context.Tasks.Update(task);
+        await _context.SaveChangesAsync();
+
         // Act
         var result = await _service.CloseTaskAsync(1, "Final notes");
 
@@ -224,9 +254,13 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
     // === Get User Tasks Tests ===
 
     [Fact]
-    public async Task GetUserTasks_ShouldExcludeClosedTasks()
+    public async Task GetUserTasks_ShouldReturnAssignedTasksIncludingClosed()
     {
         // Arrange
+        var task = await _context.Tasks.FindAsync(1);
+        task!.CurrentStatus = 3;
+        _context.Tasks.Update(task);
+        await _context.SaveChangesAsync();
         await _service.CloseTaskAsync(1, "Closed");
 
         // Add another open task
@@ -246,8 +280,9 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         var tasks = await _service.GetUserTasksAsync(1);
 
         // Assert
-        Assert.Single(tasks);
-        Assert.Equal(2, tasks.First().Id); // Only open task
+        Assert.Equal(2, tasks.Count());
+        Assert.Contains(tasks, t => t.Id == 1 && t.CurrentStatus == WorkflowConstants.ClosedStatus);
+        Assert.Contains(tasks, t => t.Id == 2 && t.CurrentStatus == 1);
     }
 
     [Fact]
@@ -295,7 +330,7 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         await _context.SaveChangesAsync();
 
         // Act
-        var result = await _service.ChangeStatusAsync(1, 4, "{}");
+        var result = await _service.ChangeStatusAsync(1, 4, 1, "{}");
 
         // Assert
         Assert.False(result.Success);
@@ -344,7 +379,8 @@ public class TaskWorkflowIntegrationTests : IAsyncLifetime
             new MockLogger());
 
         var user = new AppUser { Id = 1, Name = "Test", Email = "test@test.com" };
-        _context.Users.Add(user);
+        var user2 = new AppUser { Id = 2, Name = "Assignee", Email = "assignee@test.com" };
+        _context.Users.AddRange(user, user2);
         await _context.SaveChangesAsync();
     }
 
@@ -362,26 +398,22 @@ public class TaskWorkflowIntegrationTests : IAsyncLifetime
         {
             TaskType = "Procurement",
             Description = "Test",
-            CurrentStatus = 0,
+            CurrentStatus = WorkflowConstants.CreatedStatus,
             AssignedToUserId = 1,
             CustomDataJson = "{}"
         };
         _context.Tasks.Add(task);
         await _context.SaveChangesAsync();
 
-        // 0 → 1
-        var r1 = await _service.ChangeStatusAsync(task.Id, 1, "{}");
-        Assert.True(r1.Success);
-
         // 1 → 2
         var prices = JsonSerializer.Serialize(new { prices = new[] { "5000", "4800" } });
-        var r2 = await _service.ChangeStatusAsync(task.Id, 2, prices);
-        Assert.True(r2.Success);
+        var r1 = await _service.ChangeStatusAsync(task.Id, 2, 2, prices);
+        Assert.True(r1.Success);
 
         // 2 → 3
         var receipt = JsonSerializer.Serialize(new { prices = new[] { "5000", "4800" }, receipt = "REC-001" });
-        var r3 = await _service.ChangeStatusAsync(task.Id, 3, receipt);
-        Assert.True(r3.Success);
+        var r2 = await _service.ChangeStatusAsync(task.Id, 3, 1, receipt);
+        Assert.True(r2.Success);
 
         // Close
         var close = await _service.CloseTaskAsync(task.Id, "Done");

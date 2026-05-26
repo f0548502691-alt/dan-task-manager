@@ -31,9 +31,10 @@ public class TaskStatusService : ITaskStatusService
             return TaskStatusChangeResult.FailureResult("המשימה היא null");
         }
 
-        if (nextStatus < 0)
+        if (nextStatus < WorkflowConstants.CreatedStatus)
         {
-            return TaskStatusChangeResult.FailureResult("סטטוס לא יכול להיות שלילי");
+            return TaskStatusChangeResult.FailureResult(
+                $"סטטוס חייב להיות {WorkflowConstants.CreatedStatus} ומעלה");
         }
 
         // קבלת Handler מתאים לפי סוג המשימה
@@ -49,18 +50,26 @@ public class TaskStatusService : ITaskStatusService
             return ValidateBasicStatusChange(task, nextStatus);
         }
 
+        if (nextStatus == WorkflowConstants.ClosedStatus)
+        {
+            return TaskStatusChangeResult.FailureResult("סגירת משימה מתבצעת רק דרך פעולה ייעודית");
+        }
+
         // בדיקת סטטוס סופי
         if (task.CurrentStatus >= handler.FinalStatus)
         {
-            return TaskStatusChangeResult.FailureResult(
-                $"המשימה כבר הגיעה לסטטוס סופי ({handler.FinalStatus}), לא ניתן לשנות");
+            if (nextStatus > task.CurrentStatus)
+            {
+                return TaskStatusChangeResult.FailureResult(
+                    $"המשימה כבר הגיעה לסטטוס סופי ({handler.FinalStatus}), לא ניתן להתקדם");
+            }
         }
 
-        // בדיקת שינוי לאחור (סטטוס נמוך יותר)
-        if (nextStatus < task.CurrentStatus)
+        // וולידציה של תנועת סטטוס
+        var movementValidation = ValidateMovement(task.CurrentStatus, nextStatus);
+        if (!movementValidation.Success)
         {
-            return TaskStatusChangeResult.FailureResult(
-                $"לא ניתן להחזיר משימה לסטטוס קודם. סטטוס נוכחי: {task.CurrentStatus}, סטטוס מבוקש: {nextStatus}");
+            return movementValidation;
         }
 
         // וולידציה דרך Handler
@@ -106,22 +115,25 @@ public class TaskStatusService : ITaskStatusService
     /// </summary>
     private static TaskStatusChangeResult ValidateBasicStatusChange(BaseTask task, int nextStatus)
     {
-        // בדיקה שהסטטוס עולה בהדרגה
-        if (nextStatus <= task.CurrentStatus)
+        return ValidateMovement(task.CurrentStatus, nextStatus);
+    }
+
+    private static TaskStatusChangeResult ValidateMovement(int currentStatus, int nextStatus)
+    {
+        if (nextStatus == currentStatus)
         {
-            return TaskStatusChangeResult.FailureResult(
-                "סטטוס חדש חייב להיות גבוה יותר מהסטטוס הנוכחי");
+            return TaskStatusChangeResult.FailureResult("סטטוס חדש זהה לסטטוס הנוכחי");
         }
 
-        // לא ניתן לדלג יותר מ-1 סטטוס בבת אחת (בדיקה בסיסית)
-        if (nextStatus > task.CurrentStatus + 2)
+        if (nextStatus > currentStatus && nextStatus != currentStatus + 1)
         {
             return TaskStatusChangeResult.FailureResult(
-                "לא ניתן לדלג יותר מ-2 סטטוסים בבת אחת");
+                $"תנועה קדימה חייבת להיות רציפה (+1). סטטוס נוכחי: {currentStatus}, מבוקש: {nextStatus}");
         }
 
+        // תנועה אחורה תמיד מותרת לפי חוקיות המערכת.
         return TaskStatusChangeResult.SuccessResult(
             nextStatus,
-            $"סטטוס עודכן בהצלחה מ-{task.CurrentStatus} ל-{nextStatus}");
+            $"סטטוס עודכן בהצלחה מ-{currentStatus} ל-{nextStatus}");
     }
 }

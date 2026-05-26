@@ -9,7 +9,7 @@ public interface ITaskApplicationService
         string taskType,
         PageRequest pageRequest,
         CancellationToken cancellationToken = default);
-    Task<PagedResult<TaskSummaryDto>> GetOpenByUserAsync(
+    Task<PagedResult<TaskSummaryDto>> GetByUserAsync(
         int userId,
         PageRequest pageRequest,
         CancellationToken cancellationToken = default);
@@ -21,6 +21,7 @@ public interface ITaskApplicationService
     Task<WorkflowResult> ChangeStatusAsync(
         int taskId,
         int newStatus,
+        int nextAssignedToUserId,
         string newDataJson,
         CancellationToken cancellationToken = default);
     Task<WorkflowResult> CloseAsync(
