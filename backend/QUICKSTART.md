@@ -73,7 +73,7 @@ dan-task-manager/
 │   └── ApplicationDbContext.cs # DbContext עם Seed data
 ├── Controllers/
 │   ├── TasksController.cs   # API endpoints for tasks
-│   └── UsersController.cs   # API endpoints for users
+│   └── UsersController.cs   # read-only endpoints for users
 ├── DanTaskManager.csproj    # .NET 8 project file
 ├── Program.cs               # DI Configuration
 ├── appsettings.json         # Connection strings
