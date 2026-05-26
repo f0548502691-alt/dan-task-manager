@@ -17,6 +17,11 @@ builder.Services.AddTaskHandlersFromAssembly(typeof(ITaskHandler).Assembly);
 // ✅ הרשמה של TaskHandlerFactory
 builder.Services.AddSingleton(sp => new TaskHandlerFactory(sp.GetRequiredService<IEnumerable<ITaskHandler>>()));
 
+// ✅ הרשמת חוקיות Task Types מתוך קונפיגורציה
+builder.Services.Configure<TaskTypeValidationOptions>(
+    builder.Configuration.GetSection(TaskTypeValidationOptions.SectionName));
+builder.Services.AddSingleton<ITaskTypeValidationService, TaskTypeValidationService>();
+
 // ✅ הרשמה של Task Status Service
 builder.Services.AddScoped<ITaskStatusService, TaskStatusService>();
 

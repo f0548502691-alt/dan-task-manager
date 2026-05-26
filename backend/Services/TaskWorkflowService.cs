@@ -65,6 +65,7 @@ public class TaskWorkflowService : ITaskWorkflowService
 {
     private readonly ApplicationDbContext _context;
     private readonly TaskHandlerFactory _handlerFactory;
+    private readonly ITaskTypeValidationService _taskTypeValidationService;
     private readonly ILogger<TaskWorkflowService> _logger;
 
     // סטטוס סגירה (משימה סגורה לא יכולה להשתנות)
@@ -73,10 +74,12 @@ public class TaskWorkflowService : ITaskWorkflowService
     public TaskWorkflowService(
         ApplicationDbContext context,
         TaskHandlerFactory handlerFactory,
+        ITaskTypeValidationService taskTypeValidationService,
         ILogger<TaskWorkflowService> logger)
     {
         _context = context;
         _handlerFactory = handlerFactory;
+        _taskTypeValidationService = taskTypeValidationService;
         _logger = logger;
     }
 
@@ -106,23 +109,35 @@ public class TaskWorkflowService : ITaskWorkflowService
 
         // 3. קבלת ה-Handler לבדיקת הוולידציה
         var handler = _handlerFactory.GetHandler(task.TaskType);
+        var finalStatus = _taskTypeValidationService.GetFinalStatus(task.TaskType) ?? handler?.FinalStatus;
 
         // 4. בדיקת כללי תנועה
-        var movementValidation = ValidateStatusMovement(task, newStatus, handler);
+        var movementValidation = ValidateStatusMovement(task, newStatus, finalStatus);
         if (!movementValidation.IsValid)
         {
             return WorkflowResult.FailureResult(movementValidation.Message);
         }
 
-        // 5. וולידציה ספציפית של Handler (אם קיים)
-        if (handler != null)
+        // 5. וולידציה לפי קונפיגורציה (TaskTypeValidation)
+        if (_taskTypeValidationService.HasTaskType(task.TaskType))
+        {
+            var configValidation = _taskTypeValidationService.ValidateStatusData(
+                task.TaskType,
+                newStatus,
+                newDataJson);
+            if (!configValidation.IsValid)
+            {
+                return WorkflowResult.FailureResult(configValidation.Message);
+            }
+        }
+        // Fallback ל-Handlers עבור סוגי משימות שטרם הוגדרו בקונפיגורציה.
+        else if (handler != null)
         {
             var handlerValidation = handler.ValidateStatusChange(
                 task.CustomDataJson,
                 task.CurrentStatus,
                 newStatus,
                 newDataJson);
-
             if (!handlerValidation.IsValid)
             {
                 return WorkflowResult.FailureResult(handlerValidation.Message);
@@ -223,16 +238,13 @@ public class TaskWorkflowService : ITaskWorkflowService
     /// <summary>
     /// וולידציה של כללי תנועה בין סטטוסים
     /// </summary>
-    private StatusMovementValidation ValidateStatusMovement(BaseTask task, int newStatus, ITaskHandler? handler)
+    private StatusMovementValidation ValidateStatusMovement(BaseTask task, int newStatus, int? finalStatus)
     {
         // בדיקה בסיסית - סטטוס לא יכול להיות שלילי
         if (newStatus < 0)
         {
             return new() { IsValid = false, Message = "סטטוס לא יכול להיות שלילי" };
         }
-
-        // קבלת הסטטוס הסופי (אם קיים Handler)
-        int? finalStatus = handler?.FinalStatus;
 
         // בדיקה - אי אפשר להעבור את הסטטוס הסופי
         if (finalStatus.HasValue && task.CurrentStatus >= finalStatus.Value && newStatus > task.CurrentStatus)

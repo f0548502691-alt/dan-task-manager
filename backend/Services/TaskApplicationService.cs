@@ -12,17 +12,20 @@ public class TaskApplicationService : ITaskApplicationService
     private readonly ApplicationDbContext _context;
     private readonly ITaskWorkflowService _workflowService;
     private readonly TaskHandlerFactory _handlerFactory;
+    private readonly ITaskTypeValidationService _taskTypeValidationService;
     private readonly ILogger<TaskApplicationService> _logger;
 
     public TaskApplicationService(
         ApplicationDbContext context,
         ITaskWorkflowService workflowService,
         TaskHandlerFactory handlerFactory,
+        ITaskTypeValidationService taskTypeValidationService,
         ILogger<TaskApplicationService> logger)
     {
         _context = context;
         _workflowService = workflowService;
         _handlerFactory = handlerFactory;
+        _taskTypeValidationService = taskTypeValidationService;
         _logger = logger;
     }
 
@@ -90,10 +93,11 @@ public class TaskApplicationService : ITaskApplicationService
             return TaskCreationResult.FailureResult(jsonError);
         }
 
-        if (!_handlerFactory.HasHandler(command.TaskType))
+        if (!_handlerFactory.HasHandler(command.TaskType) &&
+            !_taskTypeValidationService.HasTaskType(command.TaskType))
         {
             _logger.LogWarning(
-                "Creating task with task type {TaskType} without dedicated handler",
+                "Creating task with task type {TaskType} without dedicated handler/rules configuration",
                 command.TaskType);
         }
 
