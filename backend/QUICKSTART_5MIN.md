@@ -105,8 +105,11 @@ POST /api/tasks
 ```bash
 POST /api/tasks/1/change-status
 {
-  "newStatus": 1,
-  "newDataJson": "{}"
+  "newStatus": 2,
+  "nextAssignedToUserId": 1,
+  "customFields": {
+    "prices": ["5000", "4800"]
+  }
 }
 ```
 

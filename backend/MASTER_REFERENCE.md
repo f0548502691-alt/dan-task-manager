@@ -140,13 +140,13 @@ Documentation:        Comprehensive ✅
 
 ### 1. Workflow States
 ```
-Status 0:    Initial (new task)
-Status 1-N:  Work in progress (handler-specific)
+Status 1:    Created / first workflow status
+Status 2-N:  Work in progress (task-type-specific)
 Status 99:   Closed (final)
 
 Transitions:
 - Forward: +1 only
-- Backward: to any lower
+- Backward: to any lower status >= 1
 - Closed: immutable
 ```
 
@@ -203,13 +203,13 @@ curl -X POST http://localhost:5000/api/tasks \
 ### Change Status
 ```bash
 curl -X POST http://localhost:5000/api/tasks/1/change-status \
-  -d '{"newStatus":1,"newDataJson":"{}"}'
+  -d '{"newStatus":2,"nextAssignedToUserId":1,"customFields":{"prices":["5000","4800"]}}'
 ```
 
 ### Close Task
 ```bash
 curl -X POST http://localhost:5000/api/tasks/1/close \
-  -d '{"finalNotes":"Completed"}'
+  -d '{"nextAssignedToUserId":1,"finalNotes":"Completed"}'
 ```
 
 ### Get User Tasks

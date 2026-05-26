@@ -165,8 +165,11 @@ curl -X POST http://localhost:5000/api/tasks \
 curl -X POST http://localhost:5000/api/tasks/1/change-status \
   -H "Content-Type: application/json" \
   -d '{
-    "newStatus": 1,
-    "newDataJson": "{}"
+    "newStatus": 2,
+    "nextAssignedToUserId": 1,
+    "customFields": {
+      "prices": ["5000", "4800"]
+    }
   }'
 ```
 
@@ -174,7 +177,10 @@ curl -X POST http://localhost:5000/api/tasks/1/change-status \
 ```bash
 curl -X POST http://localhost:5000/api/tasks/1/close \
   -H "Content-Type: application/json" \
-  -d '{"finalNotes": "Completed successfully"}'
+  -d '{
+    "nextAssignedToUserId": 1,
+    "finalNotes": "Completed successfully"
+  }'
 ```
 
 ---

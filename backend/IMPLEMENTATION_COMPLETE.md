@@ -158,8 +158,17 @@ All three phases successfully implemented with comprehensive documentation and 3
 
 #### ITaskWorkflowService Interface
 ```csharp
-Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, string newDataJson);
-Task<WorkflowResult> CloseTaskAsync(int taskId, string finalNotes);
+Task<WorkflowResult> ChangeStatusAsync(
+    int taskId,
+    int newStatus,
+    int nextAssignedToUserId,
+    string newDataJson,
+    CancellationToken cancellationToken = default);
+Task<WorkflowResult> CloseTaskAsync(
+    int taskId,
+    int nextAssignedToUserId,
+    string finalNotes,
+    CancellationToken cancellationToken = default);
 Task<IEnumerable<BaseTask>> GetUserTasksAsync(int userId);
 Task<BaseTask?> GetTaskAsync(int taskId);
 ```
@@ -170,9 +179,11 @@ Task<BaseTask?> GetTaskAsync(int taskId);
 1. **Check Not Closed** - Status 99 is immutable
 2. **Forward Movement** - Must be exactly +1
 3. **Backward Movement** - Can go to any lower status
-4. **Handler Validation** - Delegates to handler for specific rules
-5. **Final Status** - Cannot exceed handler's FinalStatus
-6. **Persistence** - All changes saved to database
+4. **Created Status Floor** - Status must be >= 1
+5. **Assignment Validation** - `nextAssignedToUserId` must identify an existing user
+6. **Metadata/Handler Validation** - Metadata-backed task types win; handlers are fallback
+7. **Final Status** - Cannot exceed metadata/handler FinalStatus
+8. **Persistence** - Status, assignment, JSON, and timestamps saved to database
 
 **Result Classes**:
 - `WorkflowResult` - Success, Message, NewStatus, UpdatedTask
@@ -193,9 +204,9 @@ Task<BaseTask?> GetTaskAsync(int taskId);
 | DELETE | `/api/tasks/{id}` | ✅ Delete |
 
 ### Request/Response Classes
-- `CreateTaskRequest` - taskType, description, assignedToUserId
-- `ChangeStatusWorkflowRequest` - newStatus, newDataJson
-- `CloseTaskRequest` - finalNotes
+- `CreateTaskRequest` - taskType, description, assignedToUserId, customFields
+- `ChangeStatusWorkflowRequest` - newStatus, nextAssignedToUserId, customFields
+- `CloseTaskRequest` - nextAssignedToUserId, finalNotes
 - `UpdateTaskRequest` - description
 - `WorkflowResult` - Response for all workflow operations
 

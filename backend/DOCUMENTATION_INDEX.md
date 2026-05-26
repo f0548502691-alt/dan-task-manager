@@ -4,6 +4,23 @@
 
 **New to this project?** Start here: [GETTING_STARTED.md](GETTING_STARTED.md)
 
+## ✅ Current workflow contract
+
+Use these docs as the canonical references for task workflow behavior:
+- [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md): state machine, assignment rules, request bodies.
+- [API_ERROR_CODES.md](API_ERROR_CODES.md): current validation and workflow error responses.
+- [EXTENSION_GUIDE.md](EXTENSION_GUIDE.md): handler and metadata extension constraints.
+
+Important invariants:
+- Created/first workflow status is `1`; status `0` is not valid.
+- Closed status is `99` and can only be reached with `POST /api/tasks/{id}/close`.
+- `change-status` requests require `newStatus`, `nextAssignedToUserId`, and object-shaped `customFields`.
+- Close requests require `nextAssignedToUserId` and `finalNotes`.
+- Metadata `FinalStatus` must be present, `>= 1`, and `< 99`; field status ranges must stay within that final status.
+
+Some older generated summary files remain useful for historical architecture context, but the workflow
+API contract above supersedes stale examples that mention `newDataJson` request bodies or status `0`.
+
 ---
 
 ## 📚 Complete Documentation Guide

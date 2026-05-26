@@ -1,5 +1,10 @@
 # 🎯 Strategy Pattern Implementation - תיעוד מהיר
 
+> Current workflow API note: status `1` is the first valid workflow status, `99` is closed, and
+> `POST /api/tasks/{id}/change-status` requires `newStatus`, `nextAssignedToUserId`, and
+> `customFields` as a JSON object. See [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) for the
+> canonical API contract.
+
 ## 📌 שלום! מה זה המערכת החדשה?
 
 ממשנו **Strategy Pattern** עם **Factory** כדי לאפשר הרחבה של סוגי משימות חדשים ללא שינוי קוד קיים (Open/Closed Principle).
@@ -70,19 +75,19 @@ Domain/Handlers/TaskHandlerFactory.cs
 
 ### **Service Layer** - לוגיקה עסקית
 
-#### `ITaskStatusService` - ממשק לשרות
+#### `TaskWorkflowService` - שירות Workflow
 ```
-Services/ITaskStatusService.cs
-├─ ValidateAndChangeStatus(task, nextStatus, newDataJson)
-└─ GetFinalStatus(taskType)
+Services/TaskWorkflowService.cs
+├─ ChangeStatusAsync(taskId, newStatus, nextAssignedToUserId, newDataJson)
+├─ CloseTaskAsync(taskId, nextAssignedToUserId, finalNotes)
+└─ EnsureTaskMutableAsync(taskId)
 ```
 
-#### `TaskStatusService` - Implementation
+#### Rule Providers - Validation Sources
 ```
-Services/TaskStatusService.cs
-├─ משתמש ב-TaskHandlerFactory
-├─ עורך וולידציה דרך Handler
-└─ מחזיר תוצאות עם הודעות
+Services/TaskWorkflowRuleProviders.cs
+├─ MetadataTaskWorkflowRuleProvider (priority 0)
+└─ HandlerTaskWorkflowRuleProvider (priority 100)
 ```
 
 ### **Controller** - API Endpoint
@@ -90,8 +95,9 @@ Services/TaskStatusService.cs
 ```
 Controllers/TasksController.cs
 └─ POST /api/tasks/{id}/change-status
-   ├─ nextStatus
-   └─ newDataJson
+   ├─ newStatus
+   ├─ nextAssignedToUserId
+   └─ customFields
 ```
 
 ### **Testing** - Unit Tests
@@ -119,9 +125,10 @@ var task = new BaseTask
 
 ### 2. **שינוי סטטוס עם וולידציה**
 ```csharp
-var result = taskStatusService.ValidateAndChangeStatus(
-    task,
-    nextStatus: 2,
+var result = await workflowService.ChangeStatusAsync(
+    taskId: task.Id,
+    newStatus: 2,
+    nextAssignedToUserId: task.AssignedToUserId,
     newDataJson: "{\"prices\": [\"5000\", \"4800\"]}"
 );
 
@@ -149,8 +156,6 @@ ValidationResult (IsValid, Message)
 ## 📊 דוגמאות - Procurement
 
 ```
-סטטוס 0: התחלה
-   ↓
 סטטוס 1: בתהליך
    ↓
 סטטוס 2: בחירת ספקים ⭐
@@ -167,8 +172,6 @@ ValidationResult (IsValid, Message)
 ## 📊 דוגמאות - Development
 
 ```
-סטטוס 0: התחלה
-   ↓
 סטטוס 1: בתהליך
    ↓
 סטטוס 2: אפיון ⭐
@@ -194,8 +197,11 @@ POST /api/tasks/1/change-status
 Content-Type: application/json
 
 {
-  "nextStatus": 2,
-  "newDataJson": "{\"prices\": [\"5000 ₪\", \"4800 ₪\"]}"
+  "newStatus": 2,
+  "nextAssignedToUserId": 1,
+  "customFields": {
+    "prices": ["5000 ₪", "4800 ₪"]
+  }
 }
 ```
 
@@ -222,16 +228,13 @@ Content-Type: application/json
 ```csharp
 // Program.cs
 
-// הרשמה של Handlers
-builder.Services.AddTransient<ITaskHandler, ProcurementTaskHandler>();
-builder.Services.AddTransient<ITaskHandler, DevelopmentTaskHandler>();
+// גילוי אוטומטי של Handlers
+builder.Services.AddTaskHandlersFromAssembly(typeof(ITaskHandler).Assembly);
 
-// הרשמה של Factory (מזריק את כל ה-Handlers אוטומטי)
-builder.Services.AddSingleton(sp => 
-    new TaskHandlerFactory(sp.GetRequiredService<IEnumerable<ITaskHandler>>()));
-
-// הרשמה של Service
-builder.Services.AddScoped<ITaskStatusService, TaskStatusService>();
+// Rule providers + workflow service
+builder.Services.AddScoped<ITaskWorkflowRuleProvider, MetadataTaskWorkflowRuleProvider>();
+builder.Services.AddScoped<ITaskWorkflowRuleProvider, HandlerTaskWorkflowRuleProvider>();
+builder.Services.AddScoped<ITaskWorkflowService, TaskWorkflowService>();
 ```
 
 ---
