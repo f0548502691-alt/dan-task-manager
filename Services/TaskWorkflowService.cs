@@ -153,8 +153,6 @@ public class TaskWorkflowService : ITaskWorkflowService
         var updatedJson = task.CustomDataJson;
         try
         {
-            var jsonDoc = System.Text.Json.JsonDocument.Parse(updatedJson);
-            var json = System.Text.Json.JsonSerializer.Deserialize<dynamic>(updatedJson) ?? new();
             var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(updatedJson) ?? new();
             dict["finalNotes"] = finalNotes;
             dict["closedAt"] = DateTime.UtcNow.ToString("o");
