@@ -162,6 +162,47 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         Assert.Equal(2, result.NewStatus);
     }
 
+    [Fact]
+    public async Task ChangeStatus_WithMissingNextAssignee_ShouldFailWithoutMutatingTask()
+    {
+        // Arrange
+        var priceData = JsonSerializer.Serialize(new { prices = new[] { "5000", "4800" } });
+
+        // Act
+        var result = await _service.ChangeStatusAsync(1, 2, 999, priceData);
+
+        // Assert
+        var task = await _context.Tasks.FindAsync(1);
+        Assert.False(result.Success);
+        Assert.Equal(WorkflowConstants.CreatedStatus, task!.CurrentStatus);
+        Assert.Equal(1, task.AssignedToUserId);
+    }
+
+    [Fact]
+    public async Task ChangeStatus_WithInvalidJsonPayload_ShouldFailWithoutMutatingTask()
+    {
+        // Act
+        var result = await _service.ChangeStatusAsync(1, 2, 2, "{not-json");
+
+        // Assert
+        var task = await _context.Tasks.FindAsync(1);
+        Assert.False(result.Success);
+        Assert.Contains("JSON", result.Message);
+        Assert.Equal(WorkflowConstants.CreatedStatus, task!.CurrentStatus);
+        Assert.Equal("{}", task.CustomDataJson);
+    }
+
+    [Fact]
+    public async Task ChangeStatus_ToClosedStatusDirectly_ShouldFail()
+    {
+        // Act
+        var result = await _service.ChangeStatusAsync(1, WorkflowConstants.ClosedStatus, 2, "{}");
+
+        // Assert
+        Assert.False(result.Success);
+        Assert.Contains(nameof(TaskWorkflowService.CloseTaskAsync).Replace("Async", ""), result.Message);
+    }
+
     // === Closed Status Tests ===
 
     [Fact]
@@ -179,6 +220,23 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         // Assert
         Assert.False(result.Success);
         Assert.Contains("סגורה", result.Message);
+    }
+
+    [Fact]
+    public async Task EnsureTaskMutable_WhenTaskClosed_ShouldFail()
+    {
+        // Arrange
+        var task = await _context.Tasks.FindAsync(1);
+        task!.CurrentStatus = WorkflowConstants.ClosedStatus;
+        _context.Tasks.Update(task);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.EnsureTaskMutableAsync(1);
+
+        // Assert
+        Assert.False(result.Success);
+        Assert.Contains("immutable", result.Message);
     }
 
     // === Close Task Tests ===
