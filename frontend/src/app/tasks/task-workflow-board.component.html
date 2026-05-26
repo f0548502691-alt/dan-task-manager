@@ -49,7 +49,7 @@
         <ng-container *ngSwitchDefault>
           <label for="fallbackJson">Workflow payload (JSON)</label>
           <textarea id="fallbackJson" rows="6" formControlName="fallbackJson"></textarea>
-          <small *ngIf="form.controls['fallbackJson'].hasError('invalidJson')">
+          <small *ngIf="form.controls.fallbackJson.hasError('invalidJson')">
             The JSON payload is invalid.
           </small>
         </ng-container>

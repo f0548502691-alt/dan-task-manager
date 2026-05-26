@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 import {
   BaseTaskDto,
@@ -13,6 +13,11 @@ import {
 import { TaskService } from './task.service';
 import { DevelopmentFieldsComponent } from './development-fields.component';
 import { ProcurementFieldsComponent } from './procurement-fields.component';
+import {
+  TaskWorkflowDynamicControlName,
+  TaskWorkflowForm,
+  TaskWorkflowFormControls
+} from './task-workflow-form.types';
 
 interface StatusOption {
   value: number;
@@ -28,22 +33,20 @@ interface StatusOption {
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TaskWorkflowBoardComponent {
-  private readonly fb = inject(FormBuilder);
-
   readonly taskService = inject(TaskService);
   readonly selectedTask = signal<BaseTaskDto | null>(null);
   readonly submitInFlight = signal(false);
   readonly successMessage = signal<string | null>(null);
 
-  readonly form: FormGroup = this.fb.group({
-    newStatus: this.fb.control<number | null>(null, [Validators.required]),
-    priceA: this.fb.nonNullable.control(''),
-    priceB: this.fb.nonNullable.control(''),
-    receipt: this.fb.nonNullable.control(''),
-    specification: this.fb.nonNullable.control(''),
-    branchName: this.fb.nonNullable.control(''),
-    versionNumber: this.fb.nonNullable.control(''),
-    fallbackJson: this.fb.nonNullable.control('')
+  readonly form: TaskWorkflowForm = new FormGroup<TaskWorkflowFormControls>({
+    newStatus: new FormControl<number | null>(null, { validators: [Validators.required] }),
+    priceA: new FormControl('', { nonNullable: true }),
+    priceB: new FormControl('', { nonNullable: true }),
+    receipt: new FormControl('', { nonNullable: true }),
+    specification: new FormControl('', { nonNullable: true }),
+    branchName: new FormControl('', { nonNullable: true }),
+    versionNumber: new FormControl('', { nonNullable: true }),
+    fallbackJson: new FormControl('', { nonNullable: true })
   });
 
   readonly statusOptions = computed<StatusOption[]>(() => {
@@ -64,7 +67,7 @@ export class TaskWorkflowBoardComponent {
   });
 
   get selectedNextStatus(): number {
-    return Number(this.form.controls['newStatus'].value ?? 0);
+    return this.form.controls.newStatus.value ?? TASK_STATUS.BACKLOG;
   }
 
   selectTask(task: BaseTaskDto): void {
@@ -75,7 +78,7 @@ export class TaskWorkflowBoardComponent {
     this.resetStatusSpecificFields();
     this.hydrateStatusFields(task);
 
-    this.form.controls['newStatus'].setValue(this.getSuggestedStatus(task));
+    this.form.controls.newStatus.setValue(this.getSuggestedStatus(task));
   }
 
   submitStatusUpdate(): void {
@@ -90,7 +93,7 @@ export class TaskWorkflowBoardComponent {
     }
 
     const payload = this.buildPayload(task.taskType, this.selectedNextStatus);
-    if (this.form.controls['fallbackJson'].hasError('invalidJson')) {
+    if (this.form.controls.fallbackJson.hasError('invalidJson')) {
       return;
     }
 
@@ -112,7 +115,7 @@ export class TaskWorkflowBoardComponent {
           this.selectedTask.set(response.task);
           this.resetStatusSpecificFields();
           this.hydrateStatusFields(response.task);
-          this.form.controls['newStatus'].setValue(this.getSuggestedStatus(response.task));
+          this.form.controls.newStatus.setValue(this.getSuggestedStatus(response.task));
         },
         error: () => {
           // Errors are propagated to taskService.error.
@@ -142,7 +145,7 @@ export class TaskWorkflowBoardComponent {
   }
 
   private resetStatusSpecificFields(): void {
-    const dynamicControls = [
+    const dynamicControls: TaskWorkflowDynamicControlName[] = [
       'priceA',
       'priceB',
       'receipt',
@@ -150,7 +153,7 @@ export class TaskWorkflowBoardComponent {
       'branchName',
       'versionNumber',
       'fallbackJson'
-    ] as const;
+    ];
 
     for (const controlName of dynamicControls) {
       const control = this.form.controls[controlName];
@@ -194,20 +197,20 @@ export class TaskWorkflowBoardComponent {
       return;
     }
 
-    this.form.controls['fallbackJson'].setValue(JSON.stringify(data, null, 2), { emitEvent: false });
+    this.form.controls.fallbackJson.setValue(JSON.stringify(data, null, 2), { emitEvent: false });
   }
 
   private buildPayload(taskType: string, status: number): TaskCustomData {
     if (taskType === 'Procurement') {
       if (status === TASK_STATUS.READY_FOR_REVIEW) {
         return {
-          prices: [this.form.controls['priceA'].value, this.form.controls['priceB'].value]
+          prices: [this.form.controls.priceA.value, this.form.controls.priceB.value]
         };
       }
 
       if (status === TASK_STATUS.DONE) {
         return {
-          receipt: this.form.controls['receipt'].value
+          receipt: this.form.controls.receipt.value
         };
       }
 
@@ -217,30 +220,30 @@ export class TaskWorkflowBoardComponent {
     if (taskType === 'Development') {
       if (status === TASK_STATUS.READY_FOR_REVIEW) {
         return {
-          specification: this.form.controls['specification'].value
+          specification: this.form.controls.specification.value
         };
       }
 
       if (status === TASK_STATUS.DONE) {
         return {
-          branchName: this.form.controls['branchName'].value
+          branchName: this.form.controls.branchName.value
         };
       }
 
       if (status === TASK_STATUS.RELEASED) {
         return {
-          versionNumber: this.form.controls['versionNumber'].value
+          versionNumber: this.form.controls.versionNumber.value
         };
       }
 
       return {};
     }
 
-    return this.parseFallbackJson(this.form.controls['fallbackJson'].value);
+    return this.parseFallbackJson(this.form.controls.fallbackJson.value);
   }
 
   private parseFallbackJson(value: string): TaskCustomData {
-    const fallbackControl = this.form.controls['fallbackJson'];
+    const fallbackControl = this.form.controls.fallbackJson;
 
     if (!value.trim()) {
       fallbackControl.setErrors(null);

@@ -1,7 +1,10 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges } from '@angular/core';
-import { FormGroup, ReactiveFormsModule, ValidatorFn, Validators } from '@angular/forms';
+import { ReactiveFormsModule, ValidatorFn, Validators } from '@angular/forms';
 import { TASK_STATUS } from './task.interfaces';
+import { TaskWorkflowForm } from './task-workflow-form.types';
+
+type DevelopmentControlName = 'specification' | 'branchName' | 'versionNumber';
 
 @Component({
   selector: 'app-development-fields',
@@ -11,7 +14,7 @@ import { TASK_STATUS } from './task.interfaces';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class DevelopmentFieldsComponent implements OnChanges {
-  @Input({ required: true }) form!: FormGroup;
+  @Input({ required: true }) form!: TaskWorkflowForm;
   @Input({ required: true }) status!: number;
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -20,9 +23,9 @@ export class DevelopmentFieldsComponent implements OnChanges {
     }
   }
 
-  isInvalid(controlName: string): boolean {
-    const control = this.form.get(controlName);
-    return !!control && control.invalid && (control.touched || control.dirty);
+  isInvalid(controlName: DevelopmentControlName): boolean {
+    const control = this.form.controls[controlName];
+    return control.invalid && (control.touched || control.dirty);
   }
 
   private syncValidators(): void {
@@ -37,12 +40,8 @@ export class DevelopmentFieldsComponent implements OnChanges {
     this.setControlState('versionNumber', this.status === TASK_STATUS.RELEASED, [Validators.required]);
   }
 
-  private setControlState(controlName: string, enabled: boolean, validators: ValidatorFn[]): void {
-    const control = this.form.get(controlName);
-    if (!control) {
-      return;
-    }
-
+  private setControlState(controlName: DevelopmentControlName, enabled: boolean, validators: ValidatorFn[]): void {
+    const control = this.form.controls[controlName];
     if (enabled) {
       control.setValidators(validators);
     } else {
