@@ -179,7 +179,7 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         await _context.SaveChangesAsync();
 
         // Act
-        var result = await _service.ChangeStatusAsync(99, 1, "{}");
+        var result = await _service.ChangeStatusAsync(99, 1, 1, "{}");
 
         // Assert
         Assert.False(result.Success);

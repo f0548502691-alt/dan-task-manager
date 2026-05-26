@@ -92,7 +92,10 @@ public class TaskApplicationService : ITaskApplicationService
 
         if (!_handlerFactory.HasHandler(command.TaskType))
         {
-            return TaskCreationResult.FailureResult($"סוג משימה לא נתמך: {command.TaskType}");
+            var supportedTaskTypes = _handlerFactory.GetRegisteredTaskTypes();
+            return TaskCreationResult.FailureResult(
+                $"סוג משימה לא נתמך: {command.TaskType}",
+                supportedTaskTypes);
         }
 
         var task = new BaseTask

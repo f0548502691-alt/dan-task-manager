@@ -119,6 +119,15 @@ public class TasksController : ControllerBase
 
         if (!result.Success)
         {
+            if (result.SupportedTaskTypes.Count > 0)
+            {
+                return BadRequest(new
+                {
+                    error = result.Message,
+                    supportedTaskTypes = result.SupportedTaskTypes
+                });
+            }
+
             return BadRequest(new { error = result.Message });
         }
 
