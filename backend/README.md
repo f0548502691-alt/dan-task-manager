@@ -1,76 +1,54 @@
 # מנהל משימות - DanTaskManager
 
-פרויקט .NET 8 עם EF Core ו-SQL Server לניהול משימות גנרי.
+פרויקט .NET 8 עם EF Core ו-SQL Server לניהול משימות גנרי עם Workflow מבוסס סוג משימה.
 
-## 📋 מבנה הפרויקט
+## מבנה הפרויקט
 
+```text
+backend/
+├── Controllers/            # REST API עבור users/tasks
+├── Data/                   # ApplicationDbContext, mapping ו-seed data
+├── Domain/                 # AppUser, BaseTask, workflow errors ו-handlers
+├── Middleware/             # GlobalExceptionMiddleware לפורמט שגיאות אחיד
+├── Services/               # Application services, DTO projections ו-workflow orchestration
+├── Tests/                  # בדיקות xUnit לשירותים ול-handlers
+├── Program.cs              # DI, Swagger, EF migrations ו-routing
+└── DanTaskManager.csproj
 ```
-dan-task-manager/
-├── Domain/
-│   ├── AppUser.cs          # מחלקה המייצגת משתמש
-│   └── BaseTask.cs         # מחלקה למשימה בסיסית
-├── Data/
-│   └── ApplicationDbContext.cs  # DbContext עם הגדרות EF Core
-├── DanTaskManager.csproj   # קובץ הפרויקט
-└── README.md
-```
 
-## 🏗️ מחלקות Domain
+## מודל Domain
 
 ### AppUser
-ייצוג משתמש במערכת:
-- `Id`: מזהה ייחודי
-- `Name`: שם המשתמש
-- `Email`: דוא"ל (עם אינדקס ייחודי)
-- `CreatedAt`: תאריך יצירה
-- `Tasks`: קשר לרבות משימות
+
+ייצוג משתמש קיים במערכת:
+- `Id`: מזהה ייחודי.
+- `Name`: שם המשתמש.
+- `Email`: דוא"ל עם אינדקס ייחודי.
+- `CreatedAt`: תאריך יצירה.
+- `Tasks`: קשר One-to-Many למשימות.
 
 ### BaseTask
-ייצוג משימה עם תמיכה בנתונים משתנים:
-- `Id`: מזהה ייחודי
-- `TaskType`: סוג המשימה (Analysis, Development, Testing, וכו')
-- `CurrentStatus`: סטטוס כמספר (0=לא התחילה, 1=בתהליך, 2=הושלמה, 3=ביוטלה)
-- `AssignedToUserId`: מזהה המשתמש המופקד
-- `AssignedToUser`: קשר למשתמש
-- `Description`: תיאור המשימה
-- **`CustomDataJson`**: JSON המכיל נתונים משתנים בהתאם לסוג המשימה
-- `CreatedAt` / `UpdatedAt`: ניהול תאריכים
 
-## 💾 DbContext - ApplicationDbContext
+ייצוג משימה עם נתונים משתנים לפי סוג:
+- `TaskType`: סוג המשימה, למשל `Procurement` או `Development`.
+- `CurrentStatus`: סטטוס מספרי. הסטטוסים המשותפים הם `0`, `1`, `2`, `3`, `4`, וסטטוס סגירה `99`.
+- `AssignedToUserId`: מזהה המשתמש שמוקצה למשימה.
+- `Description`: תיאור משימה.
+- `CustomDataJson`: JSON מסוג `nvarchar(max)` עם נתונים ספציפיים לסוג/סטטוס.
+- `CreatedAt` / `UpdatedAt`: timestamps ב-UTC.
 
-ההגדרות כוללות:
+## Setup והרצה
 
-### תכונות JSON
-`CustomDataJson` מוגדר כעמודת JSON מסוג `nvarchar(max)` התומכת בשמירת נתונים דינאמיים:
+### 1. התקנת packages
 
-```csharp
-taskBuilder
-    .Property(t => t.CustomDataJson)
-    .IsRequired()
-    .HasColumnType("nvarchar(max)")
-    .HasDefaultValue("{}");
-```
-
-### Seed Data - 6 משתמשים
-כברירת מחדל, יש 6 משתמשים בסיסיים:
-1. **דן כהן** (dan@example.com)
-2. **רות לוי** (ruth@example.com)
-3. **משה אברהם** (moshe@example.com)
-4. **נועה ישראלי** (noa@example.com)
-5. **איתן ברק** (eitan@example.com)
-6. **מיכל גל** (michal@example.com)
-
-וכן 3 משימות לדוגמה עם `CustomDataJson` שונה לכל אחת.
-
-## 🔧 Setup והגדרה
-
-### 1. התקנת Packages
 ```bash
 dotnet restore
 ```
 
 ### 2. הגדרת Connection String
+
 בקובץ `appsettings.json`:
+
 ```json
 {
   "ConnectionStrings": {
@@ -79,52 +57,116 @@ dotnet restore
 }
 ```
 
-### 3. יצירת Migration
+### 3. הרצת השרת
+
+```bash
+dotnet run --project DanTaskManager.csproj
+```
+
+`Program.cs` מריץ `Database.Migrate()` בזמן העלייה, לכן סביבת הרצה צריכה הרשאות יצירה/עדכון schema במסד הנתונים. אם אין migration קיים בסביבת הפיתוח, יש ליצור אחד לפני הרצה ראשונה:
+
 ```bash
 dotnet ef migrations add InitialCreate
 ```
 
-### 4. עדכון בסיס הנתונים
+בסביבת Development מופעל Swagger דרך `AddSwaggerGen()`.
+
+### 4. בדיקות
+
 ```bash
-dotnet ef database update
+dotnet test DanTaskManager.csproj
 ```
 
-## 📝 דוגמה לשימוש ב-CustomDataJson
+## API ציבורי
 
-```csharp
-// יצירת משימה עם נתונים משתנים
-var task = new BaseTask
+כל רשימות ה-API המפולטרות מוחזרות כ-`PagedResult<T>`:
+
+```json
 {
-    TaskType = "Analysis",
-    Description = "ניתוח",
-    AssignedToUserId = 1,
-    CustomDataJson = @"{
-        ""priority"": ""high"",
-        ""deadline"": ""2026-06-15"",
-        ""estimatedHours"": 8,
-        ""customField"": ""ערך"""
-};
-
-// שמירה בדטה בייס
-context.Tasks.Add(task);
-await context.SaveChangesAsync();
+  "items": [],
+  "page": 1,
+  "pageSize": 20,
+  "totalCount": 0,
+  "totalPages": 0
+}
 ```
 
-## 📖 הערות חשובות
+`PageRequest` מחזיר `page=1` כאשר נשלח ערך קטן מ-1, מחזיר `pageSize=20` כאשר נשלח ערך קטן מ-1, ומגביל `pageSize` למקסימום `100`.
 
-- **JSON Columns**: EF Core 8 תומך בעבודה עם JSON columns בצורה מובנית
-- **Foreign Keys**: קשר One-to-Many בין AppUser ו-BaseTask עם `OnDelete(DeleteBehavior.Restrict)`
-- **Indexes**: יצירת אינדקס על `Email` ו-`TaskType` להאצת חיפושים
-- **Timestamps**: `CreatedAt` ו-`UpdatedAt` מוגדרים עם `GETUTCDATE()` כברירת מחדל
+### TasksController
 
-## 🚀 שלבים הבאים
+| Method | Route | Return | הערות |
+| --- | --- | --- | --- |
+| `GET` | `/api/tasks?page=1&pageSize=20` | `PagedResult<TaskSummaryDto>` | כל המשימות, ממוינות מהחדש לישן |
+| `GET` | `/api/tasks/{id}` | `TaskDetailsDto` | כולל `customDataJson` |
+| `GET` | `/api/tasks/byType/{taskType}` | `PagedResult<TaskSummaryDto>` | סינון לפי `TaskType` |
+| `GET` | `/api/tasks/user/{userId}` | `PagedResult<TaskSummaryDto>` | רק משימות פתוחות של משתמש קיים |
+| `POST` | `/api/tasks` | `TaskDetailsDto` | יוצר משימה בסטטוס `0`; `customDataJson` ברירת מחדל `{}` |
+| `POST` | `/api/tasks/{id}/change-status` | workflow response | מפעיל חוקי workflow ו-handler לפי סוג |
+| `POST` | `/api/tasks/{id}/close` | close response | מעביר לסטטוס `99` ושומר `finalNotes`/`closedAt` ב-JSON |
+| `PUT` | `/api/tasks/{id}` | `204 NoContent` | מעדכן description אם נשלח ערך לא ריק |
+| `DELETE` | `/api/tasks/{id}` | `204 NoContent` | מוחק משימה |
 
-1. יצירת Controllers לקבלת בקשות API
-2. הוספת Business Logic שכבה
-3. מימוש סינון וחיפוש משימות לפי סוג וסטטוס
-4. הוספת Validation ל-CustomDataJson
-5. יצירת Migration ו-seed לנתונים נוספים
+### UsersController
+
+| Method | Route | Return | הערות |
+| --- | --- | --- | --- |
+| `GET` | `/api/users?page=1&pageSize=20` | `PagedResult<UserSummaryDto>` | כולל ספירת משימות פתוחות |
+| `GET` | `/api/users/{id}` | `UserDetailsDto` | מחזיר `404` אם המשתמש לא קיים |
+| `GET` | `/api/users/{id}/tasks` | `PagedResult<TaskSummaryDto>` | כל משימות המשתמש, כולל סגורות |
+
+## Workflow contracts
+
+בקשת שינוי סטטוס:
+
+```json
+{
+  "newStatus": 2,
+  "newDataJson": "{\"prices\":[\"1200\",\"1350\"]}"
+}
+```
+
+חוקי תנועה כלליים (`TaskWorkflowService`):
+- משימה סגורה (`99`) לא ניתנת לעדכון.
+- תנועה קדימה חייבת להיות בדיוק `+1`.
+- תנועה אחורה מותרת לכל סטטוס נמוך יותר.
+- אותו סטטוס נדחה.
+- `newDataJson` חייב להיות JSON תקין ולא ריק.
+
+### Handlers לפי סוג משימה
+
+| TaskType | Final status | סטטוס | JSON נדרש |
+| --- | --- | --- | --- |
+| `Procurement` | `3` | `2` | `prices`: מערך של בדיוק 2 מחרוזות לא ריקות |
+| `Procurement` | `3` | `3` | `receipt`: מחרוזת לא ריקה |
+| `Development` | `4` | `2` | `specification`: מחרוזת באורך 10+ תווים |
+| `Development` | `4` | `3` | `branchName`: מחרוזת לא ריקה ללא רווחים, `//`, סיומת `/`, או סיומת `.` |
+| `Development` | `4` | `4` | `versionNumber`: מחרוזת או מספר לא ריקים; גרסה עם נקודות חייבת להכיל חלקים מספריים |
+
+דוגמאות:
+
+```json
+{ "prices": ["1200", "1350"] }
+{ "receipt": "PO-2026-0042" }
+{ "specification": "Add CSV invoice export with filters" }
+{ "branchName": "feature/invoice-export" }
+{ "versionNumber": "1.2.0" }
+```
+
+## שגיאות ותפעול
+
+- `GlobalExceptionMiddleware` מחזיר שגיאות workflow בפורמט `{ "error": "...", "code": "workflow_validation_failed" }` עם HTTP 400.
+- שגיאות לא צפויות מוחזרות כ-HTTP 500 עם `code: "internal_server_error"`.
+- `CreateTask` ופעולות validation בסיסיות עשויות להחזיר `BadRequest` עם `{ "error": "..." }`.
+- `ApplicationDbContext` מגדיר FK מ-`BaseTask.AssignedToUserId` ל-`AppUser.Id` עם `DeleteBehavior.Restrict`.
+- Seed data כולל 6 משתמשים ו-3 משימות לדוגמה.
+
+## הערות אינטגרציה מול ה-Frontend
+
+- `TaskDetailsDto` כולל `customDataJson`; `TaskSummaryDto` לא כולל אותו.
+- `GET /api/tasks/user/{userId}` מחזיר `PagedResult<TaskSummaryDto>`, לא מערך `BaseTaskDto[]`.
+- אם ה-UI צריך לערוך payload של משימה קיימת, יש לטעון פרטי משימה דרך `GET /api/tasks/{id}` או לשנות את contract של רשימת המשימות.
 
 ---
 
-**נבנה עם:** .NET 8, EF Core 8, SQL Server
+**נבנה עם:** .NET 8, EF Core 8, SQL Server, xUnit
