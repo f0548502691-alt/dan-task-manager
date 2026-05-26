@@ -24,3 +24,30 @@ Adopt Signal Store when at least one of these is true:
 ## Current project decision
 - For the current task workflow UI, existing Angular Signals in `TaskService` are sufficient.
 - No immediate migration to Signal Store is required.
+
+## Client Baseline (Angular)
+
+Use the following checklist as the default baseline for client-side task workflow work:
+
+- Framework: Angular.
+- Leverage Angular built-ins: dependency injection, services, and reactive patterns.
+- TypeScript must stay in strict mode (`"strict": true` in `tsconfig` when present).
+- Component architecture should stay focused; keep templates clean and split domain-specific fields into dedicated components.
+- UI should remain minimal and functionality-first (avoid unnecessary styling complexity).
+- Required capabilities:
+  - Create task.
+  - Manage lifecycle (advance, reverse, close).
+  - View current user's tasks.
+- A hard-coded user ID is acceptable for MVP flows.
+
+### Verification snapshot (current repository state)
+
+- [OK] Angular + DI/service/reactive patterns are implemented in `src/app/tasks/task.service.ts` and related components.
+- [OK] Focused component architecture is in place (`task-workflow-board`, `procurement-fields`, `development-fields`).
+- [OK] Minimal UI approach is in place (simple layout and lightweight styles).
+- [OK] Viewing user tasks is implemented (`TaskService.refreshCurrentUserTasks()` + board list rendering).
+- [OK] Advancing/reversing task status is available through status selection in the workflow board.
+- [OK] Creating a task from the UI is implemented in `task-workflow-board` via `submitCreateTask()`.
+- [OK] Closing a task from the UI is implemented in `task-workflow-board` via `submitCloseTask()`.
+- [OK] Hard-coded user ID wiring is implemented in `TaskWorkflowBoardComponent` (`DEFAULT_CURRENT_USER_ID = 1` + `setCurrentUserId` on init).
+- [OK] Strict mode is explicitly configured in `frontend/tsconfig.json` (`"strict": true`).
