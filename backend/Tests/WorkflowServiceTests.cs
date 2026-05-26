@@ -21,7 +21,7 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
     public TaskWorkflowServiceTests()
     {
         _options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase("WorkflowServiceTestDb")
+            .UseInMemoryDatabase($"WorkflowServiceTestDb-{Guid.NewGuid()}")
             .Options;
     }
 
@@ -43,10 +43,9 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
             CreateRuleProviders(_factory, validationService),
             new MockLogger());
 
-        // Seed data
-        var user = new AppUser { Id = 1, Name = "Test User", Email = "test@test.com" };
-        var user2 = new AppUser { Id = 2, Name = "Reviewer", Email = "reviewer@test.com" };
-        _context.Users.AddRange(user, user2);
+        // Seeded users come from ApplicationDbContext; tests own the task rows.
+        _context.Tasks.RemoveRange(_context.Tasks);
+        await _context.SaveChangesAsync();
 
         var task = new BaseTask
         {
@@ -598,7 +597,7 @@ public class TaskWorkflowIntegrationTests : IAsyncLifetime
     public TaskWorkflowIntegrationTests()
     {
         _options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase("WorkflowIntegrationTestDb")
+            .UseInMemoryDatabase($"WorkflowIntegrationTestDb-{Guid.NewGuid()}")
             .Options;
     }
 
@@ -619,9 +618,7 @@ public class TaskWorkflowIntegrationTests : IAsyncLifetime
                 CreateValidationService()),
             new MockLogger());
 
-        var user = new AppUser { Id = 1, Name = "Test", Email = "test@test.com" };
-        var user2 = new AppUser { Id = 2, Name = "Assignee", Email = "assignee@test.com" };
-        _context.Users.AddRange(user, user2);
+        _context.Tasks.RemoveRange(_context.Tasks);
         await _context.SaveChangesAsync();
     }
 

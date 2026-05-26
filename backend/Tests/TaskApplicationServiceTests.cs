@@ -20,14 +20,6 @@ public class TaskApplicationServiceTests
         await using var context = new ApplicationDbContext(options);
         await context.Database.EnsureCreatedAsync();
 
-        context.Users.Add(new AppUser
-        {
-            Id = 1,
-            Name = "Test User",
-            Email = "test@example.com"
-        });
-        await context.SaveChangesAsync();
-
         var handlers = new ITaskHandler[]
         {
             new AnalysisTaskHandler(),
