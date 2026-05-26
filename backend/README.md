@@ -51,11 +51,14 @@ taskBuilder
     .HasDefaultValue("{}");
 ```
 
-### Seed Data - 3 משתמשים
-כברירת מחדל, יש 3 משתמשים בסיסיים:
+### Seed Data - 6 משתמשים
+כברירת מחדל, יש 6 משתמשים בסיסיים:
 1. **דן כהן** (dan@example.com)
 2. **רות לוי** (ruth@example.com)
 3. **משה אברהם** (moshe@example.com)
+4. **נועה ישראלי** (noa@example.com)
+5. **איתן ברק** (eitan@example.com)
+6. **מיכל גל** (michal@example.com)
 
 וכן 3 משימות לדוגמה עם `CustomDataJson` שונה לכל אחת.
 

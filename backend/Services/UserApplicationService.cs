@@ -44,38 +44,6 @@ public class UserApplicationService : IUserApplicationService
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<UserCreationResult> CreateAsync(
-        UserCreateCommand command,
-        CancellationToken cancellationToken = default)
-    {
-        var emailInUse = await _context.Users
-            .AsNoTracking()
-            .AnyAsync(u => u.Email == command.Email, cancellationToken);
-
-        if (emailInUse)
-        {
-            return UserCreationResult.FailureResult("כתובת האימייל כבר קיימת במערכת");
-        }
-
-        var user = new AppUser
-        {
-            Name = command.Name,
-            Email = command.Email,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        _context.Users.Add(user);
-        await _context.SaveChangesAsync(cancellationToken);
-
-        var createdUser = await GetByIdAsync(user.Id, cancellationToken);
-        if (createdUser == null)
-        {
-            return UserCreationResult.FailureResult("המשתמש נוצר אך לא ניתן היה לטעון אותו מחדש");
-        }
-
-        return UserCreationResult.SuccessResult(createdUser);
-    }
-
     public async Task<PagedResult<TaskSummaryDto>> GetUserTasksAsync(
         int userId,
         PageRequest pageRequest,
