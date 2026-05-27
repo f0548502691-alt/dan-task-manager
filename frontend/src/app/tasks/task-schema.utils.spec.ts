@@ -50,7 +50,7 @@ test('filters schema fields by inclusive status ranges', () => {
 });
 
 test('rebuilds the custom-fields group from applicable schema rules', () => {
-  const group = new FormGroup({
+  const group: FormGroup = new FormGroup({
     stale: new FormControl('remove me')
   });
 
@@ -77,7 +77,7 @@ test('rebuilds the custom-fields group from applicable schema rules', () => {
 });
 
 test('hydrates schema-generated controls with backend data using safe scalar coercion', () => {
-  const group = new FormGroup({});
+  const group: FormGroup = new FormGroup({});
   const resolved = rebuildCustomFieldsGroup(
     group,
     schema([
@@ -107,7 +107,7 @@ test('hydrates schema-generated controls with backend data using safe scalar coe
 });
 
 test('builds workflow payloads with schema-aware scalar coercion', () => {
-  const group = new FormGroup({});
+  const group: FormGroup = new FormGroup({});
   const resolved = rebuildCustomFieldsGroup(
     group,
     schema([
