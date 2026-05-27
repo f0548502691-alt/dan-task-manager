@@ -9,12 +9,18 @@ import {
   CloseTaskRequest,
   CloseTaskResponse,
   TASK_STATUS,
-  TaskCustomData,
   TaskTypeSchemaDto,
   PagedResultDto,
   CreateTaskRequest,
   UpdateTaskRequest
 } from './task.interfaces';
+import {
+  normalizeChangeStatusResponse,
+  normalizeCloseResponse,
+  normalizeTask,
+  normalizeTaskCollection
+} from './task-response-normalizers';
+import { normalizeTaskTypes } from './task-type-metadata.utils';
 
 @Injectable({ providedIn: 'root' })
 export class TaskService {
@@ -61,7 +67,7 @@ export class TaskService {
     this._error.set(null);
 
     return this.http.get<PagedResultDto<unknown> | unknown[]>(`${this.apiUrl}/user/${userId}`).pipe(
-      map((response) => this.normalizeTaskCollection(response)),
+      map((response) => normalizeTaskCollection(response)),
       map((tasks) => this.sortTasks(tasks)),
       tap((tasks) => this._tasks.set(tasks)),
       catchError((error) => this.handleHttpError(error)),
@@ -73,7 +79,7 @@ export class TaskService {
     this._error.set(null);
 
     return this.http.post<unknown>(this.apiUrl, request).pipe(
-      map((response) => this.normalizeTask(response)),
+      map((response) => normalizeTask(response)),
       tap((task) => this.syncTaskWithState(task)),
       catchError((error) => this.handleHttpError(error))
     );
@@ -83,7 +89,7 @@ export class TaskService {
     this._error.set(null);
 
     return this.http.post<unknown>(`${this.apiUrl}/${taskId}/change-status`, request).pipe(
-      map((response) => this.normalizeChangeStatusResponse(response)),
+      map((response) => normalizeChangeStatusResponse(response)),
       tap((response) => this.syncTaskWithState(response.task)),
       catchError((error) => this.handleHttpError(error))
     );
@@ -93,7 +99,7 @@ export class TaskService {
     this._error.set(null);
 
     return this.http.post<unknown>(`${this.apiUrl}/${taskId}/close`, request).pipe(
-      map((response) => this.normalizeCloseResponse(response)),
+      map((response) => normalizeCloseResponse(response)),
       tap((response) => this.syncTaskWithState(response.task)),
       catchError((error) => this.handleHttpError(error))
     );
@@ -103,16 +109,7 @@ export class TaskService {
     this._error.set(null);
 
     return this.http.get<TaskTypeSchemaDto[]>('/api/task-types').pipe(
-      map((taskTypes) =>
-        taskTypes
-          .filter(
-            (taskType) =>
-              taskType.isActive &&
-              typeof taskType.taskType === 'string' &&
-              taskType.taskType.trim().length > 0
-          )
-          .sort((left, right) => left.taskType.localeCompare(right.taskType))
-      ),
+      map((taskTypes) => normalizeTaskTypes(taskTypes)),
       catchError((error) => this.handleHttpError(error))
     );
   }
@@ -171,113 +168,6 @@ export class TaskService {
 
   private sortTasks(tasks: readonly BaseTaskDto[]): readonly BaseTaskDto[] {
     return [...tasks].sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
-  }
-
-  private normalizeTaskCollection(payload: PagedResultDto<unknown> | unknown[]): BaseTaskDto[] {
-    if (Array.isArray(payload)) {
-      return payload.map((task) => this.normalizeTask(task));
-    }
-
-    if (this.isPagedResult(payload) && Array.isArray(payload.items)) {
-      return payload.items.map((task) => this.normalizeTask(task));
-    }
-
-    return [];
-  }
-
-  private normalizeChangeStatusResponse(payload: unknown): ChangeStatusWorkflowResponse {
-    const response = this.asRecord(payload);
-    const task = this.normalizeTask(response['task']);
-    const newStatus = this.toNumber(response['newStatus'], task.currentStatus);
-
-    return {
-      success: this.toBoolean(response['success']),
-      message: this.toStringValue(response['message'], ''),
-      newStatus,
-      task
-    };
-  }
-
-  private normalizeCloseResponse(payload: unknown): CloseTaskResponse {
-    const response = this.asRecord(payload);
-
-    return {
-      success: this.toBoolean(response['success']),
-      message: this.toStringValue(response['message'], ''),
-      task: this.normalizeTask(response['task'])
-    };
-  }
-
-  private normalizeTask(payload: unknown): BaseTaskDto {
-    const task = this.asRecord(payload);
-    const assignedToUserPayload = task['assignedToUser'];
-    const assignedToUser =
-      assignedToUserPayload && typeof assignedToUserPayload === 'object' && !Array.isArray(assignedToUserPayload)
-        ? {
-            id: this.toNumber((assignedToUserPayload as Record<string, unknown>)['id']),
-            name: this.toStringValue((assignedToUserPayload as Record<string, unknown>)['name'], ''),
-            email: this.toStringValue((assignedToUserPayload as Record<string, unknown>)['email'], ''),
-            createdAt: this.toStringValue((assignedToUserPayload as Record<string, unknown>)['createdAt'], '')
-          }
-        : null;
-
-    return {
-      id: this.toNumber(task['id']),
-      taskType: this.toStringValue(task['taskType'], ''),
-      currentStatus: this.toNumber(task['currentStatus'], TASK_STATUS.IN_PROGRESS),
-      assignedToUserId: this.toNumber(task['assignedToUserId']),
-      assignedToUser,
-      description: this.toStringValue(task['description'], ''),
-      customDataJson: this.extractCustomDataJson(task),
-      createdAt: this.toStringValue(task['createdAt'], new Date(0).toISOString()),
-      updatedAt: this.toStringValue(task['updatedAt'], new Date(0).toISOString())
-    };
-  }
-
-  private extractCustomDataJson(task: Record<string, unknown>): string {
-    const customDataJson = task['customDataJson'];
-    if (typeof customDataJson === 'string') {
-      return customDataJson;
-    }
-
-    const customFields = task['customFields'];
-    if (customFields === null || customFields === undefined) {
-      return '{}';
-    }
-
-    if (typeof customFields === 'string') {
-      return customFields;
-    }
-
-    if (typeof customFields === 'object' && !Array.isArray(customFields)) {
-      return JSON.stringify(customFields as TaskCustomData);
-    }
-
-    return '{}';
-  }
-
-  private isPagedResult(value: unknown): value is PagedResultDto<unknown> {
-    return value !== null && typeof value === 'object' && 'items' in value;
-  }
-
-  private asRecord(value: unknown): Record<string, unknown> {
-    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-      return value as Record<string, unknown>;
-    }
-
-    throw new Error('Unexpected task response payload.');
-  }
-
-  private toNumber(value: unknown, fallback = 0): number {
-    return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-  }
-
-  private toStringValue(value: unknown, fallback: string): string {
-    return typeof value === 'string' ? value : fallback;
-  }
-
-  private toBoolean(value: unknown): boolean {
-    return value === true;
   }
 
   private handleHttpError(error: unknown): Observable<never> {

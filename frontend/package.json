@@ -1,0 +1,9 @@
+{
+  "scripts": {
+    "test": "tsc -p tsconfig.spec.json && node --test out-tsc/spec/app/tasks/*.spec.js"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "typescript": "^6.0.3"
+  }
+}

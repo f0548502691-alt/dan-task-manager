@@ -6,8 +6,6 @@ import { finalize } from 'rxjs';
 import {
   BaseTaskDto,
   ChangeStatusWorkflowRequest,
-  DEFAULT_TASK_FINAL_STATUS_BY_TYPE,
-  DEFAULT_STATUS_LABELS,
   TASK_STATUS,
   TaskTypeSchemaDto,
   TaskCustomData
@@ -17,14 +15,15 @@ import { DevelopmentFieldsComponent } from './development-fields.component';
 import { ProcurementFieldsComponent } from './procurement-fields.component';
 import { parseTaskCustomDataJson, resetControl } from './task-form.utils';
 import { getTaskWorkflowAdapter } from './task-workflow-adapters';
-
-interface StatusOption {
-  value: number;
-  label: string;
-}
+import {
+  buildStatusOptions,
+  buildTaskTypeMetadataState,
+  getStatusLabel as getWorkflowStatusLabel,
+  getSuggestedStatus as getSuggestedWorkflowStatus
+} from './task-type-metadata.utils';
 
 const DEFAULT_CURRENT_USER_ID = 1;
-const FALLBACK_TASK_TYPE_OPTIONS = ['Procurement', 'Development'] as const;
+const DEFAULT_TASK_TYPE_METADATA = buildTaskTypeMetadataState([]);
 
 @Component({
   selector: 'app-task-workflow-board',
@@ -49,7 +48,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
   readonly taskTypeMetadataInFlight = signal(false);
   readonly successMessage = signal<string | null>(null);
   private readonly taskTypeFinalStatusMap = signal<Readonly<Record<string, number>>>(
-    DEFAULT_TASK_FINAL_STATUS_BY_TYPE
+    DEFAULT_TASK_TYPE_METADATA.finalStatusByType
   );
 
   readonly createForm = this.fb.group({
@@ -72,25 +71,13 @@ export class TaskWorkflowBoardComponent implements OnInit {
     closeNotes: this.fb.nonNullable.control('', [Validators.required, Validators.minLength(3)])
   });
 
-  readonly statusOptions = computed<StatusOption[]>(() => {
+  readonly statusOptions = computed(() => {
     const task = this.selectedTask();
     if (!task) {
       return [];
     }
-    if (task.currentStatus === TASK_STATUS.CLOSED) {
-      return [{ value: TASK_STATUS.CLOSED, label: this.getStatusLabel(TASK_STATUS.CLOSED) }];
-    }
 
-    const finalStatus = this.getFinalStatus(task.taskType, task.currentStatus);
-    const maxStatus = Math.max(finalStatus, task.currentStatus);
-    const options: StatusOption[] = [];
-    const minStatus = TASK_STATUS.IN_PROGRESS;
-
-    for (let status = minStatus; status <= maxStatus; status += 1) {
-      options.push({ value: status, label: this.getStatusLabel(status) });
-    }
-
-    return options;
+    return buildStatusOptions(task, this.taskTypeFinalStatusMap());
   });
 
   get selectedNextStatus(): number {
@@ -264,16 +251,11 @@ export class TaskWorkflowBoardComponent implements OnInit {
   }
 
   private getSuggestedStatus(task: BaseTaskDto): number {
-    const finalStatus = this.getFinalStatus(task.taskType, task.currentStatus);
-    return Math.min(task.currentStatus + 1, finalStatus);
+    return getSuggestedWorkflowStatus(task, this.taskTypeFinalStatusMap());
   }
 
   private getStatusLabel(status: number): string {
-    return DEFAULT_STATUS_LABELS[status] ?? `Status ${status}`;
-  }
-
-  private getFinalStatus(taskType: string, fallbackStatus: number): number {
-    return this.taskTypeFinalStatusMap()[taskType] ?? fallbackStatus;
+    return getWorkflowStatusLabel(status);
   }
 
   private loadTaskTypeMetadata(): void {
@@ -292,26 +274,15 @@ export class TaskWorkflowBoardComponent implements OnInit {
   }
 
   private setTaskTypeMetadata(taskTypes: readonly TaskTypeSchemaDto[]): void {
-    if (taskTypes.length === 0) {
-      this.setFallbackTaskTypeMetadata();
-      return;
-    }
-
-    const taskTypesMap: Record<string, number> = { ...DEFAULT_TASK_FINAL_STATUS_BY_TYPE };
-    for (const taskType of taskTypes) {
-      if (typeof taskType.finalStatus === 'number') {
-        taskTypesMap[taskType.taskType] = taskType.finalStatus;
-      }
-    }
-
-    this.taskTypeFinalStatusMap.set(taskTypesMap);
-    this.taskTypeOptions.set(taskTypes.map((taskType) => taskType.taskType));
+    const metadata = buildTaskTypeMetadataState(taskTypes);
+    this.taskTypeFinalStatusMap.set(metadata.finalStatusByType);
+    this.taskTypeOptions.set(metadata.taskTypeOptions);
     this.ensureCreateTaskTypeIsSelected();
   }
 
   private setFallbackTaskTypeMetadata(): void {
-    this.taskTypeOptions.set(FALLBACK_TASK_TYPE_OPTIONS);
-    this.taskTypeFinalStatusMap.set(DEFAULT_TASK_FINAL_STATUS_BY_TYPE);
+    this.taskTypeOptions.set(DEFAULT_TASK_TYPE_METADATA.taskTypeOptions);
+    this.taskTypeFinalStatusMap.set(DEFAULT_TASK_TYPE_METADATA.finalStatusByType);
     this.ensureCreateTaskTypeIsSelected();
   }
 
