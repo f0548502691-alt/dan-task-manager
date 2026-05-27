@@ -159,7 +159,8 @@ status-change, close, or detail-shaped response provides `customFields`.
   yet. Add UI generation or a new adapter before expecting arbitrary task types
   to have first-class form controls.
 - Add a new adapter only when the task type needs a guided form. Otherwise, the
-  fallback JSON editor can submit metadata-validated payloads.
+  fallback JSON editor is the intended UI surface for metadata-validated
+  payloads after the status-change DTO is aligned with the backend contract.
 
 ## Client Baseline (Angular)
 
