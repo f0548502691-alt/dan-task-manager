@@ -28,7 +28,6 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
     public async Task InitializeAsync()
     {
         _context = new ApplicationDbContext(_options);
-        await _context.Database.EnsureCreatedAsync();
 
         // Setup handlers
         var handlers = new ITaskHandler[]
@@ -575,7 +574,6 @@ public class TaskWorkflowIntegrationTests : IAsyncLifetime
     public async Task InitializeAsync()
     {
         _context = new ApplicationDbContext(_options);
-        await _context.Database.EnsureCreatedAsync();
 
         var handlers = new ITaskHandler[]
         {
