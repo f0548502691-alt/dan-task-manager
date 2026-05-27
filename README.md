@@ -41,6 +41,8 @@ The Angular dev server runs on `http://localhost:4200` and proxies `/api` reques
 
 The backend uses EF Core migrations. The initial migration creates schema + seed data for demo users, task types, field definitions, and sample tasks.
 
+On startup, the API checks for migrations and applies them automatically before serving requests. Manual migration commands are mainly useful when running the backend outside Docker or validating a schema change locally.
+
 Seeded demo users:
 
 - `dan@example.com`
@@ -57,6 +59,10 @@ cd backend
 dotnet ef database update
 ```
 
+When changing the EF model, create a new migration from `/backend` and commit both the generated migration file and `Migrations/ApplicationDbContextModelSnapshot.cs`.
+
+The seeded task-type metadata includes `Procurement`, `Development`, and `Marketing`. Workflow status values start at `1`; closed tasks use status `99` and are only reached through the close endpoint.
+
 ## Extensibility approach (adding a new task type)
 
 Task-type behavior is intentionally pluggable:
@@ -69,4 +75,12 @@ This lets new task types be introduced without editing existing task-type handle
 ## More details
 
 - Backend guide: `backend/README.md`
+- Backend quickstart and troubleshooting: `backend/docs/QUICKSTART.md`
+- Workflow rules: `backend/docs/WORKFLOW.md`
 - Extension deep dive: `backend/docs/EXTENSION_GUIDE.md`
+
+## Common setup pitfalls
+
+- `docker compose up` requires `DB_PASSWORD` in `.env`; SQL Server rejects weak passwords.
+- The backend fails fast if `ConnectionStrings:DefaultConnection` is missing.
+- The Angular dev server expects the API on `http://localhost:8080` through `frontend/proxy.conf.json`.
