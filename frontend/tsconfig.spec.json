@@ -3,7 +3,9 @@
   "compilerOptions": {
     "module": "CommonJS",
     "moduleResolution": "node",
+    "rootDir": "./src",
     "outDir": "./out-tsc/spec",
+    "ignoreDeprecations": "6.0",
     "types": ["node"]
   },
   "include": [
