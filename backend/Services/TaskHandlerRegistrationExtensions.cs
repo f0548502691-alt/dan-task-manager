@@ -10,11 +10,12 @@ public static class TaskHandlerRegistrationExtensions
         Assembly assembly)
     {
         var handlerInterface = typeof(ITaskHandler);
+        var registerableHandlerInterface = typeof(IRegisterableTaskHandler);
 
         var handlerImplementations = assembly
             .GetTypes()
             .Where(type =>
-                handlerInterface.IsAssignableFrom(type) &&
+                registerableHandlerInterface.IsAssignableFrom(type) &&
                 !type.IsInterface &&
                 !type.IsAbstract)
             .OrderBy(type => type.Name)

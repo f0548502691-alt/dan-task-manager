@@ -9,15 +9,18 @@ public class TaskApplicationService : ITaskApplicationService
 {
     private readonly ApplicationDbContext _context;
     private readonly ITaskWorkflowService _workflowService;
+    private readonly ITaskTypeCatalog _taskTypeCatalog;
     private readonly ILogger<TaskApplicationService> _logger;
 
     public TaskApplicationService(
         ApplicationDbContext context,
         ITaskWorkflowService workflowService,
+        ITaskTypeCatalog taskTypeCatalog,
         ILogger<TaskApplicationService> logger)
     {
         _context = context;
         _workflowService = workflowService;
+        _taskTypeCatalog = taskTypeCatalog;
         _logger = logger;
     }
 
@@ -91,17 +94,17 @@ public class TaskApplicationService : ITaskApplicationService
             return TaskCreationResult.FailureResult(jsonError);
         }
 
-        if (!WorkflowConstants.IsSupportedTaskType(command.TaskType))
+        var taskType = _taskTypeCatalog.Find(command.TaskType);
+        if (taskType == null)
         {
-            var supportedTaskTypes = GetSupportedTaskTypes();
             return TaskCreationResult.FailureResult(
                 $"Unsupported task type: {command.TaskType}",
-                supportedTaskTypes);
+                _taskTypeCatalog.GetTaskTypeCodes());
         }
 
         var task = new BaseTask
         {
-            TaskType = command.TaskType,
+            TaskType = taskType.TaskType,
             Description = command.Description,
             AssignedToUserId = command.AssignedToUserId,
             CurrentStatus = WorkflowConstants.CreatedStatus,
@@ -207,7 +210,7 @@ public class TaskApplicationService : ITaskApplicationService
         var items = await orderedQuery
             .Skip(pageRequest.Skip)
             .Take(pageSize)
-            .Select(TaskDtoMappings.ToTaskSummary())
+            .Select(TaskProjectionExpressions.ToSummary())
             .ToListAsync(cancellationToken);
 
         return PagedResult<TaskSummaryDto>.Create(items, totalCount, page, pageSize);
@@ -278,10 +281,4 @@ public class TaskApplicationService : ITaskApplicationService
         }
     }
 
-    private IReadOnlyCollection<string> GetSupportedTaskTypes()
-    {
-        return WorkflowConstants.SupportedTaskTypes
-            .OrderBy(type => type, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
 }
