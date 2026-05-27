@@ -1,6 +1,13 @@
 using DanTaskManager.Application.Tasks.ChangeTaskStatus;
+using DanTaskManager.Application.Tasks.CloseTask;
 using DanTaskManager.Application.Tasks.CreateTask;
+using DanTaskManager.Application.Tasks.DeleteTask;
+using DanTaskManager.Application.Tasks.GetAllTasks;
 using DanTaskManager.Application.Tasks.GetTaskById;
+using DanTaskManager.Application.Tasks.GetTasksByType;
+using DanTaskManager.Application.Tasks.GetTasksByUser;
+using DanTaskManager.Application.Tasks.UpdateTaskDescription;
+using DanTaskManager.Application.Tasks.UserExists;
 using DanTaskManager.Domain;
 using DanTaskManager.Services;
 using FluentValidation;
@@ -17,7 +24,6 @@ namespace DanTaskManager.Controllers;
 [Route("api/[controller]")]
 public class TasksController : ControllerBase
 {
-    private readonly ITaskApplicationService _taskService;
     private readonly IValidator<CreateTaskRequest> _createTaskValidator;
     private readonly IValidator<ChangeStatusWorkflowRequest> _changeStatusValidator;
     private readonly IValidator<CloseTaskRequest> _closeTaskValidator;
@@ -25,14 +31,12 @@ public class TasksController : ControllerBase
     private readonly ILogger<TasksController> _logger;
 
     public TasksController(
-        ITaskApplicationService taskService,
         IValidator<CreateTaskRequest> createTaskValidator,
         IValidator<ChangeStatusWorkflowRequest> changeStatusValidator,
         IValidator<CloseTaskRequest> closeTaskValidator,
         IMediator mediator,
         ILogger<TasksController> logger)
     {
-        _taskService = taskService;
         _createTaskValidator = createTaskValidator;
         _changeStatusValidator = changeStatusValidator;
         _closeTaskValidator = closeTaskValidator;
@@ -47,8 +51,8 @@ public class TasksController : ControllerBase
     public async Task<ActionResult<PagedResult<TaskSummaryDto>>> GetTasks(
         [FromQuery] PaginationQuery pagination)
     {
-        var tasks = await _taskService.GetAllAsync(
-            pagination.ToPageRequest(),
+        var tasks = await _mediator.Send(
+            new GetAllTasksQuery(pagination.ToPageRequest()),
             HttpContext.RequestAborted);
         return Ok(tasks);
     }
@@ -76,9 +80,8 @@ public class TasksController : ControllerBase
         string taskType,
         [FromQuery] PaginationQuery pagination)
     {
-        var tasks = await _taskService.GetByTypeAsync(
-            taskType,
-            pagination.ToPageRequest(),
+        var tasks = await _mediator.Send(
+            new GetTasksByTypeQuery(taskType, pagination.ToPageRequest()),
             HttpContext.RequestAborted);
 
         return Ok(tasks);
@@ -92,15 +95,14 @@ public class TasksController : ControllerBase
         int userId,
         [FromQuery] PaginationQuery pagination)
     {
-        var userExists = await _taskService.UserExistsAsync(userId, HttpContext.RequestAborted);
+        var userExists = await _mediator.Send(new UserExistsQuery(userId), HttpContext.RequestAborted);
         if (!userExists)
         {
             return NotFound("משתמש לא קיים");
         }
 
-        var tasks = await _taskService.GetByUserAsync(
-            userId,
-            pagination.ToPageRequest(),
+        var tasks = await _mediator.Send(
+            new GetTasksByUserQuery(userId, pagination.ToPageRequest()),
             HttpContext.RequestAborted);
         return Ok(tasks);
     }
@@ -206,7 +208,9 @@ public class TasksController : ControllerBase
             return BadRequest(new { error = BuildValidationErrorMessage(validation.Errors.Select(e => e.ErrorMessage)) });
         }
 
-        var result = await _taskService.CloseAsync(id, request.FinalNotes, HttpContext.RequestAborted);
+        var result = await _mediator.Send(
+            new CloseTaskCommand(id, request.FinalNotes),
+            HttpContext.RequestAborted);
 
         if (!result.Success)
         {
@@ -218,7 +222,7 @@ public class TasksController : ControllerBase
             id,
             request.FinalNotes);
 
-        var updatedTask = await _taskService.GetByIdAsync(id, HttpContext.RequestAborted);
+        var updatedTask = await _mediator.Send(new GetTaskByIdQuery(id), HttpContext.RequestAborted);
 
         return Ok(new
         {
@@ -234,13 +238,12 @@ public class TasksController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateTask(int id, UpdateTaskRequest request)
     {
-        var updated = await _taskService.UpdateDescriptionAsync(
-            id,
-            request.Description,
+        var updated = await _mediator.Send(
+            new UpdateTaskDescriptionCommand(id, request.Description),
             HttpContext.RequestAborted);
         if (!updated)
         {
-            var task = await _taskService.GetByIdAsync(id, HttpContext.RequestAborted);
+            var task = await _mediator.Send(new GetTaskByIdQuery(id), HttpContext.RequestAborted);
             if (task == null)
             {
                 return NotFound();
@@ -258,10 +261,10 @@ public class TasksController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteTask(int id)
     {
-        var deleted = await _taskService.DeleteAsync(id, HttpContext.RequestAborted);
+        var deleted = await _mediator.Send(new DeleteTaskCommand(id), HttpContext.RequestAborted);
         if (!deleted)
         {
-            var task = await _taskService.GetByIdAsync(id, HttpContext.RequestAborted);
+            var task = await _mediator.Send(new GetTaskByIdQuery(id), HttpContext.RequestAborted);
             if (task == null)
             {
                 return NotFound();
