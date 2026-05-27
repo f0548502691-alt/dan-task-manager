@@ -8,18 +8,30 @@ code — either declaratively via metadata rows, or by implementing a single
 
 ## Quick start
 
-The connection string is no longer hard-coded in `appsettings.json`. Pick one of
-three options to supply it:
+### Full stack with Docker Compose
+
+`docker-compose.yml` starts the Angular frontend, .NET backend, and SQL Server
+database together. From the repository root:
 
 ```bash
-# Option A — Docker (uses .env at the repo root)
-cp .env.example .env   # then edit DB_* values
-docker compose up -d
+cp .env.example .env   # then set a strong DB_PASSWORD
+docker compose up --build
+```
 
-# Option B — environment variable (local dotnet run)
+Open the frontend at http://localhost:4200. The Angular dev server proxies `/api`
+requests to the backend service at `http://backend:8080`; Swagger is available at
+http://localhost:8080/swagger when `ASPNETCORE_ENVIRONMENT=Development`.
+
+### Backend-only local development
+
+The connection string is not hard-coded in `appsettings.json`. Supply it with one of
+these options before running the API locally:
+
+```bash
+# Option A — environment variable
 export ConnectionStrings__DefaultConnection="Server=.;Database=DanTaskManager;Trusted_Connection=true;Encrypt=false;TrustServerCertificate=true;"
 
-# Option C — appsettings.Development.json (gitignored)
+# Option B — appsettings.Development.json (gitignored)
 #   { "ConnectionStrings": { "DefaultConnection": "..." } }
 ```
 
@@ -100,6 +112,7 @@ Full walkthrough: `docs/EXTENSION_GUIDE.md`.
 
 ## Documentation
 
+- `../frontend/README.md` — Angular app and Dockerized frontend runtime
 - `docs/WORKFLOW.md` — workflow rules and per-type providers
 - `docs/EXTENSION_GUIDE.md` — adding new task types and validation rules
 - `docs/API_ERROR_CODES.md` — error-code catalog returned by the API

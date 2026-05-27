@@ -1,160 +1,88 @@
-# 🚀 מדריך התחלה מהיר - DanTaskManager
+# Quickstart
 
-## ✅ מה נוצר
+Use this guide to run DanTaskManager locally and verify that the frontend, backend,
+and database are wired together correctly.
 
-### 📦 מחלקות Domain
-- [Domain/AppUser.cs](Domain/AppUser.cs) - מחלקת המשתמש עם ID, Name, Email
-- [Domain/BaseTask.cs](Domain/BaseTask.cs) - מחלקת המשימה עם CustomDataJson
+## Option A: full stack with Docker Compose
 
-### 💾 DbContext  
-- [Data/ApplicationDbContext.cs](Data/ApplicationDbContext.cs) - EF Core context עם:
-  - הגדרת JSON columns ל-CustomDataJson
-  - Seed data של 3 משתמשים
-  - 3 משימות לדוגמה
-  - Relationships וindexes
+From the repository root:
 
-### 🔧 קונפיגורציה
-- [DanTaskManager.csproj](DanTaskManager.csproj) - .NET 8 עם NuGet packages
-- [Program.cs](Program.cs) - Dependency Injection ו-DbContext registration
-- [appsettings.json](appsettings.json) - Connection string לSQL Server
-
-### 🎮 Controllers (Bonus)
-- [Controllers/TasksController.cs](Controllers/TasksController.cs) - REST API for Tasks
-- [Controllers/UsersController.cs](Controllers/UsersController.cs) - REST API for Users
-
-### 📚 דוקומנטציה
-- [README.md](README.md) - תיעוד מלא בעברית
-
----
-
-## 🏃 שלבי התחלה
-
-### 1️⃣ התקנת Packages
-```bash
-dotnet restore
-```
-
-### 2️⃣ הגדרת בסיס הנתונים
-
-**אפשרות א' - Docker (מומלץ):**
 ```bash
 cp .env.example .env
-# ערוך את .env עם הסיסמה שלך
-docker compose up -d
+# Edit .env and set a strong DB_PASSWORD.
+docker compose up --build
 ```
 
-**אפשרות ב' - פיתוח מקומי:**
+Compose starts:
 
-הגדר משתנה סביבה עם מחרוזת החיבור:
+| Service | Source | Host URL/port | Notes |
+|---------|--------|---------------|-------|
+| `frontend` | `frontend/Dockerfile` | http://localhost:4200 | Angular dev server running `npm run start:docker`. |
+| `backend` | `backend/Dockerfile` | http://localhost:8080 | .NET API; Swagger is enabled in Development. |
+| `db` | SQL Server 2022 image | `localhost:${DB_PORT:-1433}` | Data is stored in the `sqlserver-data` volume. |
+
+The frontend uses relative `/api` calls. In Docker, `frontend/proxy.docker.conf.json`
+routes those calls to `http://backend:8080`, where `backend` is the Compose service
+name.
+
+## Option B: backend and frontend on the host
+
+Start SQL Server yourself, or use only the Compose database service. Then configure the
+backend connection string with either an environment variable:
+
 ```bash
-export ConnectionStrings__DefaultConnection="Server=YOUR_SERVER;Database=DanTaskManager;Trusted_Connection=true;Encrypt=false;TrustServerCertificate=true;"
+export ConnectionStrings__DefaultConnection="Server=localhost,1433;Database=DanTaskManager;User Id=sa;Password=YOUR_PASSWORD;Encrypt=False;TrustServerCertificate=True;"
 ```
 
-או צור קובץ `appsettings.Development.json`:
+or a gitignored `backend/appsettings.Development.json`:
+
 ```json
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Server=YOUR_SERVER;Database=DanTaskManager;Trusted_Connection=true;Encrypt=false;TrustServerCertificate=true;"
+    "DefaultConnection": "Server=localhost,1433;Database=DanTaskManager;User Id=sa;Password=YOUR_PASSWORD;Encrypt=False;TrustServerCertificate=True;"
   }
 }
 ```
 
-### 3️⃣ יצירת Migration
-```bash
-dotnet ef migrations add InitialCreate
-```
+Run the API:
 
-### 4️⃣ עדכון בסיס הנתונים (Create DB)
 ```bash
-dotnet ef database update
-```
-
-### 5️⃣ הרצת האפליקציה
-```bash
+cd backend
+dotnet restore
 dotnet run
 ```
 
----
+In another terminal, run the frontend:
 
-## 📋 מבנה הפרויקט
-
-```
-dan-task-manager/
-├── Domain/
-│   ├── AppUser.cs           # מחלקה: משתמש
-│   └── BaseTask.cs          # מחלקה: משימה עם CustomDataJson
-├── Data/
-│   └── ApplicationDbContext.cs # DbContext עם Seed data
-├── Controllers/
-│   ├── TasksController.cs   # API endpoints for tasks
-│   └── UsersController.cs   # API endpoints for users
-├── DanTaskManager.csproj    # .NET 8 project file
-├── Program.cs               # DI Configuration
-├── appsettings.json         # Connection strings
-└── README.md                # תיעוד מלא
+```bash
+cd frontend
+npm ci
+npm start
 ```
 
----
+`npm start` uses `frontend/proxy.conf.json`, which targets `http://localhost:8080`.
 
-## 🎯 עכשיו אתה יכול:
+## Smoke checks
 
-✅ **שאילתות בסיסיות:**
-```csharp
-// קבלת כל המשתמשים
-var users = await context.Users.ToListAsync();
+- Frontend: open http://localhost:4200 and load a seeded user ID.
+- API metadata: `GET http://localhost:8080/api/task-types`
+- Swagger: http://localhost:8080/swagger when the backend environment is Development.
+- Created tasks start at status `1`; closed tasks use status `99`.
 
-// קבלת משימה לפי ID
-var task = await context.Tasks.FindAsync(1);
+## Troubleshooting
 
-// קבלת משימות בסטטוס "בתהליך"
-var inProgress = await context.Tasks
-    .Where(t => t.CurrentStatus == 1)
-    .ToListAsync();
-```
+| Symptom | Check |
+|---------|-------|
+| Compose fails with `DB_PASSWORD` missing | Copy `.env.example` to `.env` and set `DB_PASSWORD`, or export it in the shell. |
+| SQL Server exits during startup | Use a strong SA password that satisfies the SQL Server image requirements. |
+| Frontend loads but API calls fail in Docker | Keep `proxy.docker.conf.json` pointed at `http://backend:8080`; `localhost` inside the container is not the backend. |
+| Frontend cannot be reached on `localhost:4200` | `start:docker` must keep `--host 0.0.0.0` so Docker can publish the dev server port. |
+| First browser load shows transient API errors | `depends_on` orders containers but does not wait for the API and database to be ready. Wait for backend startup to finish and refresh. |
+| Frontend file changes are missing in Compose | The Docker image copies source during build and does not mount a live volume. Rebuild the frontend service or use local `npm start`. |
 
-✅ **עבודה עם CustomDataJson:**
-```csharp
-var customData = new { priority = "high", deadline = "2026-06-15" };
-task.CustomDataJson = JsonSerializer.Serialize(customData);
-```
+## Related docs
 
-✅ **REST API Endpoints:**
-- `GET /api/tasks` - קבלת כל המשימות
-- `POST /api/tasks` - יצירת משימה חדשה
-- `PUT /api/tasks/{id}` - עדכון משימה
-- `DELETE /api/tasks/{id}` - מחיקת משימה
-- `GET /api/users/{id}/tasks` - משימות של משתמש
-
----
-
-## 📝 הערות חשובות
-
-1. **SQL Server Connection**: הגדר את מחרוזת החיבור דרך משתנה סביבה `ConnectionStrings__DefaultConnection`, קובץ `.env` (ל-Docker), או קובץ `appsettings.Development.json` (לפיתוח מקומי)
-
-2. **CustomDataJson**: 
-   - מאוחסן כ-`nvarchar(max)` בבסיס הנתונים
-   - ברירת מחדל: `"{}"`
-   - ניתן להכניס כל JSON שהוא
-
-3. **Status Values**:
-   - `0` = לא התחילה
-   - `1` = בתהליך
-   - `2` = הושלמה
-   - `3` = ביוטלה
-
-4. **Seed Data**: 
-   - 3 משתמשים נטועים באופן אוטומטי
-   - 3 משימות לדוגמה
-   - רץ בעת `database update`
-
----
-
-## 🔗 לקריאה נוספת
-
-- [Entity Framework Core 8 Documentation](https://learn.microsoft.com/en-us/ef/core/)
-- [JSON columns in EF Core](https://learn.microsoft.com/en-us/ef/core/modeling/value-conversions#json-columns)
-- [SQL Server and JSON](https://learn.microsoft.com/en-us/sql/relational-databases/json/json-data-sql-server)
-
----
-
-**Enjoy! 🎉**
+- `../../frontend/README.md` - Angular runtime, Docker proxy behavior, and common frontend pitfalls.
+- `WORKFLOW.md` - workflow rules and status-transition constraints.
+- `EXTENSION_GUIDE.md` - adding metadata-backed or code-backed task types.
+- `API_ERROR_CODES.md` - API error response catalog.
