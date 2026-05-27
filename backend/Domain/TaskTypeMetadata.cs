@@ -1,7 +1,9 @@
 namespace DanTaskManager.Domain;
 
 /// <summary>
-/// Metadata של סוג משימה כולל חוקיות כללית.
+/// Metadata describing a task type and the rules common to every task of that
+/// type. The metadata-driven rule provider reads these rows to validate tasks
+/// without requiring any C# changes when a new type is added.
 /// </summary>
 public class TaskTypeMetadata
 {
@@ -18,7 +20,9 @@ public class TaskTypeMetadata
 }
 
 /// <summary>
-/// חוקיות של שדה מותאם אישית עבור סוג משימה.
+/// Validation rule for a single field inside <see cref="BaseTask.CustomDataJson"/>
+/// for a given task type. The same row can scope to a status range via
+/// <see cref="AppliesFromStatus"/> and <see cref="AppliesToStatus"/>.
 /// </summary>
 public class TaskFieldDefinition
 {

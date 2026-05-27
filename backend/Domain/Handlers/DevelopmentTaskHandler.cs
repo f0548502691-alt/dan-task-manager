@@ -3,11 +3,10 @@ using System.Text.Json;
 namespace DanTaskManager.Domain.Handlers;
 
 /// <summary>
-/// מטפל משימות Development
-/// סטטוס סופי: 4
-/// סטטוס 2: דורש טקסט אפיון (specification)
-/// סטטוס 3: דורש שם בראנץ' (branch name)
-/// סטטוס 4: דורש מספר גרסה (version number)
+/// Development task handler. Final status = 4.
+/// Status 2 requires <c>specification</c>: string of at least 10 characters.
+/// Status 3 requires <c>branchName</c>: valid Git branch name.
+/// Status 4 requires <c>versionNumber</c>: string or number in SemVer format.
 /// </summary>
 public class DevelopmentTaskHandler : StatusValidationTaskHandlerBase
 {
@@ -25,9 +24,6 @@ public class DevelopmentTaskHandler : StatusValidationTaskHandlerBase
 
     public override int FinalStatus => 4;
 
-    /// <summary>
-    /// וולידציה לסטטוס 2: בדיקת טקסט אפיון
-    /// </summary>
     private static ValidationResult ValidateStatusTwo(string newDataJson)
     {
         try
@@ -35,14 +31,12 @@ public class DevelopmentTaskHandler : StatusValidationTaskHandlerBase
             using var jsonDoc = JsonDocument.Parse(newDataJson);
             var root = jsonDoc.RootElement;
 
-            // בדיקת קיום שדה "specification"
             if (!root.TryGetProperty("specification", out var specElement))
             {
                 return ValidationResult.Failure(
                     "Status 2 requires a 'specification' field containing specification text");
             }
 
-            // בדיקה שזהו מחרוזת
             if (specElement.ValueKind != JsonValueKind.String)
             {
                 return ValidationResult.Failure("'specification' must be a string");
@@ -63,9 +57,6 @@ public class DevelopmentTaskHandler : StatusValidationTaskHandlerBase
         }
     }
 
-    /// <summary>
-    /// וולידציה לסטטוס 3: בדיקת שם בראנץ'
-    /// </summary>
     private static ValidationResult ValidateStatusThree(string newDataJson)
     {
         try
@@ -73,14 +64,12 @@ public class DevelopmentTaskHandler : StatusValidationTaskHandlerBase
             using var jsonDoc = JsonDocument.Parse(newDataJson);
             var root = jsonDoc.RootElement;
 
-            // בדיקת קיום שדה "branchName"
             if (!root.TryGetProperty("branchName", out var branchElement))
             {
                 return ValidationResult.Failure(
                     "Status 3 requires a 'branchName' field containing a branch name");
             }
 
-            // בדיקה שזהו מחרוזת
             if (branchElement.ValueKind != JsonValueKind.String)
             {
                 return ValidationResult.Failure("'branchName' must be a string");
@@ -92,7 +81,6 @@ public class DevelopmentTaskHandler : StatusValidationTaskHandlerBase
                 return ValidationResult.Failure("'branchName' cannot be empty");
             }
 
-            // בדיקה בסיסית של כללי Git branch names
             if (branchName.Contains("//") || branchName.EndsWith("/") || 
                 branchName.EndsWith(".") || branchName.Contains(" "))
             {
@@ -108,9 +96,6 @@ public class DevelopmentTaskHandler : StatusValidationTaskHandlerBase
         }
     }
 
-    /// <summary>
-    /// וולידציה לסטטוס 4: בדיקת מספר גרסה
-    /// </summary>
     private static ValidationResult ValidateStatusFour(string newDataJson)
     {
         try
@@ -118,14 +103,12 @@ public class DevelopmentTaskHandler : StatusValidationTaskHandlerBase
             using var jsonDoc = JsonDocument.Parse(newDataJson);
             var root = jsonDoc.RootElement;
 
-            // בדיקת קיום שדה "versionNumber"
             if (!root.TryGetProperty("versionNumber", out var versionElement))
             {
                 return ValidationResult.Failure(
                     "Status 4 requires a 'versionNumber' field containing a version number");
             }
 
-            // בדיקה שזהו מחרוזת או מספר
             string versionString;
             if (versionElement.ValueKind == JsonValueKind.String)
             {
@@ -146,7 +129,6 @@ public class DevelopmentTaskHandler : StatusValidationTaskHandlerBase
                 return ValidationResult.Failure("'versionNumber' cannot be empty");
             }
 
-            // בדיקה שהוא בפורמט Semantic Versioning (אופציונלי - דוגמה: 1.0.0)
             var parts = versionString.Split('.');
             if (parts.Length >= 2)
             {

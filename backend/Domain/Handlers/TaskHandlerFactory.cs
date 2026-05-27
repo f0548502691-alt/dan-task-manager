@@ -1,8 +1,11 @@
 namespace DanTaskManager.Domain.Handlers;
 
 /// <summary>
-/// Factory ל-Task Handlers
-/// מזריק את כל המימושים ומחזיר את ה-Handler המתאים לפי סוג המשימה
+/// DI-facing lookup that maps a task-type code to its registered
+/// <see cref="ITaskHandler"/>. Backed by a case-insensitive dictionary built
+/// once at construction; <see cref="System.Collections.Generic.Dictionary{TKey,TValue}"/>
+/// throws on duplicate keys, so two handlers claiming the same task type
+/// would fail at DI resolution.
 /// </summary>
 public class TaskHandlerFactory
 {
@@ -10,7 +13,6 @@ public class TaskHandlerFactory
 
     public TaskHandlerFactory(IEnumerable<ITaskHandler> handlers)
     {
-        // בנייה של מפת handlers לפי TaskType
         _handlersMap = handlers.ToDictionary(
             h => h.TaskType,
             h => h,
@@ -18,10 +20,9 @@ public class TaskHandlerFactory
     }
 
     /// <summary>
-    /// קבלת Handler מתאים לפי סוג המשימה
+    /// Resolve the handler for <paramref name="taskType"/>, or <c>null</c>
+    /// if no handler is registered for that type.
     /// </summary>
-    /// <param name="taskType">סוג המשימה</param>
-    /// <returns>Handler המתאים, או null אם לא קיים</returns>
     public ITaskHandler? GetHandler(string taskType)
     {
         if (string.IsNullOrWhiteSpace(taskType))
@@ -31,18 +32,12 @@ public class TaskHandlerFactory
         return handler;
     }
 
-    /// <summary>
-    /// בדיקה האם יש Handler עבור סוג משימה מסוים
-    /// </summary>
     public bool HasHandler(string taskType)
     {
         return !string.IsNullOrWhiteSpace(taskType) &&
                _handlersMap.ContainsKey(taskType);
     }
 
-    /// <summary>
-    /// קבלת רשימה של כל סוגי ה-Handlers הרשומים
-    /// </summary>
     public IEnumerable<string> GetRegisteredTaskTypes()
     {
         return _handlersMap.Keys;

@@ -3,10 +3,9 @@ using System.Text.Json;
 namespace DanTaskManager.Domain.Handlers;
 
 /// <summary>
-/// מטפל משימות Testing
-/// סטטוס סופי: 3
-/// סטטוס 2: דורש testCases גדול מ-0
-/// סטטוס 3: דורש coverage באחוזים ו-summary
+/// Testing task handler. Final status = 3.
+/// Status 2 requires <c>testCases</c>: integer greater than 0.
+/// Status 3 requires <c>coverage</c> as percentage string and a non-empty <c>summary</c>.
 /// </summary>
 public class TestingTaskHandler : IRegisterableTaskHandler
 {

@@ -21,46 +21,50 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(connectionString)
 );
 
-// ✅ הרשמה אוטומטית של כל Task Handler שקיים באסמבלי
+// Discover every IRegisterableTaskHandler in the assembly by reflection.
+// Adding a code-backed task type does not require touching this file.
 builder.Services.AddTaskHandlersFromAssembly(typeof(Program).Assembly);
 
-// ✅ הרשמה של TaskHandlerFactory
 builder.Services.AddScoped<TaskHandlerFactory>();
 builder.Services.AddScoped<ITaskTypeCatalog, TaskTypeCatalogService>();
 
-// ✅ cache לחוקיות מסוגי משימות
 builder.Services.AddMemoryCache();
 
-// ✅ הרשמת שירות metadata + ולידציה מבוססי DB
 builder.Services.AddScoped<TaskTypeValidationService>();
 builder.Services.AddScoped<ITaskTypeValidationService>(sp => sp.GetRequiredService<TaskTypeValidationService>());
 builder.Services.AddScoped<ITaskTypeMetadataService>(sp => sp.GetRequiredService<TaskTypeValidationService>());
 
-// ✅ הרשמה של Task Workflow Service
 builder.Services.AddScoped<ITaskWorkflowRuleProvider, MetadataTaskWorkflowRuleProvider>();
 builder.Services.AddScoped<ITaskWorkflowRuleProvider, HandlerTaskWorkflowRuleProvider>();
 builder.Services.AddScoped<ITaskWorkflowService, TaskWorkflowService>();
 
-// ✅ הרשמה של FluentValidation validators
+// Startup diagnostic that detects task-type codes claimed by multiple rule providers.
+builder.Services.Configure<TaskTypeConflictValidatorOptions>(
+    builder.Configuration.GetSection(TaskTypeConflictValidatorOptions.SectionName));
+builder.Services.AddHostedService<TaskTypeConflictValidator>();
+
+// Materialize SQL Server computed columns + indexes for fields marked IsIndexed = true.
+// No-op on the InMemory provider used in tests.
+builder.Services.AddHostedService<JsonIndexBootstrapper>();
+
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
-// ✅ הרשמה של Application Services
 builder.Services.AddScoped<ITaskApplicationService, TaskApplicationService>();
 builder.Services.AddScoped<IUserApplicationService, UserApplicationService>();
 
-// ✅ הרשמה של MediatR (מיגרציה הדרגתית ל-commands/queries)
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));
 
-// הוספת Swagger/OpenAPI (אופציונלי)
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// הוספת Controllers (אופציונלי)
 builder.Services.AddControllers();
 
 var app = builder.Build();
 
-// ✅ יצירת הטבלאות אם לא קיימות (Migration אוטומטי)
+// Single source of truth for the schema is the EF model in ApplicationDbContext.
+// In development we materialize it via EnsureCreated; in production deployments
+// migrations should be applied out-of-band before the app starts. If migrations
+// are added to the project later, they take precedence here.
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -72,8 +76,6 @@ using (var scope = app.Services.CreateScope())
     {
         dbContext.Database.EnsureCreated();
     }
-
-    HybridSchemaBootstrapper.EnsureSchema(dbContext);
 }
 
 // Configure the HTTP request pipeline.

@@ -10,7 +10,7 @@ using Xunit;
 namespace DanTaskManager.Tests;
 
 /// <summary>
-/// בדיקות יחידתיות עבור TaskWorkflowService
+/// Unit tests for <see cref="TaskWorkflowService"/>.
 /// </summary>
 public class TaskWorkflowServiceTests : IAsyncLifetime
 {

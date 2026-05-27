@@ -20,18 +20,14 @@ public class TaskTypesController : ControllerBase
         _taskTypeCatalog = taskTypeCatalog;
     }
 
-    /// <summary>
-    /// קבלת כל הסכמות של סוגי המשימות.
-    /// </summary>
+    /// <summary>Return every active task-type schema, merged from metadata and code-backed sources.</summary>
     [HttpGet]
     public ActionResult<IReadOnlyCollection<TaskTypeSchemaDto>> GetTaskTypes()
     {
         return Ok(GetMergedTaskTypeSchemas());
     }
 
-    /// <summary>
-    /// קבלת סכימה מלאה לסוג משימה בודד.
-    /// </summary>
+    /// <summary>Return the full schema for a single task type.</summary>
     [HttpGet("{taskType}")]
     public ActionResult<TaskTypeSchemaDto> GetTaskTypeSchema(string taskType)
     {
@@ -56,9 +52,7 @@ public class TaskTypesController : ControllerBase
         return GetTaskTypeSchema(taskType);
     }
 
-    /// <summary>
-    /// יצירה/עדכון של metadata עבור סוג משימה.
-    /// </summary>
+    /// <summary>Create or update task-type metadata.</summary>
     [HttpPost]
     public ActionResult<TaskTypeSchemaDto> UpsertTaskType(UpsertTaskTypeRequest request)
     {
@@ -114,9 +108,7 @@ public class TaskTypesController : ControllerBase
         };
     }
 
-    /// <summary>
-    /// יצירה/עדכון חוקיות של שדה מותאם אישית לסוג משימה.
-    /// </summary>
+    /// <summary>Create or update a single field-validation rule for a task type.</summary>
     [HttpPost("{taskType}/fields")]
     public ActionResult<TaskTypeSchemaDto> UpsertTaskTypeField(
         string taskType,
@@ -124,7 +116,7 @@ public class TaskTypesController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(request.Field))
         {
-            throw new ApiValidationException("Field נדרש");
+            throw new ApiValidationException("Field is required");
         }
 
         var result = _metadataService.UpsertFieldDefinition(taskType, new UpsertFieldDefinitionCommand
@@ -155,9 +147,7 @@ public class TaskTypesController : ControllerBase
         return Ok(result.TaskType);
     }
 
-    /// <summary>
-    /// יצירה/עדכון חוקיות שדה לפי מזהה שדה בנתיב.
-    /// </summary>
+    /// <summary>Same as <see cref="UpsertTaskTypeField"/> but with the field key supplied in the URL.</summary>
     [HttpPut("{taskType}/fields/{field}")]
     public ActionResult<TaskTypeSchemaDto> PutTaskTypeField(
         string taskType,

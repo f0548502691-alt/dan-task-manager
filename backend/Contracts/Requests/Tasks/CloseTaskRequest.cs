@@ -1,17 +1,11 @@
 namespace DanTaskManager.Contracts.Requests.Tasks;
 
-/// <summary>
-/// בקשה לסגירת משימה
-/// </summary>
+/// <summary>Request body for <c>POST /api/tasks/{id}/close</c>.</summary>
 public class CloseTaskRequest
 {
-    /// <summary>
-    /// המשתמש שאליו המשימה תוקצה בעת הסגירה
-    /// </summary>
+    /// <summary>Assignee for the task once it is closed.</summary>
     public int NextAssignedToUserId { get; set; }
 
-    /// <summary>
-    /// הערות סופיות על המשימה
-    /// </summary>
+    /// <summary>Final notes; persisted to the task's <c>CustomDataJson.finalNotes</c>.</summary>
     public string FinalNotes { get; set; } = string.Empty;
 }

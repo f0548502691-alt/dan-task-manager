@@ -1,13 +1,14 @@
 namespace DanTaskManager.Domain;
 
 /// <summary>
-/// חריגה עסקית עבור כשל וולידציה ב-Workflow.
-/// מטופלת ברמת middleware וממופה ל-400 Bad Request.
+/// Business-rule failure raised by the workflow service. Caught by the global
+/// exception middleware and serialized as a 400 response with the stable
+/// <c>code</c> field preserved from the originating <see cref="WorkflowResult"/>.
 /// </summary>
 public class WorkflowValidationException : ApiValidationException
 {
-    public WorkflowValidationException(string message)
-        : base(message, "workflow_validation_failed")
+    public WorkflowValidationException(string message, string code = "workflow_validation_failed")
+        : base(message, string.IsNullOrWhiteSpace(code) ? "workflow_validation_failed" : code)
     {
     }
 }

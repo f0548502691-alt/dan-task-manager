@@ -4,14 +4,12 @@ using Xunit;
 
 namespace DanTaskManager.Tests;
 
-/// <summary>
-/// בדיקות יחידתיות עבור ProcurementTaskHandler
-/// </summary>
+/// <summary>Unit tests for <see cref="ProcurementTaskHandler"/>.</summary>
 public class ProcurementTaskHandlerTests
 {
     private readonly ProcurementTaskHandler _handler = new();
 
-    // === בדיקות סטטוס 2 ===
+    // Status 2 transitions
 
     [Fact]
     public void ValidateStatus2_WithValidPrices_ShouldPass()
@@ -69,7 +67,7 @@ public class ProcurementTaskHandlerTests
         Assert.Contains("empty", result.Message);
     }
 
-    // === בדיקות סטטוס 3 ===
+    // Status 3 transitions
 
     [Fact]
     public void ValidateStatus3_WithValidReceipt_ShouldPass()
@@ -114,7 +112,7 @@ public class ProcurementTaskHandlerTests
         Assert.False(result.IsValid);
     }
 
-    // === בדיקות סטטוס סופי ===
+    // Final-status guard tests
 
     [Fact]
     public void ValidateStatus_AtFinalStatus_ShouldFail()
@@ -145,14 +143,12 @@ public class ProcurementTaskHandlerTests
     }
 }
 
-/// <summary>
-/// בדיקות יחידתיות עבור DevelopmentTaskHandler
-/// </summary>
+/// <summary>Unit tests for <see cref="DevelopmentTaskHandler"/>.</summary>
 public class DevelopmentTaskHandlerTests
 {
     private readonly DevelopmentTaskHandler _handler = new();
 
-    // === בדיקות סטטוס 2 ===
+    // Status 2 transitions
 
     [Fact]
     public void ValidateStatus2_WithValidSpecification_ShouldPass()
@@ -197,7 +193,7 @@ public class DevelopmentTaskHandlerTests
         Assert.False(result.IsValid);
     }
 
-    // === בדיקות סטטוס 3 ===
+    // Status 3 transitions
 
     [Fact]
     public void ValidateStatus3_WithValidBranchName_ShouldPass()
@@ -241,7 +237,7 @@ public class DevelopmentTaskHandlerTests
         Assert.False(result.IsValid);
     }
 
-    // === בדיקות סטטוס 4 ===
+    // Status 4 transitions
 
     [Fact]
     public void ValidateStatus4_WithValidVersionSemVer_ShouldPass()
@@ -289,7 +285,7 @@ public class DevelopmentTaskHandlerTests
         Assert.False(result.IsValid);
     }
 
-    // === בדיקות סטטוס סופי ===
+    // Final-status guard tests
 
     [Fact]
     public void Handler_FinalStatus_ShouldBe4()
@@ -306,9 +302,7 @@ public class DevelopmentTaskHandlerTests
     }
 }
 
-/// <summary>
-/// בדיקות יחידתיות עבור AnalysisTaskHandler
-/// </summary>
+/// <summary>Unit tests for <see cref="AnalysisTaskHandler"/>.</summary>
 public class AnalysisTaskHandlerTests
 {
     private readonly AnalysisTaskHandler _handler = new();
@@ -333,9 +327,7 @@ public class AnalysisTaskHandlerTests
     }
 }
 
-/// <summary>
-/// בדיקות יחידתיות עבור TestingTaskHandler
-/// </summary>
+/// <summary>Unit tests for <see cref="TestingTaskHandler"/>.</summary>
 public class TestingTaskHandlerTests
 {
     private readonly TestingTaskHandler _handler = new();
@@ -377,9 +369,7 @@ public class TestingTaskHandlerTests
     }
 }
 
-/// <summary>
-/// בדיקות יחידתיות עבור TaskHandlerFactory
-/// </summary>
+/// <summary>Unit tests for <see cref="TaskHandlerFactory"/>.</summary>
 public class TaskHandlerFactoryTests
 {
     [Fact]

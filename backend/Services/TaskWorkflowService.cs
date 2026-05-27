@@ -5,13 +5,14 @@ using Microsoft.EntityFrameworkCore;
 namespace DanTaskManager.Services;
 
 /// <summary>
-/// ממשק לשירות ניהול workflow של משימות
+/// Workflow-management contract. Enforces the rules that apply to every task
+/// (forward-by-one, backward-free, no-jump-to-closed, final-status guard,
+/// closed-immutability) and delegates per-type validation to the registered
+/// <see cref="ITaskWorkflowRuleProvider"/> implementations.
 /// </summary>
 public interface ITaskWorkflowService
 {
-    /// <summary>
-    /// שינוי סטטוס של משימה עם כללי workflow
-    /// </summary>
+    /// <summary>Advance or rewind a task's status; rejects when general or per-type rules disallow it.</summary>
     Task<WorkflowResult> ChangeStatusAsync(
         int taskId,
         int newStatus,
@@ -19,55 +20,51 @@ public interface ITaskWorkflowService
         string newDataJson,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// סגירת משימה (סטטוס סופי)
-    /// </summary>
+    /// <summary>Move a task to the closed status (<see cref="WorkflowConstants.ClosedStatus"/>).</summary>
     Task<WorkflowResult> CloseTaskAsync(
         int taskId,
         int nextAssignedToUserId,
         string finalNotes,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// בדיקה האם מותר לבצע שינוי במשימה שאינה שינוי סטטוס
-    /// </summary>
+    /// <summary>Check whether a non-status mutation is allowed on the task (i.e. it isn't closed).</summary>
     Task<WorkflowResult> EnsureTaskMutableAsync(
         int taskId,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// קבלת משימות של משתמש מסוים
-    /// </summary>
     Task<IEnumerable<BaseTask>> GetUserTasksAsync(
         int userId,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// קבלת משימה עם פרטיה מלאים
-    /// </summary>
     Task<BaseTask?> GetTaskAsync(int taskId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
-/// תוצאה של פעולת workflow
+/// Result of a workflow operation. <see cref="Code"/> is a stable string from
+/// <see cref="WorkflowErrorCodes"/> (or empty on success) intended for machine
+/// consumption — frontend conditionals, integration tests, and the public
+/// `code` field of error responses. <see cref="Message"/> is the
+/// human-readable description.
 /// </summary>
 public class WorkflowResult
 {
     public bool Success { get; set; }
     public string Message { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
     public int? NewStatus { get; set; }
     public BaseTask? UpdatedTask { get; set; }
 
     public static WorkflowResult SuccessResult(int newStatus, BaseTask task, string message = "")
         => new() { Success = true, NewStatus = newStatus, UpdatedTask = task, Message = message };
 
-    public static WorkflowResult FailureResult(string message)
-        => new() { Success = false, Message = message };
+    public static WorkflowResult FailureResult(string code, string message)
+        => new() { Success = false, Code = code, Message = message };
 }
 
 /// <summary>
-/// שירות ניהול Workflow של משימות
-/// מנהל את כללי ה-Workflow כולל תנועה אחורה/קדימה ווולידציה
+/// Workflow service implementation. Owns the general status-movement rules
+/// and delegates per-type validation to <see cref="ITaskWorkflowRuleProvider"/>
+/// instances ordered by <see cref="ITaskWorkflowRuleProvider.Priority"/>.
 /// </summary>
 public class TaskWorkflowService : ITaskWorkflowService
 {
@@ -94,17 +91,17 @@ public class TaskWorkflowService : ITaskWorkflowService
         string newDataJson,
         CancellationToken cancellationToken = default)
     {
-        // 1. קבלת המשימה
         var task = await _context.Tasks.FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
         if (task == null)
         {
-            return WorkflowResult.FailureResult("Task does not exist");
+            return WorkflowResult.FailureResult(WorkflowErrorCodes.TaskNotFound, "Task does not exist");
         }
 
-        // 2. בדיקה שהמשימה לא סגורה
         if (task.CurrentStatus == WorkflowConstants.ClosedStatus)
         {
-            return WorkflowResult.FailureResult("Task is closed - status cannot be changed");
+            return WorkflowResult.FailureResult(
+                WorkflowErrorCodes.TaskClosed,
+                "Task is closed - status cannot be changed");
         }
 
         var nextAssigneeExists = await _context.Users
@@ -112,15 +109,18 @@ public class TaskWorkflowService : ITaskWorkflowService
             .AnyAsync(u => u.Id == nextAssignedToUserId, cancellationToken);
         if (!nextAssigneeExists)
         {
-            return WorkflowResult.FailureResult("Next assignee does not exist");
+            return WorkflowResult.FailureResult(
+                WorkflowErrorCodes.AssigneeNotFound,
+                "Next assignee does not exist");
         }
 
         if (!IsValidJsonPayload(newDataJson))
         {
-            return WorkflowResult.FailureResult("customFields must be a valid JSON object");
+            return WorkflowResult.FailureResult(
+                WorkflowErrorCodes.InvalidJsonPayload,
+                "customFields must be a valid JSON object");
         }
 
-        // 3. איתור ספק הכללים עבור סוג המשימה
         var ruleProvider = ResolveRuleProvider(task.TaskType);
         if (ruleProvider == null)
         {
@@ -128,26 +128,27 @@ public class TaskWorkflowService : ITaskWorkflowService
                 "No workflow rule provider found for task type {TaskType} on task {TaskId}",
                 task.TaskType,
                 taskId);
-            return WorkflowResult.FailureResult($"Unsupported task type: {task.TaskType}");
+            return WorkflowResult.FailureResult(
+                WorkflowErrorCodes.UnsupportedTaskType,
+                $"Unsupported task type: {task.TaskType}");
         }
 
         var finalStatus = ruleProvider.GetFinalStatus(task.TaskType);
 
-        // 4. בדיקת כללי תנועה
         var movementValidation = ValidateStatusMovement(task, newStatus, finalStatus);
         if (!movementValidation.IsValid)
         {
-            return WorkflowResult.FailureResult(movementValidation.Message);
+            return WorkflowResult.FailureResult(movementValidation.Code, movementValidation.Message);
         }
 
-        // 5. וולידציה לפי ספק הכללים שנבחר
         var validationResult = ruleProvider.ValidateStatusChange(task, newStatus, newDataJson);
         if (!validationResult.IsValid)
         {
-            return WorkflowResult.FailureResult(validationResult.Message);
+            return WorkflowResult.FailureResult(
+                WorkflowErrorCodes.FieldValidationFailed,
+                validationResult.Message);
         }
 
-        // 6. עדכון המשימה
         var oldStatus = task.CurrentStatus;
         var oldAssignee = task.AssignedToUserId;
         task.CurrentStatus = newStatus;
@@ -180,12 +181,14 @@ public class TaskWorkflowService : ITaskWorkflowService
         var task = await _context.Tasks.FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
         if (task == null)
         {
-            return WorkflowResult.FailureResult("Task does not exist");
+            return WorkflowResult.FailureResult(WorkflowErrorCodes.TaskNotFound, "Task does not exist");
         }
 
         if (task.CurrentStatus == WorkflowConstants.ClosedStatus)
         {
-            return WorkflowResult.FailureResult("Task is already closed");
+            return WorkflowResult.FailureResult(
+                WorkflowErrorCodes.TaskAlreadyClosed,
+                "Task is already closed");
         }
 
         var nextAssigneeExists = await _context.Users
@@ -193,19 +196,24 @@ public class TaskWorkflowService : ITaskWorkflowService
             .AnyAsync(u => u.Id == nextAssignedToUserId, cancellationToken);
         if (!nextAssigneeExists)
         {
-            return WorkflowResult.FailureResult("Next assignee does not exist");
+            return WorkflowResult.FailureResult(
+                WorkflowErrorCodes.AssigneeNotFound,
+                "Next assignee does not exist");
         }
 
         var ruleProvider = ResolveRuleProvider(task.TaskType);
         var finalStatus = ruleProvider?.GetFinalStatus(task.TaskType);
         if (!finalStatus.HasValue)
         {
-            return WorkflowResult.FailureResult($"Unsupported task type: {task.TaskType}");
+            return WorkflowResult.FailureResult(
+                WorkflowErrorCodes.UnsupportedTaskType,
+                $"Unsupported task type: {task.TaskType}");
         }
 
         if (task.CurrentStatus != finalStatus.Value)
         {
             return WorkflowResult.FailureResult(
+                WorkflowErrorCodes.CloseRequiresFinalStatus,
                 $"A {task.TaskType} task can only be closed from final status {finalStatus.Value}");
         }
 
@@ -241,12 +249,14 @@ public class TaskWorkflowService : ITaskWorkflowService
             .FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
         if (task == null)
         {
-            return WorkflowResult.FailureResult("Task does not exist");
+            return WorkflowResult.FailureResult(WorkflowErrorCodes.TaskNotFound, "Task does not exist");
         }
 
         if (task.CurrentStatus == WorkflowConstants.ClosedStatus)
         {
-            return WorkflowResult.FailureResult("Closed task is immutable and cannot be modified");
+            return WorkflowResult.FailureResult(
+                WorkflowErrorCodes.TaskClosed,
+                "Closed task is immutable and cannot be modified");
         }
 
         return WorkflowResult.SuccessResult(task.CurrentStatus, task);
@@ -273,43 +283,44 @@ public class TaskWorkflowService : ITaskWorkflowService
     }
 
     /// <summary>
-    /// וולידציה של כללי תנועה בין סטטוסים
+    /// Enforce the general status-movement rules: no jumps forward, free movement
+    /// backward, no direct moves to <see cref="WorkflowConstants.ClosedStatus"/>,
+    /// no exits past the type's final status, no same-status moves.
     /// </summary>
     private StatusMovementValidation ValidateStatusMovement(BaseTask task, int newStatus, int? finalStatus)
     {
         if (newStatus == WorkflowConstants.ClosedStatus)
         {
-            return new() { IsValid = false, Message = "Task closing is allowed only via CloseTask" };
+            return StatusMovementValidation.Invalid(
+                WorkflowErrorCodes.CloseViaCloseTaskOnly,
+                "Task closing is allowed only via CloseTask");
         }
 
-        // בדיקה בסיסית - הסטטוס חייב להתחיל מ-1
         if (newStatus < WorkflowConstants.CreatedStatus)
         {
-            return new() { IsValid = false, Message = $"Status must be {WorkflowConstants.CreatedStatus} or higher" };
+            return StatusMovementValidation.Invalid(
+                WorkflowErrorCodes.IllegalStatusTransition,
+                $"Status must be {WorkflowConstants.CreatedStatus} or higher");
         }
 
-        // בדיקה - אי אפשר להעבור את הסטטוס הסופי
         if (finalStatus.HasValue && task.CurrentStatus >= finalStatus.Value && newStatus > task.CurrentStatus)
         {
-            return new() { IsValid = false, Message = $"Task already reached final status ({finalStatus.Value})" };
+            return StatusMovementValidation.Invalid(
+                WorkflowErrorCodes.FinalStatusReached,
+                $"Task already reached final status ({finalStatus.Value})");
         }
 
-        // כללי תנועה: קדימה או אחורה?
         if (newStatus > task.CurrentStatus)
         {
-            // תנועה קדימה - חייבת להיות בדיוק +1
             if (newStatus != task.CurrentStatus + 1)
             {
-                return new()
-                {
-                    IsValid = false,
-                    Message = $"Forward movement must be exactly +1 status. Current status: {task.CurrentStatus}, requested: {newStatus}"
-                };
+                return StatusMovementValidation.Invalid(
+                    WorkflowErrorCodes.IllegalStatusTransition,
+                    $"Forward movement must be exactly +1 status. Current status: {task.CurrentStatus}, requested: {newStatus}");
             }
         }
         else if (newStatus < task.CurrentStatus)
         {
-            // תנועה אחורה - מותרת לכל סטטוס נמוך יותר
             _logger.LogInformation(
                 "Backward movement detected for task {TaskId}: {OldStatus} -> {NewStatus}",
                 task.Id,
@@ -318,17 +329,24 @@ public class TaskWorkflowService : ITaskWorkflowService
         }
         else
         {
-            // אותו סטטוס
-            return new() { IsValid = false, Message = "New status is identical to current status" };
+            return StatusMovementValidation.Invalid(
+                WorkflowErrorCodes.SameStatus,
+                "New status is identical to current status");
         }
 
-        return new() { IsValid = true };
+        return StatusMovementValidation.Ok();
     }
 
     private class StatusMovementValidation
     {
-        public bool IsValid { get; set; }
-        public string Message { get; set; } = string.Empty;
+        public bool IsValid { get; private init; }
+        public string Code { get; private init; } = string.Empty;
+        public string Message { get; private init; } = string.Empty;
+
+        public static StatusMovementValidation Ok() => new() { IsValid = true };
+
+        public static StatusMovementValidation Invalid(string code, string message)
+            => new() { IsValid = false, Code = code, Message = message };
     }
 
     private static bool IsValidJsonPayload(string payload)

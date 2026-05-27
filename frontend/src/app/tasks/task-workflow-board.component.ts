@@ -47,6 +47,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
   readonly createInFlight = signal(false);
   readonly submitInFlight = signal(false);
   readonly closeInFlight = signal(false);
+  readonly taskTypeMetadataInFlight = signal(false);
   readonly successMessage = signal<string | null>(null);
   readonly currentSchema = signal<TaskTypeSchemaDto | null>(null);
   readonly hydrationValues = signal<TaskCustomData | null>(null);
@@ -355,9 +356,13 @@ export class TaskWorkflowBoardComponent implements OnInit {
   }
 
   private loadTaskTypeMetadata(): void {
+    this.taskTypeMetadataInFlight.set(true);
     this.taskService
       .getTaskTypes()
-      .pipe(takeUntilDestroyed(this.destroyRef))
+      .pipe(
+        takeUntilDestroyed(this.destroyRef),
+        finalize(() => this.taskTypeMetadataInFlight.set(false))
+      )
       .subscribe({
         next: (taskTypes) => this.setTaskTypeMetadata(taskTypes),
         error: () => this.setTaskTypeMetadata([])

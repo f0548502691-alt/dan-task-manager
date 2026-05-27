@@ -31,6 +31,7 @@ export class TaskService {
   readonly tasks = this._tasks.asReadonly();
   readonly isLoading = this._isLoading.asReadonly();
   readonly schemasByTaskType = this._schemasByTaskType.asReadonly();
+  readonly error = this.appErrorService.error;
 
   getSchema(taskType: string | null | undefined): TaskTypeSchemaDto | undefined {
     if (!taskType) {
@@ -123,6 +124,10 @@ export class TaskService {
               typeof taskType.taskType === 'string' &&
               taskType.taskType.trim().length > 0
           )
+          .map((taskType) => ({
+            ...taskType,
+            fields: Array.isArray(taskType.fields) ? taskType.fields : []
+          }))
           .sort((left, right) =>
             (left.displayName || left.taskType).localeCompare(right.displayName || right.taskType)
           )

@@ -1,55 +1,41 @@
 namespace DanTaskManager.Domain;
 
 /// <summary>
-/// מחלקת בסיס למשימות בתוך המערכת
-/// תומכת במידע משתנה דינאמי דרך CustomDataJson
+/// Base entity for every task in the system. Per-type data lives in
+/// <see cref="CustomDataJson"/>; validation of that JSON is delegated to the
+/// rule provider for the given <see cref="TaskType"/>.
 /// </summary>
 public class BaseTask
 {
-    /// <summary>
-    /// מזהה ייחודי של המשימה
-    /// </summary>
     public int Id { get; set; }
 
     /// <summary>
-    /// סוג המשימה (לדוגמה: "Analysis", "Development", "Testing", וכו')
+    /// Task-type code (for example "Procurement", "Development", "Marketing").
+    /// Matched case-insensitively against the registered rule providers.
     /// </summary>
     public string TaskType { get; set; } = string.Empty;
 
     /// <summary>
-    /// סטטוס המשימה (ערך מספרי: 1,2,3...)
-    /// 99 מייצג משימה סגורה (Closed)
+    /// Current workflow status. Starts at <see cref="WorkflowConstants.CreatedStatus"/>
+    /// and advances by exactly +1 until the task type's final status; closing the
+    /// task moves it to <see cref="WorkflowConstants.ClosedStatus"/> (99).
     /// </summary>
     public int CurrentStatus { get; set; } = WorkflowConstants.CreatedStatus;
 
-    /// <summary>
-    /// מזהה המשתמש שמבצע את המשימה
-    /// </summary>
     public int AssignedToUserId { get; set; }
 
-    /// <summary>
-    /// קשר להקצאת משימה למשתמש
-    /// </summary>
     public AppUser? AssignedToUser { get; set; }
 
-    /// <summary>
-    /// תיאור המשימה
-    /// </summary>
     public string Description { get; set; } = string.Empty;
 
     /// <summary>
-    /// JSON מותאם אישית המכיל נתונים משתנים בהתאם לסוג המשימה
-    /// לדוגמה: {"priority": "high", "deadline": "2026-06-01", "customField": "value"}
+    /// Type-specific data as a JSON object. The schema is enforced by the rule
+    /// provider for <see cref="TaskType"/>, not by the C# type system, so new
+    /// task types can be added without changing this entity.
     /// </summary>
     public string CustomDataJson { get; set; } = "{}";
 
-    /// <summary>
-    /// תאריך יצירת המשימה
-    /// </summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    /// <summary>
-    /// תאריך עדכון אחרון
-    /// </summary>
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
