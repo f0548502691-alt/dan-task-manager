@@ -44,6 +44,16 @@ Each provider answers four questions per task type:
 - `string BuildCloseData(BaseTask task, string finalNotes)`
 - `IReadOnlyCollection<string> GetKnownTaskTypes()` &nbsp;_(used by the startup conflict validator)_
 
+## JSON-field indexing
+
+Fields in `TaskFieldDefinition` carry an `IsIndexed` flag. On SQL Server the
+`JsonIndexBootstrapper` startup service materializes each indexed scalar field
+as a `JSON_VALUE`-backed computed column (`cd_<fieldKey>`) on the `Tasks`
+table and creates a composite index `(TaskType, cd_<fieldKey>)`. This turns
+`WHERE TaskType = 'Development' AND JSON_VALUE(CustomDataJson, '$.branchName') = '...'`
+queries from full table scans into seekable index lookups. The bootstrap is
+idempotent and is skipped silently on the InMemory provider used by tests.
+
 ## Startup conflict detection
 
 `TaskTypeConflictValidator` runs once on application startup (registered as an

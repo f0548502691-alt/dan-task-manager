@@ -34,6 +34,10 @@ builder.Services.Configure<TaskTypeConflictValidatorOptions>(
     builder.Configuration.GetSection(TaskTypeConflictValidatorOptions.SectionName));
 builder.Services.AddHostedService<TaskTypeConflictValidator>();
 
+// Materialize SQL Server computed columns + indexes for fields marked IsIndexed = true.
+// No-op on the InMemory provider used in tests.
+builder.Services.AddHostedService<JsonIndexBootstrapper>();
+
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
 builder.Services.AddScoped<ITaskApplicationService, TaskApplicationService>();
