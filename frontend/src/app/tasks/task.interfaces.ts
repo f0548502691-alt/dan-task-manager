@@ -1,35 +1,32 @@
 export const CLOSED_TASK_STATUS = 99;
 
 export const TASK_STATUS = {
-  BACKLOG: 0,
-  IN_PROGRESS: 1,
-  READY_FOR_REVIEW: 2,
-  DONE: 3,
-  RELEASED: 4,
+  CREATED: 1,
+  STATUS_2: 2,
+  STATUS_3: 3,
+  STATUS_4: 4,
   CLOSED: CLOSED_TASK_STATUS
 } as const;
 
 export const DEFAULT_STATUS_LABELS: Readonly<Record<number, string>> = {
-  [TASK_STATUS.BACKLOG]: 'Backlog',
-  [TASK_STATUS.IN_PROGRESS]: 'In Progress',
-  [TASK_STATUS.READY_FOR_REVIEW]: 'Ready for Review',
-  [TASK_STATUS.DONE]: 'Done',
-  [TASK_STATUS.RELEASED]: 'Released',
+  [TASK_STATUS.CREATED]: 'Created',
+  [TASK_STATUS.STATUS_2]: 'Status 2',
+  [TASK_STATUS.STATUS_3]: 'Status 3',
+  [TASK_STATUS.STATUS_4]: 'Status 4',
   [TASK_STATUS.CLOSED]: 'Closed'
 };
 
 export const TASK_FINAL_STATUS_BY_TYPE: Readonly<Record<string, number>> = {
-  Procurement: TASK_STATUS.DONE,
-  Development: TASK_STATUS.RELEASED
+  Procurement: TASK_STATUS.STATUS_3,
+  Development: TASK_STATUS.STATUS_4
 };
 
 export type TaskCustomData = Record<string, unknown>;
 
-export interface AppUserDto {
+export interface UserBriefDto {
   id: number;
   name: string;
   email: string;
-  createdAt: string;
 }
 
 export interface BaseTaskDto {
@@ -37,27 +34,26 @@ export interface BaseTaskDto {
   taskType: string;
   currentStatus: number;
   assignedToUserId: number;
-  assignedToUser?: AppUserDto | null;
+  assignedToUser?: UserBriefDto | null;
   description: string;
-  customDataJson: string;
+  customFields?: TaskCustomData;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface AppUserWithTasksDto extends AppUserDto {
-  tasks: BaseTaskDto[];
-}
-
-export interface CreateUserRequest {
-  name: string;
-  email: string;
+export interface PagedResult<T> {
+  items: T[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
 }
 
 export interface CreateTaskRequest {
   taskType: string;
   description: string;
   assignedToUserId: number;
-  customDataJson?: string;
+  customFields?: TaskCustomData;
 }
 
 export interface UpdateTaskRequest {
@@ -66,7 +62,8 @@ export interface UpdateTaskRequest {
 
 export interface ChangeStatusWorkflowRequest {
   newStatus: number;
-  newDataJson: string;
+  nextAssignedToUserId: number;
+  customFields: TaskCustomData;
 }
 
 export interface CloseTaskRequest {

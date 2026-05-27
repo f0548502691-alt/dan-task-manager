@@ -425,11 +425,11 @@ public class ApplicationDbContext : DbContext
             new BaseTask
             {
                 Id = 1,
-                TaskType = "Analysis",
-                Description = "ניתוח דרישות לפרויקט החדש",
-                CurrentStatus = 1, // בתהליך
+                TaskType = "Procurement",
+                Description = "איסוף הצעות מחיר לציוד חדש",
+                CurrentStatus = WorkflowConstants.CreatedStatus,
                 AssignedToUserId = 1,
-                CustomDataJson = "{\"priority\": \"high\", \"deadline\": \"2026-06-15\", \"estimatedHours\": 8}",
+                CustomDataJson = "{}",
                 CreatedAt = SeedTimestampUtc,
                 UpdatedAt = SeedTimestampUtc
             },
@@ -438,20 +438,9 @@ public class ApplicationDbContext : DbContext
                 Id = 2,
                 TaskType = "Development",
                 Description = "פיתוח מודול ניהול משתמשים",
-                CurrentStatus = WorkflowConstants.CreatedStatus, // Created
+                CurrentStatus = WorkflowConstants.CreatedStatus,
                 AssignedToUserId = 2,
-                CustomDataJson = "{\"priority\": \"medium\", \"deadline\": \"2026-07-01\", \"estimatedHours\": 16}",
-                CreatedAt = SeedTimestampUtc,
-                UpdatedAt = SeedTimestampUtc
-            },
-            new BaseTask
-            {
-                Id = 3,
-                TaskType = "Testing",
-                Description = "בדיקת תכונות ה-API",
-                CurrentStatus = 2, // הושלמה
-                AssignedToUserId = 3,
-                CustomDataJson = "{\"priority\": \"high\", \"testCases\": 15, \"coverage\": \"85%\"}",
+                CustomDataJson = "{}",
                 CreatedAt = SeedTimestampUtc,
                 UpdatedAt = SeedTimestampUtc
             }

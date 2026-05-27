@@ -28,8 +28,8 @@ export class ProcurementFieldsComponent implements OnChanges {
   }
 
   private syncValidators(): void {
-    syncControlState(this.form.get('priceA'), this.status === TASK_STATUS.READY_FOR_REVIEW, [Validators.required]);
-    syncControlState(this.form.get('priceB'), this.status === TASK_STATUS.READY_FOR_REVIEW, [Validators.required]);
-    syncControlState(this.form.get('receipt'), this.status === TASK_STATUS.DONE, [Validators.required]);
+    syncControlState(this.form.get('priceA'), this.status === TASK_STATUS.STATUS_2, [Validators.required]);
+    syncControlState(this.form.get('priceB'), this.status === TASK_STATUS.STATUS_2, [Validators.required]);
+    syncControlState(this.form.get('receipt'), this.status === TASK_STATUS.STATUS_3, [Validators.required]);
   }
 }

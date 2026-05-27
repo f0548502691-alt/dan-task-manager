@@ -353,6 +353,11 @@ public class TaskWorkflowService : ITaskWorkflowService
 
     private ITaskWorkflowRuleProvider? ResolveRuleProvider(string taskType)
     {
+        if (!WorkflowConstants.IsSupportedTaskType(taskType))
+        {
+            return null;
+        }
+
         return _ruleProviders.FirstOrDefault(provider => provider.CanHandle(taskType));
     }
 }

@@ -49,11 +49,13 @@ export class TaskWorkflowBoardComponent implements OnInit {
 
   readonly createForm = this.fb.group({
     createTaskType: this.fb.nonNullable.control<string>(TASK_TYPE_OPTIONS[0], [Validators.required]),
-    createTaskDescription: this.fb.nonNullable.control('', [Validators.required, Validators.minLength(5)])
+    createTaskDescription: this.fb.nonNullable.control('', [Validators.required, Validators.minLength(5)]),
+    createAssignedToUserId: this.fb.nonNullable.control(DEFAULT_CURRENT_USER_ID, [Validators.required, Validators.min(1)])
   });
 
   readonly statusForm = this.fb.group({
     newStatus: this.fb.control<number | null>(null, [Validators.required]),
+    nextAssignedToUserId: this.fb.nonNullable.control(DEFAULT_CURRENT_USER_ID, [Validators.required, Validators.min(1)]),
     priceA: this.fb.nonNullable.control(''),
     priceB: this.fb.nonNullable.control(''),
     receipt: this.fb.nonNullable.control(''),
@@ -80,7 +82,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
     const maxStatus = Math.max(finalStatus, task.currentStatus);
     const options: StatusOption[] = [];
 
-    for (let status = 0; status <= maxStatus; status += 1) {
+    for (let status = TASK_STATUS.CREATED; status <= maxStatus; status += 1) {
       options.push({ value: status, label: this.getStatusLabel(status) });
     }
 
@@ -88,7 +90,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
   });
 
   get selectedNextStatus(): number {
-    return Number(this.statusForm.controls['newStatus'].value ?? 0);
+    return Number(this.statusForm.controls['newStatus'].value ?? TASK_STATUS.CREATED);
   }
 
   ngOnInit(): void {
@@ -98,16 +100,19 @@ export class TaskWorkflowBoardComponent implements OnInit {
   submitCreateTask(): void {
     const typeControl = this.createForm.controls['createTaskType'];
     const descriptionControl = this.createForm.controls['createTaskDescription'];
-    if (typeControl.invalid || descriptionControl.invalid) {
+    const assignedToControl = this.createForm.controls['createAssignedToUserId'];
+    if (typeControl.invalid || descriptionControl.invalid || assignedToControl.invalid) {
       typeControl.markAsTouched();
       descriptionControl.markAsTouched();
+      assignedToControl.markAsTouched();
       return;
     }
 
     const taskType = typeControl.value?.trim();
     const description = descriptionControl.value?.trim();
+    const assignedToUserId = Number(assignedToControl.value);
 
-    if (!taskType || !description) {
+    if (!taskType || !description || assignedToUserId < 1) {
       return;
     }
 
@@ -119,7 +124,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
       .createTask({
         taskType,
         description,
-        assignedToUserId: this.currentUserId
+        assignedToUserId
       })
       .pipe(
         takeUntilDestroyed(this.destroyRef),
@@ -146,7 +151,9 @@ export class TaskWorkflowBoardComponent implements OnInit {
     this.resetStatusSpecificFields();
     this.hydrateStatusFields(task);
 
+    this.statusForm.controls['nextAssignedToUserId'].setValue(task.assignedToUserId);
     this.statusForm.controls['newStatus'].setValue(this.getSuggestedStatus(task));
+    this.loadTaskDetails(task.id);
   }
 
   submitStatusUpdate(): void {
@@ -165,9 +172,16 @@ export class TaskWorkflowBoardComponent implements OnInit {
       return;
     }
 
+    const nextAssignedToUserId = Number(this.statusForm.controls['nextAssignedToUserId'].value);
+    if (nextAssignedToUserId < 1) {
+      this.statusForm.controls['nextAssignedToUserId'].markAsTouched();
+      return;
+    }
+
     const request: ChangeStatusWorkflowRequest = {
       newStatus: this.selectedNextStatus,
-      newDataJson: JSON.stringify(payload)
+      nextAssignedToUserId,
+      customFields: payload
     };
 
     this.submitInFlight.set(true);
@@ -245,7 +259,8 @@ export class TaskWorkflowBoardComponent implements OnInit {
   }
 
   canCloseTask(task: BaseTaskDto): boolean {
-    return task.currentStatus !== TASK_STATUS.CLOSED;
+    const finalStatus = TASK_FINAL_STATUS_BY_TYPE[task.taskType];
+    return typeof finalStatus === 'number' && task.currentStatus === finalStatus;
   }
 
   taskStatusLabel(status: number): string {
@@ -289,7 +304,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
   }
 
   private hydrateStatusFields(task: BaseTaskDto): void {
-    const { data } = parseTaskCustomDataJson(task.customDataJson);
+    const data = task.customFields ?? {};
     const adapter = getTaskWorkflowAdapter(task.taskType);
     if (adapter) {
       adapter.hydrate(this.statusForm, data);
@@ -314,5 +329,27 @@ export class TaskWorkflowBoardComponent implements OnInit {
 
     fallbackControl.setErrors({ invalidJson: true });
     return {};
+  }
+
+  private loadTaskDetails(taskId: number): void {
+    this.taskService
+      .getTask(taskId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (taskDetails) => {
+          if (this.selectedTask()?.id !== taskId) {
+            return;
+          }
+
+          this.selectedTask.set(taskDetails);
+          this.resetStatusSpecificFields();
+          this.hydrateStatusFields(taskDetails);
+          this.statusForm.controls['nextAssignedToUserId'].setValue(taskDetails.assignedToUserId);
+          this.statusForm.controls['newStatus'].setValue(this.getSuggestedStatus(taskDetails));
+        },
+        error: () => {
+          // Errors are propagated to taskService.error.
+        }
+      });
   }
 }

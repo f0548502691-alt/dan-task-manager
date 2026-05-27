@@ -102,8 +102,7 @@ public class TaskApplicationService : ITaskApplicationService
             return TaskCreationResult.FailureResult(jsonError);
         }
 
-        if (!_handlerFactory.HasHandler(command.TaskType) &&
-            !_taskTypeValidationService.HasTaskType(command.TaskType))
+        if (!WorkflowConstants.IsSupportedTaskType(command.TaskType))
         {
             var supportedTaskTypes = GetSupportedTaskTypes();
             return TaskCreationResult.FailureResult(
@@ -313,15 +312,7 @@ public class TaskApplicationService : ITaskApplicationService
 
     private IReadOnlyCollection<string> GetSupportedTaskTypes()
     {
-        var handlerTypes = _handlerFactory.GetRegisteredTaskTypes();
-        var metadataTypes = _taskTypeMetadataService
-            .GetTaskTypes()
-            .Select(taskType => taskType.TaskType);
-
-        return handlerTypes
-            .Concat(metadataTypes)
-            .Where(type => !string.IsNullOrWhiteSpace(type))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+        return WorkflowConstants.SupportedTaskTypes
             .OrderBy(type => type, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }

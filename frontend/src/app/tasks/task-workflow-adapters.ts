@@ -19,13 +19,13 @@ const PROCUREMENT_ADAPTER: TaskWorkflowAdapter = {
     );
   },
   buildPayload(form, status) {
-    if (status === TASK_STATUS.READY_FOR_REVIEW) {
+    if (status === TASK_STATUS.STATUS_2) {
       return {
         prices: [form.controls['priceA'].value, form.controls['priceB'].value]
       };
     }
 
-    if (status === TASK_STATUS.DONE) {
+    if (status === TASK_STATUS.STATUS_3) {
       return {
         receipt: form.controls['receipt'].value
       };
@@ -50,19 +50,19 @@ const DEVELOPMENT_ADAPTER: TaskWorkflowAdapter = {
     );
   },
   buildPayload(form, status) {
-    if (status === TASK_STATUS.READY_FOR_REVIEW) {
+    if (status === TASK_STATUS.STATUS_2) {
       return {
         specification: form.controls['specification'].value
       };
     }
 
-    if (status === TASK_STATUS.DONE) {
+    if (status === TASK_STATUS.STATUS_3) {
       return {
         branchName: form.controls['branchName'].value
       };
     }
 
-    if (status === TASK_STATUS.RELEASED) {
+    if (status === TASK_STATUS.STATUS_4) {
       return {
         versionNumber: form.controls['versionNumber'].value
       };

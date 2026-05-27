@@ -28,14 +28,14 @@ export class DevelopmentFieldsComponent implements OnChanges {
   }
 
   private syncValidators(): void {
-    syncControlState(this.form.get('specification'), this.status === TASK_STATUS.READY_FOR_REVIEW, [
+    syncControlState(this.form.get('specification'), this.status === TASK_STATUS.STATUS_2, [
       Validators.required,
       Validators.minLength(10)
     ]);
-    syncControlState(this.form.get('branchName'), this.status === TASK_STATUS.DONE, [
+    syncControlState(this.form.get('branchName'), this.status === TASK_STATUS.STATUS_3, [
       Validators.required,
       Validators.pattern(/^\S+$/)
     ]);
-    syncControlState(this.form.get('versionNumber'), this.status === TASK_STATUS.RELEASED, [Validators.required]);
+    syncControlState(this.form.get('versionNumber'), this.status === TASK_STATUS.STATUS_4, [Validators.required]);
   }
 }

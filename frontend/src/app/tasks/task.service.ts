@@ -8,7 +8,7 @@ import {
   ChangeStatusWorkflowResponse,
   CloseTaskRequest,
   CloseTaskResponse,
-  TASK_STATUS,
+  PagedResult,
   CreateTaskRequest,
   UpdateTaskRequest
 } from './task.interfaces';
@@ -57,11 +57,18 @@ export class TaskService {
     this._isLoading.set(true);
     this._error.set(null);
 
-    return this.http.get<BaseTaskDto[]>(`${this.apiUrl}/user/${userId}`).pipe(
-      map((tasks) => this.sortTasks(tasks)),
+    return this.http.get<PagedResult<BaseTaskDto>>(`${this.apiUrl}/user/${userId}`).pipe(
+      map((response) => this.sortTasks(response.items)),
       tap((tasks) => this._tasks.set(tasks)),
       catchError((error) => this.handleHttpError(error)),
       finalize(() => this._isLoading.set(false))
+    );
+  }
+
+  getTask(taskId: number): Observable<BaseTaskDto> {
+    this._error.set(null);
+    return this.http.get<BaseTaskDto>(`${this.apiUrl}/${taskId}`).pipe(
+      catchError((error) => this.handleHttpError(error))
     );
   }
 
@@ -125,7 +132,7 @@ export class TaskService {
 
   private syncTaskWithState(task: BaseTaskDto): void {
     const currentUserId = this._currentUserId();
-    if (currentUserId === null || task.assignedToUserId !== currentUserId || task.currentStatus === TASK_STATUS.CLOSED) {
+    if (currentUserId === null || task.assignedToUserId !== currentUserId) {
       this.removeTaskFromState(task.id);
       return;
     }
