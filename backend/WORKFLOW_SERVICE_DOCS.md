@@ -1,168 +1,63 @@
-# 📋 TaskWorkflowService - Workflow Management
+# Task workflow service and API contract
 
-## 🎯 Overview
+This is the canonical workflow reference for the current backend. Verify changes
+against `Controllers/TasksController.cs`, `Services/TaskWorkflowService.cs`,
+`Services/TaskApplicationService.cs`, and `Domain/WorkflowConstants.cs`.
 
-`TaskWorkflowService` מנהל את ה-Workflow הכללי של משימות עם כללים קפדניים לתנועה בין סטטוסים.
+## Current scope
 
----
+- Only `Procurement` and `Development` tasks are supported.
+- The allow-list lives in `WorkflowConstants.SupportedTaskTypes`.
+- Creating tasks, changing statuses, resolving workflow rule providers, and
+  task-type metadata writes all reject task types outside that allow-list.
+- `Program.cs` registers only `ProcurementTaskHandler` and
+  `DevelopmentTaskHandler`; metadata validation is still preferred when active
+  metadata exists for one of the supported types.
 
-## 🏗️ Architecture
+## Status model
 
-```
-REST API (TasksController)
-    ↓
-ITaskWorkflowService
-    ↓
-TaskWorkflowService
-    ├─ DbContext (EF Core)
-    ├─ TaskHandlerFactory (Handlers)
-    └─ Validation Rules
-```
+| Status | Meaning |
+| --- | --- |
+| `1` | Created status for every new task (`WorkflowConstants.CreatedStatus`) |
+| `2` | First type-specific data collection step |
+| `3` | Procurement final status; Development branch step |
+| `4` | Development final status |
+| `99` | Closed status (`WorkflowConstants.ClosedStatus`) |
 
----
+Rules enforced by `TaskWorkflowService`:
 
-## 📋 Workflow Rules
+1. Closed tasks (`99`) cannot be changed.
+2. Status `99` is only reached through `POST /api/tasks/{id}/close`.
+3. Forward movement must be exactly `+1`.
+4. Backward movement can go to any lower status, but not below `1`.
+5. A task cannot move forward after it reaches its task type final status.
+6. Closing is allowed only when the task is already at its final status.
+7. Every status change must include a valid `nextAssignedToUserId`; the assignee
+   is updated together with the status and `customFields`.
 
-### 1. **בדיקה שהמשימה לא סגורה**
-```csharp
-// משימה סגורה (Status = 99) לא יכולה להשתנות
-if (task.CurrentStatus == 99)  // ClosedStatus
-    return Failure("משימה סגורה - לא ניתן לשנות סטטוס");
-```
+## Type-specific field requirements
 
-### 2. **כללי תנועה בין סטטוסים**
+Metadata from `TaskTypes` and `TaskFieldDefinitions` has priority through
+`MetadataTaskWorkflowRuleProvider` (`Priority = 0`). If metadata is absent or
+inactive, `HandlerTaskWorkflowRuleProvider` (`Priority = 100`) falls back to the
+registered handler.
 
-#### תנועה קדימה (Forward): **בדיוק +1 סטטוס**
-```
-1 → 2 ✅
-2 → 3 ✅
-2 → 4 ❌ (דילוג, לא מותר)
-```
+Seeded metadata currently defines:
 
-#### תנועה אחורה (Backward): **לכל סטטוס נמוך יותר**
-```
-3 → 2 ✅ (rollback)
-3 → 1 ✅ (rollback)
-3 → 0 ✅ (rollback)
-```
+| Task type | Final status | Status | Required `customFields` |
+| --- | ---: | ---: | --- |
+| `Procurement` | `3` | `2` | `{"prices":["5000","4800"]}` - array of exactly two strings |
+| `Procurement` | `3` | `3` | `{"receipt":"REC-123"}` - non-empty string |
+| `Development` | `4` | `2` | `{"specification":"at least 10 chars"}` |
+| `Development` | `4` | `3` | `{"branchName":"feature/example"}` - valid git branch pattern |
+| `Development` | `4` | `4` | `{"versionNumber":"1.2.0"}` - semantic version pattern |
 
-#### ללא תנועה: ❌
-```
-2 → 2 ❌ (אותו סטטוס)
-```
+Important payload constraint: `customFields` must be a JSON object. Arrays,
+strings, numbers, and malformed JSON are rejected before workflow validation.
 
-### 3. **וולידציה ספציפית של Handler**
-לאחר שהתנועה אושרה, Handler בודק וולידציה ספציפית:
-```csharp
-var handlerValidation = handler.ValidateStatusChange(
-    currentDataJson,
-    currentStatus,
-    newStatus,
-    newDataJson);
-```
+## REST API examples
 
-### 4. **בדיקת סטטוס סופי**
-```csharp
-// אי אפשר להעבור את סטטוס סופי של Handler
-if (finalStatus.HasValue && currentStatus >= finalStatus && newStatus > currentStatus)
-    return Failure("משימה הגיעה לסטטוס סופי");
-```
-
-### 5. **עדכון נתונים**
-```csharp
-task.CurrentStatus = newStatus;
-task.CustomDataJson = newDataJson;
-task.UpdatedAt = DateTime.UtcNow;
-```
-
----
-
-## 📊 Example Workflows
-
-### Procurement Task
-
-```
-Status 0: התחלה
-   ↓ +1 (forward)
-Status 1: בתהליך
-   ↓ +1 (forward)
-Status 2: בחירת ספקים ⭐
-   Requires: {"prices": ["5000", "4800"]}
-   ↓ +1 (forward)
-Status 3: ✅ FinalStatus (לא יכול להעבור)
-   Requires: {"receipt": "REC-123"}
-   ↓
-Status 99: Closed (סגור לנצח)
-
-** אפשר להחזור:**
-Status 2 → Status 1 ← (rollback)
-Status 1 → Status 0 ← (rollback)
-```
-
-### Development Task
-
-```
-Status 0: התחלה
-   ↓ +1
-Status 1: בתהליך
-   ↓ +1
-Status 2: אפיון ⭐
-   Requires: {"specification": "..."}
-   ↓ +1
-Status 3: בקידוד ⭐
-   Requires: {"branchName": "feature/xyz"}
-   ↓ +1
-Status 4: ✅ FinalStatus
-   Requires: {"versionNumber": "1.2.0"}
-   ↓
-Status 99: Closed (סגור לנצח)
-
-** אפשר להחזור:**
-Status 3 → Status 2 ← (rollback)
-Status 2 → Status 1 ← (rollback)
-Status 2 → Status 0 ← (rollback)
-```
-
----
-
-## 🔧 Services Implementation
-
-### ITaskWorkflowService Methods
-
-```csharp
-public interface ITaskWorkflowService
-{
-    // שינוי סטטוס עם כללי workflow
-    Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, string newDataJson);
-    
-    // סגירת משימה
-    Task<WorkflowResult> CloseTaskAsync(int taskId, string finalNotes);
-    
-    // קבלת משימות של משתמש (לא סגורות)
-    Task<IEnumerable<BaseTask>> GetUserTasksAsync(int userId);
-    
-    // קבלת משימה עם פרטים
-    Task<BaseTask?> GetTaskAsync(int taskId);
-}
-```
-
-### WorkflowResult
-
-```csharp
-public class WorkflowResult
-{
-    public bool Success { get; set; }
-    public string Message { get; set; }
-    public int? NewStatus { get; set; }
-    public BaseTask? UpdatedTask { get; set; }
-}
-```
-
----
-
-## 🔌 REST API Endpoints
-
-### 1. **Create Task**
+### Create task
 
 ```http
 POST /api/tasks
@@ -170,348 +65,158 @@ Content-Type: application/json
 
 {
   "taskType": "Procurement",
-  "description": "רכישת רכיבים לשרת",
+  "description": "Collect hardware supplier quotes",
   "assignedToUserId": 1,
-  "customDataJson": "{}"
+  "customFields": {}
 }
 ```
 
-**Response (201):**
+Response: `201 Created` with `TaskDetailsDto`.
+
 ```json
 {
   "id": 1,
   "taskType": "Procurement",
-  "description": "רכישת רכיבים לשרת",
-  "currentStatus": 0,
+  "currentStatus": 1,
   "assignedToUserId": 1,
-  "customDataJson": "{}",
-  "createdAt": "2026-05-25T10:00:00Z"
+  "description": "Collect hardware supplier quotes",
+  "createdAt": "2026-05-27T09:00:00Z",
+  "updatedAt": "2026-05-27T09:00:00Z",
+  "customFields": {},
+  "assignedToUser": {
+    "id": 1,
+    "name": "דן כהן",
+    "email": "dan@example.com"
+  }
 }
 ```
 
----
+Unsupported task types return `400` and include the current allow-list:
 
-### 2. **Change Status with Workflow**
+```json
+{
+  "error": "סוג משימה לא נתמך: Analysis",
+  "supportedTaskTypes": ["Development", "Procurement"]
+}
+```
+
+### Change status and assignment
 
 ```http
 POST /api/tasks/1/change-status
 Content-Type: application/json
 
 {
-  "newStatus": 1,
-  "newDataJson": "{}"
-}
-```
-
-**Response (200) - Forward Movement:**
-```json
-{
-  "success": true,
-  "message": "סטטוס עודכן בהצלחה ל-1",
-  "newStatus": 1,
-  "task": { ... }
-}
-```
-
-**Response (400) - Invalid Movement:**
-```json
-{
-  "error": "תנועה קדימה חייבת להיות בדיוק ב-1 סטטוס. סטטוס נוכחי: 1, מבוקש: 3"
-}
-```
-
-**Response (400) - Validation Failed:**
-```json
-{
-  "error": "'prices' חייב להכיל בדיוק 2 מחרוזות, נמצאו 1"
-}
-```
-
----
-
-### 3. **Close Task**
-
-```http
-POST /api/tasks/1/close
-Content-Type: application/json
-
-{
-  "finalNotes": "משימה הושלמה בהצלחה"
-}
-```
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "משימה סגורה בהצלחה",
-  "task": {
-    "id": 1,
-    "currentStatus": 99,
-    "customDataJson": "{\"finalNotes\": \"משימה הושלמה בהצלחה\", \"closedAt\": \"2026-05-25T...\"}"
+  "newStatus": 2,
+  "nextAssignedToUserId": 2,
+  "customFields": {
+    "prices": ["5000", "4800"]
   }
 }
 ```
 
-**Response (400) - Already Closed:**
+Response: `200 OK`.
+
 ```json
 {
-  "error": "משימה כבר סגורה"
-}
-```
-
----
-
-### 4. **Get User Tasks**
-
-```http
-GET /api/tasks/user/1
-```
-
-**Response (200):**
-```json
-[
-  {
+  "success": true,
+  "message": "סטטוס עודכן בהצלחה ל-2",
+  "newStatus": 2,
+  "task": {
     "id": 1,
     "taskType": "Procurement",
-    "description": "רכישת רכיבים",
     "currentStatus": 2,
-    "assignedToUserId": 1,
-    "customDataJson": "{\"prices\": [\"5000\", \"4800\"]}"
-  },
-  {
-    "id": 2,
-    "taskType": "Development",
-    "description": "פיתוח API",
-    "currentStatus": 1,
-    "assignedToUserId": 1,
-    "customDataJson": "{}"
+    "assignedToUserId": 2,
+    "description": "Collect hardware supplier quotes",
+    "customFields": {
+      "prices": ["5000", "4800"]
+    },
+    "assignedToUser": {
+      "id": 2,
+      "name": "רות לוי",
+      "email": "ruth@example.com"
+    }
   }
-]
-```
-
----
-
-### 5. **Get Task**
-
-```http
-GET /api/tasks/1
-```
-
-**Response (200):**
-```json
-{
-  "id": 1,
-  "taskType": "Procurement",
-  "description": "רכישת רכיבים",
-  "currentStatus": 2,
-  "assignedToUserId": 1,
-  "customDataJson": "{\"prices\": [\"5000\", \"4800\"]}"
 }
 ```
 
----
+The request replaces the stored `CustomDataJson` with the supplied
+`customFields` object. Send all data that should remain available after that
+transition; do not rely on the service to merge old and new fields.
 
-### 6. **Get All Tasks**
-
-```http
-GET /api/tasks
-```
-
----
-
-### 7. **Get Tasks by Type**
+### Close task
 
 ```http
-GET /api/tasks/byType/Procurement
-```
-
----
-
-### 8. **Update Task**
-
-```http
-PUT /api/tasks/1
+POST /api/tasks/1/close
 Content-Type: application/json
 
 {
-  "description": "תיאור חדש"
+  "finalNotes": "Completed and archived"
 }
 ```
 
----
+Close succeeds only from the task type final status. The service sets
+`currentStatus` to `99` and writes `finalNotes` plus `closedAt` into the stored
+custom data.
 
-### 9. **Delete Task**
+### List and detail reads
+
+List endpoints return `PagedResult<TaskSummaryDto>` and do not include
+`customFields`:
 
 ```http
-DELETE /api/tasks/1
+GET /api/tasks?page=1&pageSize=20
+GET /api/tasks/user/1?page=1&pageSize=20
+GET /api/tasks/byType/Procurement?page=1&pageSize=20
 ```
-
----
-
-## 💡 Advanced Examples
-
-### Example 1: Forward Movement (Procurement)
 
 ```json
-// Status 1 → 2 (forward by +1)
-POST /api/tasks/1/change-status
-
 {
-  "newStatus": 2,
-  "newDataJson": "{\"prices\": [\"5000 ₪\", \"4800 ₪\"]}"
-}
-
-Response:
-{
-  "success": true,
-  "message": "סטטוס עודכן בהצלחה ל-2"
-}
-```
-
-### Example 2: Backward Movement (Rollback)
-
-```json
-// Status 2 → 1 (backward to lower status)
-POST /api/tasks/1/change-status
-
-{
-  "newStatus": 1,
-  "newDataJson": "{}"
-}
-
-Response:
-{
-  "success": true,
-  "message": "סטטוס עודכן בהצלחה ל-1"
+  "items": [
+    {
+      "id": 1,
+      "taskType": "Procurement",
+      "currentStatus": 2,
+      "assignedToUserId": 1,
+      "description": "Collect hardware supplier quotes",
+      "createdAt": "2026-05-27T09:00:00Z",
+      "updatedAt": "2026-05-27T09:05:00Z",
+      "assignedToUser": null
+    }
+  ],
+  "page": 1,
+  "pageSize": 20,
+  "totalCount": 1,
+  "totalPages": 1
 }
 ```
 
-### Example 3: Invalid Forward Jump
+Use `GET /api/tasks/{id}` when a client needs `customFields` for form
+hydration.
 
-```json
-// Status 1 → 3 (invalid: more than +1)
-POST /api/tasks/1/change-status
+## Task type metadata endpoints
 
-{
-  "newStatus": 3,
-  "newDataJson": "{}"
-}
-
-Response (400):
-{
-  "error": "תנועה קדימה חייבת להיות בדיוק ב-1 סטטוס..."
-}
+```http
+GET  /api/task-types
+GET  /api/task-types/{taskType}
+GET  /api/task-types/{taskType}/schema
+POST /api/task-types
+POST /api/task-types/{taskType}/fields
+PUT  /api/task-types/{taskType}/fields/{field}
 ```
 
-### Example 4: Close Task
+Reads return metadata for the seeded/configured task types. Writes are restricted
+to `WorkflowConstants.SupportedTaskTypes`; posting metadata for `Analysis`,
+`Testing`, or any other type returns `400` with `supportedTaskTypes`.
 
-```json
-POST /api/tasks/1/close
+## Developer pitfalls
 
-{
-  "finalNotes": "משימה הושלמה בהצלחה"
-}
-
-Response:
-{
-  "success": true,
-  "message": "משימה סגורה בהצלחה",
-  "task": {
-    "id": 1,
-    "currentStatus": 99,
-    "customDataJson": "{\"finalNotes\": \"משימה הושלמה בהצלחה\", \"closedAt\": \"...\"}"
-  }
-}
-```
-
----
-
-## 🧪 Test Scenarios
-
-### Scenario 1: Procurement Workflow
-
-```bash
-# 1. Create task (Status 0)
-POST /api/tasks
-{
-  "taskType": "Procurement",
-  "description": "רכישת חומרים",
-  "assignedToUserId": 1
-}
-→ ID: 1, Status: 0 ✅
-
-# 2. Move to Status 1
-POST /api/tasks/1/change-status
-{"newStatus": 1, "newDataJson": "{}"}
-→ Status: 1 ✅
-
-# 3. Move to Status 2 with prices
-POST /api/tasks/1/change-status
-{
-  "newStatus": 2,
-  "newDataJson": "{\"prices\": [\"5000\", \"4800\"]}"
-}
-→ Status: 2 ✅
-
-# 4. Rollback to Status 1
-POST /api/tasks/1/change-status
-{"newStatus": 1, "newDataJson": "{}"}
-→ Status: 1 ✅
-
-# 5. Move forward again
-POST /api/tasks/1/change-status
-{
-  "newStatus": 2,
-  "newDataJson": "{\"prices\": [\"5500\", \"5200\"]}"
-}
-→ Status: 2 ✅
-
-# 6. Move to Status 3 (Final)
-POST /api/tasks/1/change-status
-{
-  "newStatus": 3,
-  "newDataJson": "{\"prices\": [...], \"receipt\": \"REC-001\"}"
-}
-→ Status: 3 ✅ (FinalStatus)
-
-# 7. Try to move beyond (should fail)
-POST /api/tasks/1/change-status
-{"newStatus": 4, "newDataJson": "{}"}
-→ Error: "משימה הגיעה לסטטוס סופי" ❌
-
-# 8. Close task
-POST /api/tasks/1/close
-{"finalNotes": "הושלם בהצלחה"}
-→ Status: 99 ✅
-
-# 9. Try to change closed task (should fail)
-POST /api/tasks/1/change-status
-{"newStatus": 2, "newDataJson": "{}"}
-→ Error: "משימה סגורה" ❌
-```
-
----
-
-## 📋 Status Codes
-
-| Code | Meaning | Example |
-|------|---------|---------|
-| 200 | ✅ Success | Status changed, task closed |
-| 400 | ❌ Validation Error | Invalid movement, validation failed, closed task |
-| 404 | ❌ Not Found | Task doesn't exist |
-| 500 | ❌ Server Error | Database error |
-
----
-
-## 🎓 Key Concepts
-
-1. **Forward Movement**: Must be exactly +1 status
-2. **Backward Movement**: Allowed to any lower status (rollback)
-3. **Closed Status**: 99 (permanent, cannot be changed)
-4. **Final Status**: Handler-specific status that cannot be exceeded
-5. **Workflow Validation**: Combines movement rules + handler validation
-
----
-
-**TaskWorkflowService מוכן! 🚀**
+- Use `customFields`, not `customDataJson` or `newDataJson`, in API requests.
+- Create starts at status `1`; examples that start at `0` are obsolete.
+- Status change must include `nextAssignedToUserId`, even if assignment is not
+  changing.
+- List responses are paged summaries; call the detail endpoint before editing
+  type-specific fields.
+- Adding a new task type is no longer metadata-only. Update
+  `WorkflowConstants.SupportedTaskTypes`, DI handler registration, seeded
+  metadata, backend tests, and frontend type/status mappings together.

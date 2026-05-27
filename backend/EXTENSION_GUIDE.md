@@ -2,7 +2,7 @@
 
 ## 📖 Table of Contents
 
-1. [Adding New Handler Type](#adding-new-handler-type)
+1. [Adding or Changing Supported Task Types](#adding-or-changing-supported-task-types)
 2. [Adding New Endpoint](#adding-new-endpoint)
 3. [Adding Validation Rule](#adding-validation-rule)
 4. [Common Extension Scenarios](#common-extension-scenarios)
@@ -10,241 +10,84 @@
 
 ---
 
-## 🎯 Adding New Handler Type
+## 🎯 Adding or Changing Supported Task Types
 
-### Step 1: Create Handler Class
+The current product workflow intentionally supports only `Procurement` and
+`Development`. A new task type is not metadata-only: task creation,
+metadata writes, workflow provider resolution, and the frontend board all depend
+on the same supported-type contract.
+
+### Current allow-list
 
 ```csharp
-// Domain/Handlers/QATaskHandler.cs
-using DanTaskManager.Domain;
-using System.Text.Json;
-
-namespace DanTaskManager.Domain.Handlers;
-
-/// <summary>
-/// QA task handler with specific validation
-/// </summary>
-public class QATaskHandler : ITaskHandler
+// Domain/WorkflowConstants.cs
+public static readonly string[] SupportedTaskTypes =
 {
-    /// <summary>
-    /// Handler identifier
-    /// </summary>
-    public string TaskType => "QA";
-
-    /// <summary>
-    /// Final status for QA tasks
-    /// </summary>
-    public int FinalStatus => 3;
-
-    /// <summary>
-    /// Validate status transitions for QA tasks
-    /// </summary>
-    public ValidationResult ValidateStatusChange(
-        string currentDataJson,
-        int currentStatus,
-        int nextStatus,
-        string newDataJson)
-    {
-        // Status 1 → 2: Setup
-        if (nextStatus == 2)
-            return ValidateStatusTwo(newDataJson);
-
-        // Status 2 → 3: Testing
-        if (nextStatus == 3)
-            return ValidateStatusThree(newDataJson);
-
-        return ValidationResult.Success();
-    }
-
-    /// <summary>
-    /// Validate Status 2 (Setup)
-    /// Requires: testEnvironment, testCases
-    /// </summary>
-    private ValidationResult ValidateStatusTwo(string dataJson)
-    {
-        try
-        {
-            var json = JsonDocument.Parse(dataJson);
-            var root = json.RootElement;
-
-            // Check testEnvironment
-            if (!root.TryGetProperty("testEnvironment", out var env))
-                return ValidationResult.Failure("'testEnvironment' field is required");
-
-            if (env.ValueKind != JsonValueKind.String || string.IsNullOrEmpty(env.GetString()))
-                return ValidationResult.Failure("'testEnvironment' must be a non-empty string");
-
-            // Check testCases array
-            if (!root.TryGetProperty("testCases", out var testCases))
-                return ValidationResult.Failure("'testCases' array is required");
-
-            if (testCases.ValueKind != JsonValueKind.Array)
-                return ValidationResult.Failure("'testCases' must be an array");
-
-            var count = testCases.GetArrayLength();
-            if (count < 1)
-                return ValidationResult.Failure("'testCases' must contain at least 1 test case");
-
-            return ValidationResult.Success();
-        }
-        catch (JsonException)
-        {
-            return ValidationResult.Failure("Invalid JSON format");
-        }
-    }
-
-    /// <summary>
-    /// Validate Status 3 (Testing - Final)
-    /// Requires: testResults, bugsFound
-    /// </summary>
-    private ValidationResult ValidateStatusThree(string dataJson)
-    {
-        try
-        {
-            var json = JsonDocument.Parse(dataJson);
-            var root = json.RootElement;
-
-            // Check testResults
-            if (!root.TryGetProperty("testResults", out var results))
-                return ValidationResult.Failure("'testResults' field is required");
-
-            if (results.ValueKind != JsonValueKind.String)
-                return ValidationResult.Failure("'testResults' must be a string");
-
-            var resultsValue = results.GetString();
-            if (string.IsNullOrEmpty(resultsValue) || !new[] { "PASSED", "FAILED", "PARTIAL" }.Contains(resultsValue))
-                return ValidationResult.Failure("'testResults' must be PASSED, FAILED, or PARTIAL");
-
-            // Check bugsFound (optional but if present, must be valid)
-            if (root.TryGetProperty("bugsFound", out var bugs))
-            {
-                if (bugs.ValueKind != JsonValueKind.Array)
-                    return ValidationResult.Failure("'bugsFound' must be an array if provided");
-            }
-
-            return ValidationResult.Success();
-        }
-        catch (JsonException)
-        {
-            return ValidationResult.Failure("Invalid JSON format");
-        }
-    }
-}
+    "Procurement",
+    "Development"
+};
 ```
 
-### Step 2: Register Handler
+`TaskApplicationService.CreateAsync`, `TaskWorkflowService.ResolveRuleProvider`,
+and `TaskTypesController` all check this allow-list. If you add another type,
+update this constant first and then keep the rest of the system in sync.
+
+### Backend checklist
+
+1. Add the new type to `WorkflowConstants.SupportedTaskTypes`.
+2. Register the fallback handler explicitly in `Program.cs`.
+3. Seed or migrate `TaskTypeMetadata` and `TaskFieldDefinition` rows in
+   `ApplicationDbContext` or a migration.
+4. Add handler or metadata validation tests for each required status.
+5. Update unsupported-type tests so the returned `supportedTaskTypes` list is
+   still deterministic.
+
+Example handler registration:
 
 ```csharp
-// Program.cs
+builder.Services.AddTransient<ITaskHandler, ProcurementTaskHandler>();
+builder.Services.AddTransient<ITaskHandler, DevelopmentTaskHandler>();
 builder.Services.AddTransient<ITaskHandler, QATaskHandler>();
-
-// Full example:
-services.AddTransient<ITaskHandler, ProcurementTaskHandler>();
-services.AddTransient<ITaskHandler, DevelopmentTaskHandler>();
-services.AddTransient<ITaskHandler, QATaskHandler>(); // NEW
 ```
 
-### Step 3: Write Tests
+### API contract checklist
 
-```csharp
-// Tests/QAHandlerTests.cs
-using DanTaskManager.Domain.Handlers;
-using System.Text.Json;
+Clients must use the current request shapes:
 
-namespace DanTaskManager.Tests;
-
-public class QAHandlerTests
+```json
 {
-    private readonly QATaskHandler _handler = new();
-
-    [Fact]
-    public void ValidateStatusTwo_WithRequiredFields_ShouldPass()
-    {
-        // Arrange
-        var data = JsonSerializer.Serialize(new
-        {
-            testEnvironment = "Staging",
-            testCases = new[] { "TC001", "TC002", "TC003" }
-        });
-
-        // Act
-        var result = _handler.ValidateStatusChange("", 1, 2, data);
-
-        // Assert
-        Assert.True(result.IsValid);
-    }
-
-    [Fact]
-    public void ValidateStatusTwo_MissingTestEnvironment_ShouldFail()
-    {
-        // Arrange
-        var data = JsonSerializer.Serialize(new
-        {
-            testCases = new[] { "TC001" }
-        });
-
-        // Act
-        var result = _handler.ValidateStatusChange("", 1, 2, data);
-
-        // Assert
-        Assert.False(result.IsValid);
-        Assert.Contains("testEnvironment", result.Message);
-    }
-
-    [Fact]
-    public void ValidateStatusThree_WithAllFields_ShouldPass()
-    {
-        // Arrange
-        var data = JsonSerializer.Serialize(new
-        {
-            testResults = "PASSED",
-            bugsFound = new[] { "BUG001", "BUG002" }
-        });
-
-        // Act
-        var result = _handler.ValidateStatusChange("", 2, 3, data);
-
-        // Assert
-        Assert.True(result.IsValid);
-    }
-
-    [Fact]
-    public void ValidateStatusThree_InvalidTestResults_ShouldFail()
-    {
-        // Arrange
-        var data = JsonSerializer.Serialize(new
-        {
-            testResults = "UNKNOWN"
-        });
-
-        // Act
-        var result = _handler.ValidateStatusChange("", 2, 3, data);
-
-        // Assert
-        Assert.False(result.IsValid);
-        Assert.Contains("PASSED, FAILED, or PARTIAL", result.Message);
-    }
+  "taskType": "Procurement",
+  "description": "Collect supplier quotes",
+  "assignedToUserId": 1,
+  "customFields": {}
 }
 ```
 
-### Step 4: Test It
-
-```bash
-# Run tests
-dotnet test
-
-# Run application
-dotnet run
-
-# Test with API
-curl -X POST http://localhost:5000/api/tasks \
-  -H "Content-Type: application/json" \
-  -d '{
-    "taskType": "QA",
-    "description": "Test new feature",
-    "assignedToUserId": 1
-  }'
+```json
+{
+  "newStatus": 2,
+  "nextAssignedToUserId": 2,
+  "customFields": {
+    "prices": ["5000", "4800"]
+  }
+}
 ```
+
+Do not use older `customDataJson` or `newDataJson` request properties. They are
+internal storage/history names, not the current public API.
+
+### Frontend checklist
+
+Update the Angular workflow UI with the backend change:
+
+1. Add the type to `TASK_TYPE_OPTIONS` in
+   `frontend/src/app/tasks/task-workflow-board.component.ts`.
+2. Add the final status to `TASK_FINAL_STATUS_BY_TYPE`.
+3. Add status labels if generic `Status N` labels are not enough.
+4. Add or update a `TaskWorkflowAdapter` for type-specific form hydration and
+   `customFields` payload construction.
+5. Add a field component if the workflow needs more than the fallback JSON
+   editor.
 
 ---
 
@@ -371,7 +214,11 @@ private async Task<ValidationResult> ValidateUniqueTaskTypeAsync(int userId, str
 
 ```csharp
 // In ChangeStatusAsync or appropriate place
-public async Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, string newDataJson)
+public async Task<WorkflowResult> ChangeStatusAsync(
+    int taskId,
+    int newStatus,
+    int nextAssignedToUserId,
+    string newDataJson)
 {
     var task = await _context.Tasks.FindAsync(taskId);
     
@@ -393,15 +240,19 @@ public async Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, s
 public async Task ChangeStatus_WithDuplicateTaskType_ShouldFail()
 {
     // Arrange: Two Procurement tasks for same user
-    var task1 = new BaseTask { TaskType = "Procurement", AssignedToUserId = 1, CurrentStatus = 0 };
-    var task2 = new BaseTask { TaskType = "Procurement", AssignedToUserId = 1, CurrentStatus = 0 };
+    var task1 = new BaseTask { TaskType = "Procurement", AssignedToUserId = 1, CurrentStatus = 1 };
+    var task2 = new BaseTask { TaskType = "Procurement", AssignedToUserId = 1, CurrentStatus = 1 };
     
     _context.Tasks.Add(task1);
     _context.Tasks.Add(task2);
     await _context.SaveChangesAsync();
 
-    // Act: Try to move second task to Status 1
-    var result = await _service.ChangeStatusAsync(task2.Id, 1, "{}");
+    // Act: Try to move second task to Status 2 without changing assignment
+    var result = await _service.ChangeStatusAsync(
+        task2.Id,
+        2,
+        1,
+        "{\"prices\":[\"5000\",\"4800\"]}");
 
     // Assert
     Assert.False(result.Success);

@@ -1,352 +1,116 @@
-# 🎯 Strategy Pattern & Task Handlers - תיעוד
+# Workflow rule providers and task handlers
 
-## 📋 מבט כללי
+The workflow layer uses a provider chain to select validation rules for a task
+type. Handlers still exist, but they are no longer the only source of workflow
+rules.
 
-הפרויקט מנצל את **Strategy Pattern** עם **Factory** כדי לאפשר הרחבה של סוגי משימות חדשים ללא שינוי קוד קיים (**Open/Closed Principle**).
+## Architecture
 
----
-
-## 🏗️ ארכיטקטורה
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    BaseTask                             │
-│  (TaskType, CurrentStatus, CustomDataJson, וכו')      │
-└────────┬────────────────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────────────────────────┐
-│          ITaskStatusService                             │
-│  - ValidateAndChangeStatus()                           │
-│  - GetFinalStatus()                                    │
-└────────┬────────────────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────────────────────────┐
-│           TaskHandlerFactory                            │
-│  - GetHandler(taskType)                                │
-│  - HasHandler(taskType)                                │
-│  - GetRegisteredTaskTypes()                            │
-└────────┬────────────────────────────────────────────────┘
-         │
-         ▼
-    ┌────────────────────┐
-    │  ITaskHandler      │◄────┐
-    └────────────────────┘     │
-         ▲                      │
-         │      יורשים         │
-         ├──────────────────────┘
-         │
-    ┌────┴───────┬──────────────────────┐
-    │            │                      │
-    ▼            ▼                      ▼
-┌─────────────────┐    ┌──────────────────────────────┐
-│  Procurement    │    │  Development                 │
-│  TaskHandler    │    │  TaskHandler                 │
-│                 │    │                              │
-│ FinalStatus: 3  │    │ FinalStatus: 4               │
-└─────────────────┘    └──────────────────────────────┘
+```text
+TasksController
+    -> TaskApplicationService
+        -> TaskWorkflowService
+            -> ITaskWorkflowRuleProvider list ordered by Priority
+                1. MetadataTaskWorkflowRuleProvider (Priority 0)
+                2. HandlerTaskWorkflowRuleProvider  (Priority 100)
 ```
 
----
+`TaskWorkflowService` owns generic workflow invariants:
 
-## 🔧 מחלקות ומימשקים
+- task must exist
+- task must not be closed
+- `nextAssignedToUserId` must refer to an existing user
+- `customFields` must serialize to a JSON object
+- forward movement is exactly `+1`
+- rollback can move to any lower status down to `1`
+- closing is handled only by `CloseTaskAsync`
+- task cannot move forward after reaching final status
 
-### 1. **ITaskHandler** - ממשק Strategy
+Rule providers own task-type-specific requirements such as `prices`,
+`receipt`, `specification`, `branchName`, and `versionNumber`.
+
+## Supported task types
+
+The current product contract supports only:
 
 ```csharp
-public interface ITaskHandler
+public static readonly string[] SupportedTaskTypes =
 {
-    string TaskType { get; }           // שם סוג המשימה
-    int FinalStatus { get; }           // הסטטוס הסופי (שלא ניתן להעבור אותו)
-    
-    ValidationResult ValidateStatusChange(
-        string currentDataJson,
-        int currentStatus,
-        int nextStatus,
-        string newDataJson);
-}
+    "Procurement",
+    "Development"
+};
 ```
 
-**מה שהממשק קובע:**
-- כל handler חייב להגדיר את `TaskType` (שם ייחודי)
-- כל handler חייב להגדיר `FinalStatus` (סטטוס סופי)
-- כל handler חייב לממש וולידציה לשינוי סטטוס
+This allow-list is checked before task creation, workflow rule provider
+resolution, and task-type metadata writes. Adding a handler or metadata row for
+another type is not enough; the type must also be added to
+`WorkflowConstants.SupportedTaskTypes` and the frontend workflow board.
 
----
+## Provider precedence
 
-### 2. **ProcurementTaskHandler**
+### MetadataTaskWorkflowRuleProvider
 
-**סטטוס סופי:** 3
+- Priority: `0`
+- Source: `TaskTypeValidationService`
+- Handles a task type when active metadata exists in `TaskTypes`.
+- Uses `TaskFieldDefinitions` to validate status-specific fields.
+- Supplies metadata final status when present.
 
-| סטטוס | דרישה | דוגמה JSON |
-|-------|-------|-----------|
-| 0 | - | - |
-| 1 | - | - |
-| 2 | מערך של **2 מחרוזות** (מחירים) | `{"prices": ["5000 ₪", "4800 ₪"]}` |
-| 3 | **מחרוזת** קבלה | `{"prices": [...], "receipt": "REC-123"}` |
+### HandlerTaskWorkflowRuleProvider
 
-**וולידציה:**
-- בסטטוס 2: בדיקה שקיים שדה `prices` עם בדיוק 2 מחרוזות
-- בסטטוס 3: בדיקה שקיים שדה `receipt` עם מחרוזת לא ריקה
-
----
-
-### 3. **DevelopmentTaskHandler**
-
-**סטטוס סופי:** 4
-
-| סטטוס | דרישה | דוגמה JSON |
-|-------|-------|-----------|
-| 0 | - | - |
-| 1 | - | - |
-| 2 | **טקסט אפיון** (min 10 תווים) | `{"specification": "יש לפתח..."}` |
-| 3 | **שם בראנץ'** תקין | `{"specification": "...", "branchName": "feature/xyz"}` |
-| 4 | **מספר גרסה** (SemVer) | `{"...", "versionNumber": "1.2.0"}` |
-
-**וולידציה:**
-- בסטטוס 2: בדיקה שדה `specification` עם לפחות 10 תווים
-- בסטטוס 3: בדיקה שדה `branchName` תקין (ללא `//', `..`, רווחים וכו')
-- בסטטוס 4: בדיקה שדה `versionNumber` בפורמט SemVer
-
----
-
-### 4. **TaskHandlerFactory**
+- Priority: `100`
+- Source: `TaskHandlerFactory`
+- Fallback when metadata does not handle the supported task type.
+- Uses explicitly registered handlers from `Program.cs`.
 
 ```csharp
-public class TaskHandlerFactory
-{
-    public TaskHandlerFactory(IEnumerable<ITaskHandler> handlers);
-    
-    public ITaskHandler? GetHandler(string taskType);
-    public bool HasHandler(string taskType);
-    public IEnumerable<string> GetRegisteredTaskTypes();
-}
-```
-
-**עבודה:**
-- בונה מפה של `TaskType` → `ITaskHandler`
-- מחזירה את ה-Handler המתאים לפי סוג משימה
-- מעריכה case-insensitive (לא משנה רישיות)
-
----
-
-### 5. **ITaskStatusService**
-
-```csharp
-public interface ITaskStatusService
-{
-    TaskStatusChangeResult ValidateAndChangeStatus(
-        BaseTask task,
-        int nextStatus,
-        string newDataJson);
-        
-    int? GetFinalStatus(string taskType);
-}
-```
-
-**עבודה:**
-1. קובל משימה, סטטוס בא, JSON חדש
-2. מוצא את ה-Handler לפי `task.TaskType`
-3. קורא ל-`ValidateStatusChange` דרך Handler
-4. מחזיר תוצאה (הצלחה/כישלון)
-
----
-
-## 🔑 עקרונות SOLID שמומשו
-
-### 1. **Open/Closed Principle** ✅
-
-```
-פתוח להרחבה:
-  - אפשר להוסיף Handler חדש (TestingTaskHandler) 
-    בלי לשנות קוד קיים
-
-סגור לשינוי:
-  - TaskHandlerFactory לא משתנה
-  - ITaskStatusService לא משתנה
-  - BaseTask לא משתנה
-```
-
-**דוגמה - הוספת Handler חדש:**
-```csharp
-// 1. יצירת Handler חדש
-public class TestingTaskHandler : ITaskHandler
-{
-    public string TaskType => "Testing";
-    public int FinalStatus => 2;
-    public ValidationResult ValidateStatusChange(...) { ... }
-}
-
-// 2. הרשמה בـ Program.cs
-builder.Services.AddTransient<ITaskHandler, TestingTaskHandler>();
-
-// 3. זהו! TaskHandlerFactory ילקח אותו אוטומטי
-```
-
----
-
-### 2. **Single Responsibility Principle** ✅
-
-- **ITaskHandler**: אחראי רק לוולידציה ספציפית של סוג משימה
-- **TaskHandlerFactory**: אחראי רק ליצור את ה-Handler הנכון
-- **ITaskStatusService**: אחראי רק לתנסיק השינוי
-
----
-
-### 3. **Dependency Inversion Principle** ✅
-
-- התוכנה תלויה בממשקים (`ITaskHandler`, `ITaskStatusService`)
-- לא בממשקים (`ProcurementTaskHandler`, `DevelopmentTaskHandler`)
-
----
-
-## 💾 Dependency Injection - Program.cs
-
-```csharp
-// הרשמה של כל ה-Handlers
 builder.Services.AddTransient<ITaskHandler, ProcurementTaskHandler>();
 builder.Services.AddTransient<ITaskHandler, DevelopmentTaskHandler>();
-
-// הרשמה של Factory (אוטומטי מזריק את כל ה-Handlers)
-builder.Services.AddSingleton(sp => 
-    new TaskHandlerFactory(sp.GetRequiredService<IEnumerable<ITaskHandler>>()));
-
-// הרשמה של Service
-builder.Services.AddScoped<ITaskStatusService, TaskStatusService>();
 ```
 
----
+`TaskWorkflowService` orders providers by ascending `Priority` and uses the
+first provider whose `CanHandle(taskType)` returns `true`.
 
-## 📊 REST API Endpoints
+## Current type rules
 
-### שינוי סטטוס עם וולידציה
+| Task type | Final status | Status | Required fields |
+| --- | ---: | ---: | --- |
+| `Procurement` | `3` | `2` | `prices`: array, exactly two strings |
+| `Procurement` | `3` | `3` | `receipt`: non-empty string |
+| `Development` | `4` | `2` | `specification`: string, minimum 10 characters |
+| `Development` | `4` | `3` | `branchName`: valid git branch string |
+| `Development` | `4` | `4` | `versionNumber`: semantic version string/number |
 
-```http
-POST /api/tasks/{id}/change-status
-Content-Type: application/json
+## Public API payloads
 
-{
-  "nextStatus": 2,
-  "newDataJson": "{\"prices\": [\"5000 ₪\", \"4800 ₪\"]}"
-}
-```
+The public API uses `customFields` objects. Older examples using `newDataJson`
+or `customDataJson` describe internal storage or stale request contracts.
 
-**תוצאה בהצלחה (200):**
 ```json
 {
-  "success": true,
-  "message": "סטטוס עודכן בהצלחה מ-1 ל-2",
-  "task": { ... }
+  "newStatus": 2,
+  "nextAssignedToUserId": 2,
+  "customFields": {
+    "prices": ["5000", "4800"]
+  }
 }
 ```
 
-**תוצאה בכישלון (400):**
-```json
-{
-  "error": "'prices' חייב להכיל בדיוק 2 מחרוזות, נמצאו 1"
-}
-```
+List endpoints return paged summaries and omit `customFields`; clients should
+load `GET /api/tasks/{id}` before hydrating type-specific edit forms.
 
----
+## Extending the strategy
 
-## 🧪 בדיקה יחידתית (Unit Tests) - דוגמה
+When adding a new supported type:
 
-```csharp
-[Fact]
-public void ProcurementHandler_ValidateStatus2_WithTwoPrices_ShouldPass()
-{
-    // Arrange
-    var handler = new ProcurementTaskHandler();
-    var json = JsonSerializer.Serialize(new { prices = new[] { "5000", "4800" } });
-    
-    // Act
-    var result = handler.ValidateStatusChange("{}", 1, 2, json);
-    
-    // Assert
-    Assert.True(result.IsValid);
-}
+1. Add the type to `WorkflowConstants.SupportedTaskTypes`.
+2. Register a fallback `ITaskHandler` in `Program.cs`.
+3. Seed or migrate task-type metadata and field definitions.
+4. Add backend tests for supported/unsupported type behavior and field
+   validation.
+5. Update frontend status/final-status mappings and payload adapters.
 
-[Fact]
-public void ProcurementHandler_ValidateStatus2_WithOnlyOnePrice_ShouldFail()
-{
-    // Arrange
-    var handler = new ProcurementTaskHandler();
-    var json = JsonSerializer.Serialize(new { prices = new[] { "5000" } });
-    
-    // Act
-    var result = handler.ValidateStatusChange("{}", 1, 2, json);
-    
-    // Assert
-    Assert.False(result.IsValid);
-}
-```
-
----
-
-## 📂 מבנה קבצים
-
-```
-Domain/
-├── BaseTask.cs
-├── AppUser.cs
-└── Handlers/
-    ├── ITaskHandler.cs                  // ממשק
-    ├── ProcurementTaskHandler.cs       // Implementation
-    ├── DevelopmentTaskHandler.cs       // Implementation
-    └── TaskHandlerFactory.cs           // Factory
-
-Services/
-├── ITaskStatusService.cs               // ממשק
-└── TaskStatusService.cs                // Implementation
-
-Controllers/
-├── TasksController.cs                  // חדש: change-status endpoint
-└── UsersController.cs
-```
-
----
-
-## 📖 דוגמאות שימוש
-
-ראה [STRATEGY_EXAMPLES.cs](STRATEGY_EXAMPLES.cs) לדוגמאות קוד מלאות של:
-1. שימוש ישיר ב-Handlers
-2. Procurement flow
-3. Development flow
-4. TaskStatusService
-5. Factory pattern
-6. API endpoints
-
----
-
-## 🚀 איך להרחיב? (5 דקות)
-
-1. **יצור מחלקה חדשה עבור TestingTaskHandler**
-   ```csharp
-   public class TestingTaskHandler : ITaskHandler
-   ```
-
-2. **הטמע את ITaskHandler**
-   - `TaskType` (לדוגמה: "Testing")
-   - `FinalStatus` (לדוגמה: 2)
-   - `ValidateStatusChange()` עם לוגיקה ספציפית
-
-3. **הוסף הרשמה ב-Program.cs**
-   ```csharp
-   builder.Services.AddTransient<ITaskHandler, TestingTaskHandler>();
-   ```
-
-4. **סיום!** TaskHandlerFactory וITaskStatusService יעבדו אוטומטי
-
----
-
-## 🎓 משהו לדעת
-
-- **CustomDataJson**: שדה JSON גמיש לנתונים המשתנים לפי סוג משימה
-- **FinalStatus**: סטטוס סופי - משימה לא יכולה להתקדם מעבר לו
-- **Validation**: וולידציה מתבצעת בסטטוס מסוים, לא בכולם
-- **Case-insensitive**: TaskType מכופה case-insensitive
-
----
-
-**מעולה! 🎉**
+When adding a new source of workflow rules, implement
+`ITaskWorkflowRuleProvider` with an explicit `Priority` and register it in DI.
+Keep generic movement and persistence rules inside `TaskWorkflowService` so rule
+providers stay focused on type-specific validation.
