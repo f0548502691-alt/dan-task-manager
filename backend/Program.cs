@@ -3,6 +3,7 @@ using DanTaskManager.Domain.Handlers;
 using DanTaskManager.Middleware;
 using DanTaskManager.Services;
 using FluentValidation;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplicationBuilder.CreateBuilder(args);
@@ -37,6 +38,9 @@ builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 // ✅ הרשמה של Application Services
 builder.Services.AddScoped<ITaskApplicationService, TaskApplicationService>();
 builder.Services.AddScoped<IUserApplicationService, UserApplicationService>();
+
+// ✅ הרשמה של MediatR (מיגרציה הדרגתית ל-commands/queries)
+builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));
 
 // הוספת Swagger/OpenAPI (אופציונלי)
 builder.Services.AddEndpointsApiExplorer();
