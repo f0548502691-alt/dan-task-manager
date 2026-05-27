@@ -225,6 +225,44 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         Assert.Contains("לא נתמך", result.Message);
     }
 
+    [Fact]
+    public async Task ChangeStatus_RegisteredButUnsupportedTaskType_ShouldFail()
+    {
+        // Arrange - legacy handlers must not bypass the public Procurement/Development contract.
+        var analysisTask = new BaseTask
+        {
+            Id = 100,
+            TaskType = "Analysis",
+            Description = "Legacy analysis task",
+            CurrentStatus = WorkflowConstants.CreatedStatus,
+            AssignedToUserId = 1,
+            CustomDataJson = "{}"
+        };
+        _context.Tasks.Add(analysisTask);
+        await _context.SaveChangesAsync();
+
+        var handlers = new ITaskHandler[]
+        {
+            new AnalysisTaskHandler(),
+            new ProcurementTaskHandler(),
+            new DevelopmentTaskHandler()
+        };
+        var serviceWithLegacyHandler = new TaskWorkflowService(
+            _context,
+            CreateRuleProviders(new TaskHandlerFactory(handlers), CreateValidationService()),
+            new MockLogger());
+
+        var payload = JsonSerializer.Serialize(new { analysisReport = "Initial findings were reviewed." });
+
+        // Act
+        var result = await serviceWithLegacyHandler.ChangeStatusAsync(100, 2, 1, payload);
+
+        // Assert
+        Assert.False(result.Success);
+        Assert.Contains("לא נתמך", result.Message);
+        Assert.Equal(WorkflowConstants.CreatedStatus, analysisTask.CurrentStatus);
+    }
+
     // === Closed Status Tests ===
 
     [Fact]
