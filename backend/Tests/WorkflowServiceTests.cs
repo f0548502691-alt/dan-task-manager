@@ -256,13 +256,14 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         await _context.SaveChangesAsync();
 
         // Act
-        var result = await _service.CloseTaskAsync(1, "Completed successfully");
+        var result = await _service.CloseTaskAsync(1, 2, "Completed successfully");
 
         // Assert
         Assert.True(result.Success);
         Assert.Equal(99, result.NewStatus);
         Assert.NotNull(result.UpdatedTask);
         Assert.Equal(99, result.UpdatedTask.CurrentStatus);
+        Assert.Equal(2, result.UpdatedTask.AssignedToUserId);
     }
 
     [Fact]
@@ -273,10 +274,10 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         task!.CurrentStatus = 3;
         _context.Tasks.Update(task);
         await _context.SaveChangesAsync();
-        await _service.CloseTaskAsync(1, "First close");
+        await _service.CloseTaskAsync(1, 2, "First close");
         
         // Act
-        var result = await _service.CloseTaskAsync(1, "Second close");
+        var result = await _service.CloseTaskAsync(1, 2, "Second close");
 
         // Assert
         Assert.False(result.Success);
@@ -287,11 +288,28 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
     public async Task CloseTask_WhenNotInFinalStatus_ShouldFail()
     {
         // Act
-        var result = await _service.CloseTaskAsync(1, "Early close");
+        var result = await _service.CloseTaskAsync(1, 2, "Early close");
 
         // Assert
         Assert.False(result.Success);
         Assert.Contains("רק מסטטוס סופי", result.Message);
+    }
+
+    [Fact]
+    public async Task CloseTask_WithUnknownNextAssignee_ShouldFail()
+    {
+        // Arrange
+        var task = await _context.Tasks.FindAsync(1);
+        task!.CurrentStatus = 3;
+        _context.Tasks.Update(task);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.CloseTaskAsync(1, 999, "Final notes");
+
+        // Assert
+        Assert.False(result.Success);
+        Assert.Contains("המשתמש הבא לא קיים", result.Message);
     }
 
     [Fact]
@@ -304,7 +322,7 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         await _context.SaveChangesAsync();
 
         // Act
-        var result = await _service.CloseTaskAsync(1, "Final notes");
+        var result = await _service.CloseTaskAsync(1, 2, "Final notes");
 
         // Assert
         Assert.True(result.Success);
@@ -324,7 +342,7 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         task!.CurrentStatus = 3;
         _context.Tasks.Update(task);
         await _context.SaveChangesAsync();
-        await _service.CloseTaskAsync(1, "Closed");
+        await _service.CloseTaskAsync(1, 1, "Closed");
 
         // Add another open task
         var task2 = new BaseTask
@@ -589,7 +607,7 @@ public class TaskWorkflowIntegrationTests : IAsyncLifetime
         Assert.True(r2.Success);
 
         // Close
-        var close = await _service.CloseTaskAsync(task.Id, "Done");
+        var close = await _service.CloseTaskAsync(task.Id, 2, "Done");
         Assert.True(close.Success);
         Assert.Equal(99, close.NewStatus);
     }

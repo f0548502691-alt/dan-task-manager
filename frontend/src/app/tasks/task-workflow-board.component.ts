@@ -86,7 +86,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
     const options: StatusOption[] = [];
     const minStatus = TASK_STATUS.IN_PROGRESS;
 
-    for (let status = minStatus; status <= maxStatus; status += 1) {
+    for (let status = TASK_STATUS.IN_PROGRESS; status <= maxStatus; status += 1) {
       options.push({ value: status, label: this.getStatusLabel(status) });
     }
 
@@ -174,7 +174,8 @@ export class TaskWorkflowBoardComponent implements OnInit {
 
     const request: ChangeStatusWorkflowRequest = {
       newStatus: this.selectedNextStatus,
-      newDataJson: JSON.stringify(payload)
+      nextAssignedToUserId: task.assignedToUserId,
+      customFields: payload
     };
 
     this.submitInFlight.set(true);
@@ -224,7 +225,10 @@ export class TaskWorkflowBoardComponent implements OnInit {
     this.taskService.clearError();
 
     this.taskService
-      .closeTask(task.id, { finalNotes })
+      .closeTask(task.id, {
+        nextAssignedToUserId: task.assignedToUserId,
+        finalNotes
+      })
       .pipe(
         takeUntilDestroyed(this.destroyRef),
         finalize(() => this.closeInFlight.set(false))

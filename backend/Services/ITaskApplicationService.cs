@@ -26,6 +26,7 @@ public interface ITaskApplicationService
         CancellationToken cancellationToken = default);
     Task<WorkflowResult> CloseAsync(
         int taskId,
+        int nextAssignedToUserId,
         string finalNotes,
         CancellationToken cancellationToken = default);
 }

@@ -82,6 +82,7 @@ public class WorkflowScenarios
         Console.WriteLine("7. סגירת משימה (Status 99)");
         var closeResult = await _workflowService.CloseTaskAsync(
             taskId: 1,
+            nextAssignedToUserId: 1,
             finalNotes: "משימה הושלמה בהצלחה");
         Console.WriteLine($"   Result: {(closeResult.Success ? "✅" : "❌")} - {closeResult.Message}");
 
@@ -179,7 +180,7 @@ public class WorkflowScenarios
 
         // סגירה
         Console.WriteLine("5. סגירה (Status 99)");
-        var close = await _workflowService.CloseTaskAsync(1, "משימה הושלמה וLive");
+        var close = await _workflowService.CloseTaskAsync(1, 1, "משימה הושלמה וLive");
         Console.WriteLine($"   {(close.Success ? "✅" : "❌")} {close.Message}");
     }
 
