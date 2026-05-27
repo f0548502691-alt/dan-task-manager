@@ -1,6 +1,8 @@
+using DanTaskManager.Application.Tasks.CreateTask;
 using DanTaskManager.Domain;
 using DanTaskManager.Services;
 using FluentValidation;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
 
@@ -17,6 +19,7 @@ public class TasksController : ControllerBase
     private readonly IValidator<CreateTaskRequest> _createTaskValidator;
     private readonly IValidator<ChangeStatusWorkflowRequest> _changeStatusValidator;
     private readonly IValidator<CloseTaskRequest> _closeTaskValidator;
+    private readonly IMediator _mediator;
     private readonly ILogger<TasksController> _logger;
 
     public TasksController(
@@ -24,12 +27,14 @@ public class TasksController : ControllerBase
         IValidator<CreateTaskRequest> createTaskValidator,
         IValidator<ChangeStatusWorkflowRequest> changeStatusValidator,
         IValidator<CloseTaskRequest> closeTaskValidator,
+        IMediator mediator,
         ILogger<TasksController> logger)
     {
         _taskService = taskService;
         _createTaskValidator = createTaskValidator;
         _changeStatusValidator = changeStatusValidator;
         _closeTaskValidator = closeTaskValidator;
+        _mediator = mediator;
         _logger = logger;
     }
 
@@ -110,8 +115,8 @@ public class TasksController : ControllerBase
             return BadRequest(new { error = BuildValidationErrorMessage(validation.Errors.Select(e => e.ErrorMessage)) });
         }
 
-        var result = await _taskService.CreateAsync(
-            new TaskCreateCommand(
+        var result = await _mediator.Send(
+            new CreateTaskCommand(
                 request.TaskType,
                 request.Description,
                 request.AssignedToUserId,
