@@ -1,8 +1,6 @@
 using DanTaskManager.Data;
 using DanTaskManager.Domain;
-using DanTaskManager.Domain.Handlers;
 using Microsoft.EntityFrameworkCore;
-using System.Linq.Expressions;
 using System.Text.Json;
 
 namespace DanTaskManager.Services;
@@ -11,24 +9,18 @@ public class TaskApplicationService : ITaskApplicationService
 {
     private readonly ApplicationDbContext _context;
     private readonly ITaskWorkflowService _workflowService;
-    private readonly TaskHandlerFactory _handlerFactory;
-    private readonly ITaskTypeValidationService _taskTypeValidationService;
-    private readonly ITaskTypeMetadataService _taskTypeMetadataService;
+    private readonly ITaskTypeCatalog _taskTypeCatalog;
     private readonly ILogger<TaskApplicationService> _logger;
 
     public TaskApplicationService(
         ApplicationDbContext context,
         ITaskWorkflowService workflowService,
-        TaskHandlerFactory handlerFactory,
-        ITaskTypeValidationService taskTypeValidationService,
-        ITaskTypeMetadataService taskTypeMetadataService,
+        ITaskTypeCatalog taskTypeCatalog,
         ILogger<TaskApplicationService> logger)
     {
         _context = context;
         _workflowService = workflowService;
-        _handlerFactory = handlerFactory;
-        _taskTypeValidationService = taskTypeValidationService;
-        _taskTypeMetadataService = taskTypeMetadataService;
+        _taskTypeCatalog = taskTypeCatalog;
         _logger = logger;
     }
 
@@ -102,17 +94,17 @@ public class TaskApplicationService : ITaskApplicationService
             return TaskCreationResult.FailureResult(jsonError);
         }
 
-        if (!WorkflowConstants.IsSupportedTaskType(command.TaskType))
+        var taskType = _taskTypeCatalog.Find(command.TaskType);
+        if (taskType == null)
         {
-            var supportedTaskTypes = GetSupportedTaskTypes();
             return TaskCreationResult.FailureResult(
                 $"Unsupported task type: {command.TaskType}",
-                supportedTaskTypes);
+                _taskTypeCatalog.GetTaskTypeCodes());
         }
 
         var task = new BaseTask
         {
-            TaskType = command.TaskType,
+            TaskType = taskType.TaskType,
             Description = command.Description,
             AssignedToUserId = command.AssignedToUserId,
             CurrentStatus = WorkflowConstants.CreatedStatus,
@@ -218,32 +210,10 @@ public class TaskApplicationService : ITaskApplicationService
         var items = await orderedQuery
             .Skip(pageRequest.Skip)
             .Take(pageSize)
-            .Select(MapToTaskSummary())
+            .Select(TaskProjectionExpressions.ToSummary())
             .ToListAsync(cancellationToken);
 
         return PagedResult<TaskSummaryDto>.Create(items, totalCount, page, pageSize);
-    }
-
-    private static Expression<Func<BaseTask, TaskSummaryDto>> MapToTaskSummary()
-    {
-        return task => new TaskSummaryDto
-        {
-            Id = task.Id,
-            TaskType = task.TaskType,
-            CurrentStatus = task.CurrentStatus,
-            AssignedToUserId = task.AssignedToUserId,
-            Description = task.Description,
-            CreatedAt = task.CreatedAt,
-            UpdatedAt = task.UpdatedAt,
-            AssignedToUser = task.AssignedToUser == null
-                ? null
-                : new UserBriefDto
-                {
-                    Id = task.AssignedToUser.Id,
-                    Name = task.AssignedToUser.Name,
-                    Email = task.AssignedToUser.Email
-                }
-        };
     }
 
     private static TaskDetailsDto MapToTaskDetails(BaseTask task, AppUser? assignedToUser)
@@ -311,10 +281,4 @@ public class TaskApplicationService : ITaskApplicationService
         }
     }
 
-    private IReadOnlyCollection<string> GetSupportedTaskTypes()
-    {
-        return WorkflowConstants.SupportedTaskTypes
-            .OrderBy(type => type, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
 }

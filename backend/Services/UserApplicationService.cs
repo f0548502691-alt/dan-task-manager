@@ -61,7 +61,7 @@ public class UserApplicationService : IUserApplicationService
             .OrderByDescending(t => t.CreatedAt)
             .Skip(pageRequest.Skip)
             .Take(pageSize)
-            .Select(MapToTaskSummary())
+            .Select(TaskProjectionExpressions.ToSummary())
             .ToListAsync(cancellationToken);
 
         return PagedResult<TaskSummaryDto>.Create(tasks, totalCount, page, pageSize);
@@ -97,28 +97,6 @@ public class UserApplicationService : IUserApplicationService
             CreatedAt = user.CreatedAt,
             TasksCount = user.Tasks.Count,
             OpenTasksCount = user.Tasks.Count(t => t.CurrentStatus != WorkflowConstants.ClosedStatus)
-        };
-    }
-
-    private static Expression<Func<BaseTask, TaskSummaryDto>> MapToTaskSummary()
-    {
-        return task => new TaskSummaryDto
-        {
-            Id = task.Id,
-            TaskType = task.TaskType,
-            CurrentStatus = task.CurrentStatus,
-            AssignedToUserId = task.AssignedToUserId,
-            Description = task.Description,
-            CreatedAt = task.CreatedAt,
-            UpdatedAt = task.UpdatedAt,
-            AssignedToUser = task.AssignedToUser == null
-                ? null
-                : new UserBriefDto
-                {
-                    Id = task.AssignedToUser.Id,
-                    Name = task.AssignedToUser.Name,
-                    Email = task.AssignedToUser.Email
-                }
         };
     }
 }

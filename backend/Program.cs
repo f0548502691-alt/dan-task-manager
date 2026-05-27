@@ -1,5 +1,4 @@
 using DanTaskManager.Data;
-using DanTaskManager.Domain.Handlers;
 using DanTaskManager.Middleware;
 using DanTaskManager.Services;
 using FluentValidation;
@@ -13,12 +12,12 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
 );
 
-// ✅ הרשמה של Task Handlers עבור הסוגים הנתמכים בלבד
-builder.Services.AddTransient<ITaskHandler, ProcurementTaskHandler>();
-builder.Services.AddTransient<ITaskHandler, DevelopmentTaskHandler>();
+// ✅ הרשמה אוטומטית של כל Task Handler שקיים באסמבלי
+builder.Services.AddTaskHandlersFromAssembly(typeof(Program).Assembly);
 
 // ✅ הרשמה של TaskHandlerFactory
 builder.Services.AddScoped<TaskHandlerFactory>();
+builder.Services.AddScoped<ITaskTypeCatalog, TaskTypeCatalogService>();
 
 // ✅ cache לחוקיות מסוגי משימות
 builder.Services.AddMemoryCache();

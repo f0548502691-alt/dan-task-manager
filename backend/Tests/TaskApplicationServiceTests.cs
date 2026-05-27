@@ -36,13 +36,13 @@ public class TaskApplicationServiceTests
             new TestingTaskHandler()
         };
         var metadataService = new TaskTypeValidationService(Options.Create(new TaskTypeValidationOptions()));
+        var handlerFactory = new TaskHandlerFactory(handlers);
+        var taskTypeCatalog = new TaskTypeCatalogService(metadataService, handlerFactory);
 
         var service = new TaskApplicationService(
             context,
             new NoOpWorkflowService(),
-            new TaskHandlerFactory(handlers),
-            metadataService,
-            metadataService,
+            taskTypeCatalog,
             new MockLogger());
 
         var result = await service.CreateAsync(
@@ -55,7 +55,7 @@ public class TaskApplicationServiceTests
         Assert.False(result.Success);
         Assert.Contains("Unsupported", result.Message);
         Assert.Equal(
-            new[] { "Development", "Procurement" },
+            new[] { "Analysis", "Development", "Procurement", "Testing" },
             result.SupportedTaskTypes);
     }
 

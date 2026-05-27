@@ -209,23 +209,7 @@ public class TaskWorkflowService : ITaskWorkflowService
                 $"A {task.TaskType} task can only be closed from final status {finalStatus.Value}");
         }
 
-        // עדכון JSON עם הערות סופיות
-        var updatedJson = task.CustomDataJson;
-        try
-        {
-            var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(updatedJson) ?? new();
-            dict["finalNotes"] = finalNotes;
-            dict["closedAt"] = DateTime.UtcNow.ToString("o");
-            updatedJson = System.Text.Json.JsonSerializer.Serialize(dict);
-        }
-        catch
-        {
-            updatedJson = System.Text.Json.JsonSerializer.Serialize(new
-            {
-                finalNotes,
-                closedAt = DateTime.UtcNow.ToString("o")
-            });
-        }
+        var updatedJson = ruleProvider.BuildCloseData(task, finalNotes);
 
         var oldAssignee = task.AssignedToUserId;
         task.CurrentStatus = WorkflowConstants.ClosedStatus;
@@ -367,11 +351,6 @@ public class TaskWorkflowService : ITaskWorkflowService
 
     private ITaskWorkflowRuleProvider? ResolveRuleProvider(string taskType)
     {
-        if (!WorkflowConstants.IsSupportedTaskType(taskType))
-        {
-            return null;
-        }
-
         return _ruleProviders.FirstOrDefault(provider => provider.CanHandle(taskType));
     }
 }

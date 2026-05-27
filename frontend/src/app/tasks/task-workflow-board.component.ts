@@ -6,31 +6,38 @@ import { finalize } from 'rxjs';
 import {
   BaseTaskDto,
   ChangeStatusWorkflowRequest,
-  DEFAULT_TASK_FINAL_STATUS_BY_TYPE,
   DEFAULT_STATUS_LABELS,
-  TASK_STATUS_LABELS_BY_TYPE,
   TASK_STATUS,
-  TaskTypeSchemaDto,
-  TaskCustomData
+  TaskCustomData,
+  TaskTypeSchemaDto
 } from './task.interfaces';
+import { TaskDynamicFieldsComponent } from './task-dynamic-fields.component';
 import { TaskService } from './task.service';
-import { DevelopmentFieldsComponent } from './development-fields.component';
-import { ProcurementFieldsComponent } from './procurement-fields.component';
 import { parseTaskCustomDataJson, resetControl } from './task-form.utils';
-import { getTaskWorkflowAdapter } from './task-workflow-adapters';
+import {
+  buildTaskFieldPayload,
+  FALLBACK_TASK_TYPE_SCHEMAS,
+  getTaskFieldViewModels,
+  hydrateTaskFieldControls,
+  resetTaskFieldControls
+} from './task-workflow-schema';
 
 interface StatusOption {
   value: number;
   label: string;
 }
 
+interface TaskTypeOption {
+  value: string;
+  label: string;
+}
+
 const DEFAULT_CURRENT_USER_ID = 1;
-const FALLBACK_TASK_TYPE_OPTIONS = ['Procurement', 'Development'] as const;
 
 @Component({
   selector: 'app-task-workflow-board',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, ProcurementFieldsComponent, DevelopmentFieldsComponent],
+  imports: [CommonModule, ReactiveFormsModule, TaskDynamicFieldsComponent],
   templateUrl: './task-workflow-board.component.html',
   styleUrls: ['./task-workflow-board.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -42,16 +49,25 @@ export class TaskWorkflowBoardComponent implements OnInit {
   readonly TASK_STATUS = TASK_STATUS;
   readonly taskService = inject(TaskService);
   readonly currentUserId = DEFAULT_CURRENT_USER_ID;
-  readonly taskTypeOptions = signal<readonly string[]>([]);
+  readonly taskTypeSchemas = signal<readonly TaskTypeSchemaDto[]>([]);
   readonly selectedTask = signal<BaseTaskDto | null>(null);
   readonly createInFlight = signal(false);
   readonly submitInFlight = signal(false);
   readonly closeInFlight = signal(false);
   readonly taskTypeMetadataInFlight = signal(false);
   readonly successMessage = signal<string | null>(null);
-  private readonly taskTypeFinalStatusMap = signal<Readonly<Record<string, number>>>(
-    DEFAULT_TASK_FINAL_STATUS_BY_TYPE
+
+  readonly taskTypeOptions = computed<readonly TaskTypeOption[]>(() =>
+    this.taskTypeSchemas().map((schema) => ({
+      value: schema.taskType,
+      label: schema.displayName || schema.taskType
+    }))
   );
+
+  readonly selectedTaskSchema = computed(() => {
+    const task = this.selectedTask();
+    return task ? this.getTaskTypeSchema(task.taskType) : null;
+  });
 
   readonly createForm = this.fb.group({
     createTaskType: this.fb.nonNullable.control<string>('', [Validators.required]),
@@ -62,12 +78,6 @@ export class TaskWorkflowBoardComponent implements OnInit {
   readonly statusForm = this.fb.group({
     newStatus: this.fb.control<number | null>(null, [Validators.required]),
     nextAssignedToUserId: this.fb.nonNullable.control(DEFAULT_CURRENT_USER_ID, [Validators.required, Validators.min(1)]),
-    priceA: this.fb.nonNullable.control(''),
-    priceB: this.fb.nonNullable.control(''),
-    receipt: this.fb.nonNullable.control(''),
-    specification: this.fb.nonNullable.control(''),
-    branchName: this.fb.nonNullable.control(''),
-    versionNumber: this.fb.nonNullable.control(''),
     fallbackJson: this.fb.nonNullable.control('')
   });
 
@@ -80,8 +90,8 @@ export class TaskWorkflowBoardComponent implements OnInit {
     if (!task) {
       return [];
     }
-    if (task.currentStatus === TASK_STATUS.CLOSED) {
-      return [{ value: TASK_STATUS.CLOSED, label: this.getStatusLabel(TASK_STATUS.CLOSED, task.taskType) }];
+    if (this.isTaskClosed(task)) {
+      return [{ value: TASK_STATUS.CLOSED, label: this.getStatusLabel(TASK_STATUS.CLOSED) }];
     }
 
     const finalStatus = this.getFinalStatus(task.taskType, task.currentStatus);
@@ -89,7 +99,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
     const options: StatusOption[] = [];
 
     for (let status = TASK_STATUS.CREATED; status <= maxStatus; status += 1) {
-      options.push({ value: status, label: this.getStatusLabel(status, task.taskType) });
+      options.push({ value: status, label: this.getStatusLabel(status) });
     }
 
     return options;
@@ -155,7 +165,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
     this.successMessage.set(null);
     resetControl(this.closeForm.controls['closeNotes']);
 
-    this.resetStatusSpecificFields();
+    this.resetStatusFields();
     this.hydrateStatusFields(task);
 
     this.statusForm.controls['nextAssignedToUserId'].setValue(task.assignedToUserId);
@@ -165,7 +175,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
 
   submitStatusUpdate(): void {
     const task = this.selectedTask();
-    if (!task || task.currentStatus === TASK_STATUS.CLOSED) {
+    if (!task || this.isTaskClosed(task)) {
       return;
     }
 
@@ -205,7 +215,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
         next: (response) => {
           this.successMessage.set(response.message);
           this.selectedTask.set(response.task);
-          this.resetStatusSpecificFields();
+          this.resetStatusFields();
           this.hydrateStatusFields(response.task);
           this.statusForm.controls['newStatus'].setValue(this.getSuggestedStatus(response.task));
         },
@@ -217,7 +227,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
 
   submitCloseTask(): void {
     const task = this.selectedTask();
-    if (!task || task.currentStatus === TASK_STATUS.CLOSED) {
+    if (!task || this.isTaskClosed(task)) {
       return;
     }
 
@@ -259,13 +269,15 @@ export class TaskWorkflowBoardComponent implements OnInit {
   }
 
   isCreateDescriptionInvalid(): boolean {
-    const control = this.createForm.controls['createTaskDescription'];
-    return control.invalid && (control.touched || control.dirty);
+    return this.isControlInvalid(this.createForm.controls['createTaskDescription']);
   }
 
   isCloseNotesInvalid(): boolean {
-    const control = this.closeForm.controls['closeNotes'];
-    return control.invalid && (control.touched || control.dirty);
+    return this.isControlInvalid(this.closeForm.controls['closeNotes']);
+  }
+
+  isTaskClosed(task: BaseTaskDto): boolean {
+    return task.currentStatus === TASK_STATUS.CLOSED;
   }
 
   canCloseTask(task: BaseTaskDto): boolean {
@@ -273,12 +285,25 @@ export class TaskWorkflowBoardComponent implements OnInit {
     return typeof finalStatus === 'number' && task.currentStatus === finalStatus;
   }
 
-  taskStatusLabel(status: number, taskType?: string): string {
-    return this.getStatusLabel(status, taskType);
+  canUpdateSelectedTask(): boolean {
+    const task = this.selectedTask();
+    return !!task && !this.isTaskClosed(task);
+  }
+
+  hasSchemaFieldsForSelectedStatus(): boolean {
+    return getTaskFieldViewModels(this.selectedTaskSchema(), this.selectedNextStatus).length > 0;
+  }
+
+  taskStatusLabel(status: number): string {
+    return this.getStatusLabel(status);
   }
 
   trackByTaskId(_: number, task: BaseTaskDto): number {
     return task.id;
+  }
+
+  private isControlInvalid(control: { invalid: boolean; touched: boolean; dirty: boolean }): boolean {
+    return control.invalid && (control.touched || control.dirty);
   }
 
   private getSuggestedStatus(task: BaseTaskDto): number {
@@ -286,13 +311,18 @@ export class TaskWorkflowBoardComponent implements OnInit {
     return Math.min(task.currentStatus + 1, finalStatus);
   }
 
-  private getStatusLabel(status: number, taskType?: string): string {
-    const typeLabels = taskType ? TASK_STATUS_LABELS_BY_TYPE[taskType] : undefined;
-    return typeLabels?.[status] ?? DEFAULT_STATUS_LABELS[status] ?? `Status ${status}`;
+  private getStatusLabel(status: number): string {
+    return DEFAULT_STATUS_LABELS[status] ?? `Status ${status}`;
   }
 
   private getFinalStatus(taskType: string, fallbackStatus: number): number {
-    return this.taskTypeFinalStatusMap()[taskType] ?? fallbackStatus;
+    return this.getTaskTypeSchema(taskType)?.finalStatus ?? fallbackStatus;
+  }
+
+  private getTaskTypeSchema(taskType: string): TaskTypeSchemaDto | null {
+    return (
+      this.taskTypeSchemas().find((schema) => schema.taskType.toLowerCase() === taskType.toLowerCase()) ?? null
+    );
   }
 
   private loadTaskTypeMetadata(): void {
@@ -316,21 +346,12 @@ export class TaskWorkflowBoardComponent implements OnInit {
       return;
     }
 
-    const taskTypesMap: Record<string, number> = { ...DEFAULT_TASK_FINAL_STATUS_BY_TYPE };
-    for (const taskType of taskTypes) {
-      if (typeof taskType.finalStatus === 'number') {
-        taskTypesMap[taskType.taskType] = taskType.finalStatus;
-      }
-    }
-
-    this.taskTypeFinalStatusMap.set(taskTypesMap);
-    this.taskTypeOptions.set(taskTypes.map((taskType) => taskType.taskType));
+    this.taskTypeSchemas.set(taskTypes);
     this.ensureCreateTaskTypeIsSelected();
   }
 
   private setFallbackTaskTypeMetadata(): void {
-    this.taskTypeOptions.set(FALLBACK_TASK_TYPE_OPTIONS);
-    this.taskTypeFinalStatusMap.set(DEFAULT_TASK_FINAL_STATUS_BY_TYPE);
+    this.taskTypeSchemas.set(FALLBACK_TASK_TYPE_SCHEMAS);
     this.ensureCreateTaskTypeIsSelected();
   }
 
@@ -343,35 +364,24 @@ export class TaskWorkflowBoardComponent implements OnInit {
       return;
     }
 
-    if (!selectedType || !options.includes(selectedType)) {
-      typeControl.setValue(options[0]);
+    if (!selectedType || !options.some((option) => option.value === selectedType)) {
+      typeControl.setValue(options[0].value);
     }
   }
 
-  private resetStatusSpecificFields(): void {
-    const dynamicControls = [
-      'priceA',
-      'priceB',
-      'receipt',
-      'specification',
-      'branchName',
-      'versionNumber',
-      'fallbackJson'
-    ] as const;
-
-    for (const controlName of dynamicControls) {
-      const control = this.statusForm.controls[controlName];
-      resetControl(control);
-      control.clearValidators();
-      control.updateValueAndValidity({ emitEvent: false });
-    }
+  private resetStatusFields(): void {
+    resetTaskFieldControls(this.statusForm, this.taskTypeSchemas());
+    const fallbackControl = this.statusForm.controls['fallbackJson'];
+    resetControl(fallbackControl);
+    fallbackControl.clearValidators();
+    fallbackControl.updateValueAndValidity({ emitEvent: false });
   }
 
   private hydrateStatusFields(task: BaseTaskDto): void {
     const data = task.customFields ?? {};
-    const adapter = getTaskWorkflowAdapter(task.taskType);
-    if (adapter) {
-      adapter.hydrate(this.statusForm, data);
+    const schema = this.getTaskTypeSchema(task.taskType);
+    if (schema && schema.fields.length > 0) {
+      hydrateTaskFieldControls(this.statusForm, schema, data);
       return;
     }
 
@@ -379,9 +389,10 @@ export class TaskWorkflowBoardComponent implements OnInit {
   }
 
   private buildPayload(taskType: string, status: number): TaskCustomData {
-    const adapter = getTaskWorkflowAdapter(taskType);
-    if (adapter) {
-      return adapter.buildPayload(this.statusForm, status);
+    const schema = this.getTaskTypeSchema(taskType);
+    if (schema && getTaskFieldViewModels(schema, status).length > 0) {
+      this.statusForm.controls['fallbackJson'].setErrors(null);
+      return buildTaskFieldPayload(this.statusForm, schema, status);
     }
 
     const fallbackControl = this.statusForm.controls['fallbackJson'];
@@ -406,7 +417,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
           }
 
           this.selectedTask.set(taskDetails);
-          this.resetStatusSpecificFields();
+          this.resetStatusFields();
           this.hydrateStatusFields(taskDetails);
           this.statusForm.controls['nextAssignedToUserId'].setValue(taskDetails.assignedToUserId);
           this.statusForm.controls['newStatus'].setValue(this.getSuggestedStatus(taskDetails));

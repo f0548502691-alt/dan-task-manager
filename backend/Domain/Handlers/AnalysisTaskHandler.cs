@@ -7,7 +7,7 @@ namespace DanTaskManager.Domain.Handlers;
 /// סטטוס סופי: 2
 /// סטטוס 2: דורש שדה analysisReport
 /// </summary>
-public class AnalysisTaskHandler : ITaskHandler
+public class AnalysisTaskHandler : IRegisterableTaskHandler
 {
     public string TaskType => "Analysis";
 
