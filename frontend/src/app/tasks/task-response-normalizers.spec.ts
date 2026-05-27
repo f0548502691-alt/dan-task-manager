@@ -24,7 +24,7 @@ test('normalizes paged task collections and preserves customFields payloads', ()
           tags: ['metadata', 'workflow']
         },
         createdAt: '2026-05-21T00:00:00.000Z',
-        updatedAt: 'not-a-string'
+        updatedAt: 42
       }
     ],
     page: 1,
