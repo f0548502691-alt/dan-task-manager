@@ -309,6 +309,20 @@ public class ApplicationDbContext : DbContext
                 Version = 1,
                 CreatedAt = SeedTimestampUtc,
                 UpdatedAt = SeedTimestampUtc
+            },
+            // Marketing is the canonical "third task type" demo: added without
+            // touching any C# code beyond this seed block. The metadata-driven
+            // rule provider picks it up automatically.
+            new()
+            {
+                Id = 3,
+                Code = "Marketing",
+                DisplayName = "Marketing",
+                FinalStatus = 3,
+                IsActive = true,
+                Version = 1,
+                CreatedAt = SeedTimestampUtc,
+                UpdatedAt = SeedTimestampUtc
             }
         };
 
@@ -382,6 +396,51 @@ public class ApplicationDbContext : DbContext
                 RegexPattern = "semantic_version",
                 AppliesFromStatus = 4,
                 AppliesToStatus = 4,
+                IsIndexed = false,
+                CreatedAt = SeedTimestampUtc,
+                UpdatedAt = SeedTimestampUtc
+            },
+            // Marketing field definitions (TaskTypeMetadataId = 3). Status 2
+            // requires a campaign name and a target-audience enum; status 3
+            // requires an ISO-8601 launch date. Pure metadata, no handlers.
+            new()
+            {
+                Id = 6,
+                TaskTypeMetadataId = 3,
+                FieldKey = "campaignName",
+                DataType = "string",
+                IsRequired = true,
+                MinLength = 3,
+                AppliesFromStatus = 2,
+                AppliesToStatus = 2,
+                IsIndexed = false,
+                CreatedAt = SeedTimestampUtc,
+                UpdatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = 7,
+                TaskTypeMetadataId = 3,
+                FieldKey = "targetAudience",
+                DataType = "string",
+                IsRequired = true,
+                AllowedValuesJson = "[\"B2B\",\"B2C\",\"Internal\"]",
+                AppliesFromStatus = 2,
+                AppliesToStatus = 2,
+                IsIndexed = true,
+                CreatedAt = SeedTimestampUtc,
+                UpdatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = 8,
+                TaskTypeMetadataId = 3,
+                FieldKey = "launchDate",
+                DataType = "string",
+                IsRequired = true,
+                RegexPattern = @"^\d{4}-\d{2}-\d{2}$",
+                AppliesFromStatus = 3,
+                AppliesToStatus = 3,
                 IsIndexed = false,
                 CreatedAt = SeedTimestampUtc,
                 UpdatedAt = SeedTimestampUtc
