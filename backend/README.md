@@ -1,130 +1,90 @@
-# מנהל משימות - DanTaskManager
+# DanTaskManager — Backend
 
-פרויקט .NET 8 עם EF Core ו-SQL Server לניהול משימות גנרי.
+.NET 8 + EF Core 8 task-management service that separates the **general workflow
+rules** (apply to every task) from the **task-type-specific rules** (validation
+per type, per status). New task types can be added without modifying existing
+code — either declaratively via metadata rows, or by implementing a single
+`IRegisterableTaskHandler` interface that DI picks up automatically.
 
-## 📋 מבנה הפרויקט
+## Quick start
 
-```
-dan-task-manager/
-├── Domain/
-│   ├── AppUser.cs          # מחלקה המייצגת משתמש
-│   └── BaseTask.cs         # מחלקה למשימה בסיסית
-├── Data/
-│   └── ApplicationDbContext.cs  # DbContext עם הגדרות EF Core
-├── DanTaskManager.csproj   # קובץ הפרויקט
-└── README.md
-```
-
-## 🏗️ מחלקות Domain
-
-### AppUser
-ייצוג משתמש במערכת:
-- `Id`: מזהה ייחודי
-- `Name`: שם המשתמש
-- `Email`: דוא"ל (עם אינדקס ייחודי)
-- `CreatedAt`: תאריך יצירה
-- `Tasks`: קשר לרבות משימות
-
-### BaseTask
-ייצוג משימה עם תמיכה בנתונים משתנים:
-- `Id`: מזהה ייחודי
-- `TaskType`: סוג המשימה (Analysis, Development, Testing, וכו')
-- `CurrentStatus`: סטטוס כמספר (0=לא התחילה, 1=בתהליך, 2=הושלמה, 3=ביוטלה)
-- `AssignedToUserId`: מזהה המשתמש המופקד
-- `AssignedToUser`: קשר למשתמש
-- `Description`: תיאור המשימה
-- **`CustomDataJson`**: JSON המכיל נתונים משתנים בהתאם לסוג המשימה
-- `CreatedAt` / `UpdatedAt`: ניהול תאריכים
-
-## 💾 DbContext - ApplicationDbContext
-
-ההגדרות כוללות:
-
-### תכונות JSON
-`CustomDataJson` מוגדר כעמודת JSON מסוג `nvarchar(max)` התומכת בשמירת נתונים דינאמיים:
-
-```csharp
-taskBuilder
-    .Property(t => t.CustomDataJson)
-    .IsRequired()
-    .HasColumnType("nvarchar(max)")
-    .HasDefaultValue("{}");
-```
-
-### Seed Data - 6 משתמשים
-כברירת מחדל, יש 6 משתמשים בסיסיים:
-1. **דן כהן** (dan@example.com)
-2. **רות לוי** (ruth@example.com)
-3. **משה אברהם** (moshe@example.com)
-4. **נועה ישראלי** (noa@example.com)
-5. **איתן ברק** (eitan@example.com)
-6. **מיכל גל** (michal@example.com)
-
-וכן 3 משימות לדוגמה עם `CustomDataJson` שונה לכל אחת.
-
-## 🔧 Setup והגדרה
-
-### 1. התקנת Packages
 ```bash
+cd backend
 dotnet restore
+# Optional: update appsettings.json ConnectionStrings:DefaultConnection
+dotnet run
 ```
 
-### 2. הגדרת Connection String
-בקובץ `appsettings.json`:
-```json
-{
-  "ConnectionStrings": {
-    "DefaultConnection": "Server=.;Database=DanTaskManager;Trusted_Connection=true;Encrypt=false;"
-  }
-}
-```
+Swagger UI is served at `/swagger` when the host is running in Development.
 
-### 3. יצירת Migration
+To run the test suite:
+
 ```bash
-dotnet ef migrations add InitialCreate
+dotnet test
 ```
 
-### 4. עדכון בסיס הנתונים
-```bash
-dotnet ef database update
+## Project layout
+
+```
+backend/
+├── Domain/               Entities, value objects, base types, workflow constants
+│   └── Handlers/         Strategy interface + base classes for code-backed task rules
+├── Application/
+│   └── Tasks/            MediatR commands & queries, one folder per use-case
+├── Services/             Workflow engine, rule providers, metadata service,
+│                         startup conflict validator
+├── Contracts/            DTO contracts shared between API and clients
+├── Controllers/          HTTP endpoints (Tasks, TaskTypes, Users)
+├── Data/                 ApplicationDbContext, seed data, schema bootstrap
+├── Middleware/           Global exception → API-error mapping
+├── Validation/           FluentValidation validators
+├── Tests/                xUnit tests (alongside the project; same assembly)
+└── docs/                 Reference documentation
 ```
 
-## 📝 דוגמה לשימוש ב-CustomDataJson
+## Architecture in one diagram
 
-```csharp
-// יצירת משימה עם נתונים משתנים
-var task = new BaseTask
-{
-    TaskType = "Analysis",
-    Description = "ניתוח",
-    AssignedToUserId = 1,
-    CustomDataJson = @"{
-        ""priority"": ""high"",
-        ""deadline"": ""2026-06-15"",
-        ""estimatedHours"": 8,
-        ""customField"": ""ערך"""
-};
-
-// שמירה בדטה בייס
-context.Tasks.Add(task);
-await context.SaveChangesAsync();
+```
+Controller / MediatR handler
+        │
+        ▼
+TaskWorkflowService            ← general rules (forward +1, backward, no jumps,
+        │                        closed = immutable, final-status guard, JSON
+        │                        payload, assignee existence)
+        ▼
+ITaskWorkflowRuleProvider[]    ← ordered by Priority; first CanHandle wins
+        ├── Metadata provider  ← TaskTypeMetadata + TaskFieldDefinition rows
+        └── Handler provider   ← TaskHandlerFactory → IRegisterableTaskHandler
 ```
 
-## 📖 הערות חשובות
+A startup `IHostedService` (`TaskTypeConflictValidator`) scans every registered
+rule provider and flags any task-type code claimed by more than one source.
 
-- **JSON Columns**: EF Core 8 תומך בעבודה עם JSON columns בצורה מובנית
-- **Foreign Keys**: קשר One-to-Many בין AppUser ו-BaseTask עם `OnDelete(DeleteBehavior.Restrict)`
-- **Indexes**: יצירת אינדקס על `Email` ו-`TaskType` להאצת חיפושים
-- **Timestamps**: `CreatedAt` ו-`UpdatedAt` מוגדרים עם `GETUTCDATE()` כברירת מחדל
+## Adding a new task type
 
-## 🚀 שלבים הבאים
+Two supported paths, both **without touching any existing code**:
 
-1. יצירת Controllers לקבלת בקשות API
-2. הוספת Business Logic שכבה
-3. מימוש סינון וחיפוש משימות לפי סוג וסטטוס
-4. הוספת Validation ל-CustomDataJson
-5. יצירת Migration ו-seed לנתונים נוספים
+1. **Metadata-only** (preferred). Insert one row into `TaskTypeMetadata` and one
+   row per validation rule into `TaskFieldDefinition`. The `Marketing` type in
+   the seed data is a complete worked example.
+2. **Code-backed handler** (only when rules are not declaratively expressible).
+   Implement `IRegisterableTaskHandler` anywhere in the assembly. The DI
+   registration in `TaskHandlerRegistrationExtensions.AddTaskHandlersFromAssembly`
+   picks it up by reflection.
 
----
+Full walkthrough: `docs/EXTENSION_GUIDE.md`.
 
-**נבנה עם:** .NET 8, EF Core 8, SQL Server
+## Configuration
+
+| Setting | Default | Effect |
+|--------|---------|--------|
+| `ConnectionStrings:DefaultConnection` | _(none)_ | SQL Server connection string. |
+| `TaskTypeConflictValidation:FailOnConflict` | `false` | When `true`, the app refuses to start if more than one rule provider claims the same task-type code. |
+
+## Documentation
+
+- `docs/WORKFLOW.md` — workflow rules and per-type providers
+- `docs/EXTENSION_GUIDE.md` — adding new task types and validation rules
+- `docs/API_ERROR_CODES.md` — error-code catalog returned by the API
+- `docs/QUICKSTART.md` — runtime walkthrough with sample requests
+- `docs/BEST_PRACTICES.md` — coding conventions for this codebase
