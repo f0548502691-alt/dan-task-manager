@@ -10,10 +10,26 @@ export const TASK_STATUS = {
 
 export const DEFAULT_STATUS_LABELS: Readonly<Record<number, string>> = {
   [TASK_STATUS.CREATED]: 'Created',
-  [TASK_STATUS.STATUS_2]: 'Status 2',
-  [TASK_STATUS.STATUS_3]: 'Status 3',
-  [TASK_STATUS.STATUS_4]: 'Status 4',
+  [TASK_STATUS.STATUS_2]: 'In progress',
+  [TASK_STATUS.STATUS_3]: 'In progress',
+  [TASK_STATUS.STATUS_4]: 'In progress',
   [TASK_STATUS.CLOSED]: 'Closed'
+};
+
+export const TASK_STATUS_LABELS_BY_TYPE: Readonly<Record<string, Readonly<Record<number, string>>>> = {
+  Procurement: {
+    [TASK_STATUS.CREATED]: 'Created',
+    [TASK_STATUS.STATUS_2]: 'Supplier offers received',
+    [TASK_STATUS.STATUS_3]: 'Purchase completed',
+    [TASK_STATUS.CLOSED]: 'Closed'
+  },
+  Development: {
+    [TASK_STATUS.CREATED]: 'Created',
+    [TASK_STATUS.STATUS_2]: 'Specification completed',
+    [TASK_STATUS.STATUS_3]: 'Development completed',
+    [TASK_STATUS.STATUS_4]: 'Distribution completed',
+    [TASK_STATUS.CLOSED]: 'Closed'
+  }
 };
 
 export const TASK_FINAL_STATUS_BY_TYPE: Readonly<Record<string, number>> = {

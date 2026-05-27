@@ -7,6 +7,7 @@ import {
   BaseTaskDto,
   ChangeStatusWorkflowRequest,
   DEFAULT_STATUS_LABELS,
+  TASK_STATUS_LABELS_BY_TYPE,
   TASK_STATUS,
   TASK_FINAL_STATUS_BY_TYPE,
   TaskCustomData
@@ -75,7 +76,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
       return [];
     }
     if (task.currentStatus === TASK_STATUS.CLOSED) {
-      return [{ value: TASK_STATUS.CLOSED, label: this.getStatusLabel(TASK_STATUS.CLOSED) }];
+      return [{ value: TASK_STATUS.CLOSED, label: this.getStatusLabel(TASK_STATUS.CLOSED, task.taskType) }];
     }
 
     const finalStatus = TASK_FINAL_STATUS_BY_TYPE[task.taskType] ?? task.currentStatus;
@@ -83,7 +84,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
     const options: StatusOption[] = [];
 
     for (let status = TASK_STATUS.CREATED; status <= maxStatus; status += 1) {
-      options.push({ value: status, label: this.getStatusLabel(status) });
+      options.push({ value: status, label: this.getStatusLabel(status, task.taskType) });
     }
 
     return options;
@@ -263,8 +264,8 @@ export class TaskWorkflowBoardComponent implements OnInit {
     return typeof finalStatus === 'number' && task.currentStatus === finalStatus;
   }
 
-  taskStatusLabel(status: number): string {
-    return this.getStatusLabel(status);
+  taskStatusLabel(status: number, taskType?: string): string {
+    return this.getStatusLabel(status, taskType);
   }
 
   trackByTaskId(_: number, task: BaseTaskDto): number {
@@ -280,8 +281,9 @@ export class TaskWorkflowBoardComponent implements OnInit {
     return Math.min(task.currentStatus + 1, finalStatus);
   }
 
-  private getStatusLabel(status: number): string {
-    return DEFAULT_STATUS_LABELS[status] ?? `Status ${status}`;
+  private getStatusLabel(status: number, taskType?: string): string {
+    const typeLabels = taskType ? TASK_STATUS_LABELS_BY_TYPE[taskType] : undefined;
+    return typeLabels?.[status] ?? DEFAULT_STATUS_LABELS[status] ?? `Status ${status}`;
   }
 
   private resetStatusSpecificFields(): void {
