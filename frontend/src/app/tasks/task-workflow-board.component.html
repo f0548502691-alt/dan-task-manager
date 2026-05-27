@@ -36,7 +36,7 @@
       (click)="selectTask(task)"
     >
       <span class="task-list-item__title">#{{ task.id }} - {{ task.description }}</span>
-      <span class="task-list-item__meta">{{ task.taskType }} | {{ taskStatusLabel(task.currentStatus, task.taskType) }}</span>
+      <span class="task-list-item__meta">{{ task.taskType }} | {{ taskStatusLabel(task.currentStatus) }}</span>
     </button>
   </aside>
 
@@ -44,7 +44,7 @@
     <h3>Update task #{{ task.id }}</h3>
     <p class="editor-panel__subtitle">
       Type: <strong>{{ task.taskType }}</strong> | Current status:
-      <strong>{{ taskStatusLabel(task.currentStatus, task.taskType) }}</strong>
+      <strong>{{ taskStatusLabel(task.currentStatus) }}</strong>
     </p>
 
     <form [formGroup]="statusForm" (ngSubmit)="submitStatusUpdate()">
@@ -59,27 +59,26 @@
       <label for="nextAssignedToUserId">Next assigned user ID</label>
       <input id="nextAssignedToUserId" type="number" min="1" formControlName="nextAssignedToUserId" />
 
-      <ng-container [ngSwitch]="task.taskType">
-        <app-procurement-fields
-          *ngSwitchCase="'Procurement'"
-          [form]="statusForm"
+      <ng-container *ngIf="hasSchemaForSelected; else fallbackJsonTemplate">
+        <app-dynamic-task-fields
+          [group]="customFieldsGroup"
+          [schema]="currentSchema()"
           [status]="selectedNextStatus"
-        ></app-procurement-fields>
-
-        <app-development-fields
-          *ngSwitchCase="'Development'"
-          [form]="statusForm"
-          [status]="selectedNextStatus"
-        ></app-development-fields>
-
-        <ng-container *ngSwitchDefault>
-          <label for="fallbackJson">Workflow payload (JSON)</label>
-          <textarea id="fallbackJson" rows="6" formControlName="fallbackJson"></textarea>
-          <small *ngIf="statusForm.controls['fallbackJson'].hasError('invalidJson')">
-            The JSON payload is invalid.
-          </small>
-        </ng-container>
+          [values]="hydrationValues()"
+          (schemaResolved)="onResolvedFieldsChanged($event)"
+        ></app-dynamic-task-fields>
+        <p class="panel-note" *ngIf="!hasApplicableSchemaFields">
+          No fields are required for this status.
+        </p>
       </ng-container>
+
+      <ng-template #fallbackJsonTemplate>
+        <label for="fallbackJson">Workflow payload (JSON)</label>
+        <textarea id="fallbackJson" rows="6" formControlName="fallbackJson"></textarea>
+        <small *ngIf="statusForm.controls['fallbackJson'].hasError('invalidJson')">
+          The JSON payload is invalid.
+        </small>
+      </ng-template>
 
       <p class="feedback feedback--success" *ngIf="successMessage()">{{ successMessage() }}</p>
 

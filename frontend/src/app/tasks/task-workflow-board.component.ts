@@ -1,23 +1,24 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 import {
   BaseTaskDto,
   ChangeStatusWorkflowRequest,
-  DEFAULT_TASK_FINAL_STATUS_BY_TYPE,
   DEFAULT_STATUS_LABELS,
-  TASK_STATUS_LABELS_BY_TYPE,
   TASK_STATUS,
-  TaskTypeSchemaDto,
-  TaskCustomData
+  TaskCustomData,
+  TaskTypeSchemaDto
 } from './task.interfaces';
 import { TaskService } from './task.service';
-import { DevelopmentFieldsComponent } from './development-fields.component';
-import { ProcurementFieldsComponent } from './procurement-fields.component';
+import { DynamicTaskFieldsComponent } from './dynamic-task-fields.component';
 import { parseTaskCustomDataJson, resetControl } from './task-form.utils';
-import { getTaskWorkflowAdapter } from './task-workflow-adapters';
+import {
+  ResolvedFieldRule,
+  buildPayloadFromGroup,
+  getApplicableFields
+} from './task-schema.utils';
 
 interface StatusOption {
   value: number;
@@ -25,12 +26,11 @@ interface StatusOption {
 }
 
 const DEFAULT_CURRENT_USER_ID = 1;
-const FALLBACK_TASK_TYPE_OPTIONS = ['Procurement', 'Development'] as const;
 
 @Component({
   selector: 'app-task-workflow-board',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, ProcurementFieldsComponent, DevelopmentFieldsComponent],
+  imports: [CommonModule, ReactiveFormsModule, DynamicTaskFieldsComponent],
   templateUrl: './task-workflow-board.component.html',
   styleUrls: ['./task-workflow-board.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -48,9 +48,9 @@ export class TaskWorkflowBoardComponent implements OnInit {
   readonly submitInFlight = signal(false);
   readonly closeInFlight = signal(false);
   readonly successMessage = signal<string | null>(null);
-  private readonly taskTypeFinalStatusMap = signal<Readonly<Record<string, number>>>(
-    DEFAULT_TASK_FINAL_STATUS_BY_TYPE
-  );
+  readonly currentSchema = signal<TaskTypeSchemaDto | null>(null);
+  readonly hydrationValues = signal<TaskCustomData | null>(null);
+  private resolvedFields: readonly ResolvedFieldRule[] = [];
 
   readonly createForm = this.fb.group({
     createTaskType: this.fb.nonNullable.control<string>('', [Validators.required]),
@@ -61,12 +61,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
   readonly statusForm = this.fb.group({
     newStatus: this.fb.control<number | null>(null, [Validators.required]),
     nextAssignedToUserId: this.fb.nonNullable.control(DEFAULT_CURRENT_USER_ID, [Validators.required, Validators.min(1)]),
-    priceA: this.fb.nonNullable.control(''),
-    priceB: this.fb.nonNullable.control(''),
-    receipt: this.fb.nonNullable.control(''),
-    specification: this.fb.nonNullable.control(''),
-    branchName: this.fb.nonNullable.control(''),
-    versionNumber: this.fb.nonNullable.control(''),
+    customFields: this.fb.group({}),
     fallbackJson: this.fb.nonNullable.control('')
   });
 
@@ -80,7 +75,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
       return [];
     }
     if (task.currentStatus === TASK_STATUS.CLOSED) {
-      return [{ value: TASK_STATUS.CLOSED, label: this.getStatusLabel(TASK_STATUS.CLOSED, task.taskType) }];
+      return [{ value: TASK_STATUS.CLOSED, label: this.getStatusLabel(TASK_STATUS.CLOSED) }];
     }
 
     const finalStatus = this.getFinalStatus(task.taskType, task.currentStatus);
@@ -88,14 +83,27 @@ export class TaskWorkflowBoardComponent implements OnInit {
     const options: StatusOption[] = [];
 
     for (let status = TASK_STATUS.CREATED; status <= maxStatus; status += 1) {
-      options.push({ value: status, label: this.getStatusLabel(status, task.taskType) });
+      options.push({ value: status, label: this.getStatusLabel(status) });
     }
 
     return options;
   });
 
+  get customFieldsGroup(): FormGroup {
+    return this.statusForm.controls['customFields'] as FormGroup;
+  }
+
   get selectedNextStatus(): number {
     return Number(this.statusForm.controls['newStatus'].value ?? TASK_STATUS.CREATED);
+  }
+
+  get hasSchemaForSelected(): boolean {
+    const schema = this.currentSchema();
+    return !!schema?.fields && schema.fields.length > 0;
+  }
+
+  get hasApplicableSchemaFields(): boolean {
+    return getApplicableFields(this.currentSchema(), this.selectedNextStatus).length > 0;
   }
 
   ngOnInit(): void {
@@ -154,11 +162,10 @@ export class TaskWorkflowBoardComponent implements OnInit {
     this.successMessage.set(null);
     resetControl(this.closeForm.controls['closeNotes']);
 
-    this.resetStatusSpecificFields();
-    this.hydrateStatusFields(task);
-
-    this.statusForm.controls['nextAssignedToUserId'].setValue(task.assignedToUserId);
     this.statusForm.controls['newStatus'].setValue(this.getSuggestedStatus(task));
+    this.statusForm.controls['nextAssignedToUserId'].setValue(task.assignedToUserId);
+
+    this.refreshSchemaContext(task);
     this.loadTaskDetails(task.id);
   }
 
@@ -168,13 +175,15 @@ export class TaskWorkflowBoardComponent implements OnInit {
       return;
     }
 
-    if (this.statusForm.invalid) {
-      this.statusForm.markAllAsTouched();
+    if (this.statusForm.controls['newStatus'].invalid || this.statusForm.controls['nextAssignedToUserId'].invalid) {
+      this.statusForm.controls['newStatus'].markAsTouched();
+      this.statusForm.controls['nextAssignedToUserId'].markAsTouched();
       return;
     }
 
-    const payload = this.buildPayload(task.taskType, this.selectedNextStatus);
-    if (this.statusForm.controls['fallbackJson'].hasError('invalidJson')) {
+    const nextStatus = this.selectedNextStatus;
+    const payload = this.buildPayload(nextStatus);
+    if (payload === null) {
       return;
     }
 
@@ -185,7 +194,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
     }
 
     const request: ChangeStatusWorkflowRequest = {
-      newStatus: this.selectedNextStatus,
+      newStatus: nextStatus,
       nextAssignedToUserId,
       customFields: payload
     };
@@ -204,9 +213,8 @@ export class TaskWorkflowBoardComponent implements OnInit {
         next: (response) => {
           this.successMessage.set(response.message);
           this.selectedTask.set(response.task);
-          this.resetStatusSpecificFields();
-          this.hydrateStatusFields(response.task);
           this.statusForm.controls['newStatus'].setValue(this.getSuggestedStatus(response.task));
+          this.refreshSchemaContext(response.task);
         },
         error: () => {
           // Errors are propagated to the global error service.
@@ -257,6 +265,10 @@ export class TaskWorkflowBoardComponent implements OnInit {
       });
   }
 
+  onResolvedFieldsChanged(resolved: readonly ResolvedFieldRule[]): void {
+    this.resolvedFields = resolved;
+  }
+
   isCreateDescriptionInvalid(): boolean {
     const control = this.createForm.controls['createTaskDescription'];
     return control.invalid && (control.touched || control.dirty);
@@ -272,12 +284,30 @@ export class TaskWorkflowBoardComponent implements OnInit {
     return typeof finalStatus === 'number' && task.currentStatus === finalStatus;
   }
 
-  taskStatusLabel(status: number, taskType?: string): string {
-    return this.getStatusLabel(status, taskType);
+  taskStatusLabel(status: number): string {
+    return this.getStatusLabel(status);
   }
 
   trackByTaskId(_: number, task: BaseTaskDto): number {
     return task.id;
+  }
+
+  private refreshSchemaContext(task: BaseTaskDto): void {
+    const schema = this.taskService.getSchema(task.taskType) ?? null;
+    this.currentSchema.set(schema);
+    this.hydrationValues.set(task.customFields ?? {});
+
+    const fallbackControl = this.statusForm.controls['fallbackJson'];
+    if (schema?.fields && schema.fields.length > 0) {
+      resetControl(fallbackControl);
+      fallbackControl.clearValidators();
+      fallbackControl.updateValueAndValidity({ emitEvent: false });
+    } else {
+      fallbackControl.setValue(JSON.stringify(task.customFields ?? {}, null, 2), { emitEvent: false });
+      fallbackControl.setErrors(null);
+      fallbackControl.markAsPristine();
+      fallbackControl.markAsUntouched();
+    }
   }
 
   private getSuggestedStatus(task: BaseTaskDto): number {
@@ -285,13 +315,43 @@ export class TaskWorkflowBoardComponent implements OnInit {
     return Math.min(task.currentStatus + 1, finalStatus);
   }
 
-  private getStatusLabel(status: number, taskType?: string): string {
-    const typeLabels = taskType ? TASK_STATUS_LABELS_BY_TYPE[taskType] : undefined;
-    return typeLabels?.[status] ?? DEFAULT_STATUS_LABELS[status] ?? `Status ${status}`;
+  private getStatusLabel(status: number): string {
+    return DEFAULT_STATUS_LABELS[status] ?? `Status ${status}`;
   }
 
   private getFinalStatus(taskType: string, fallbackStatus: number): number {
-    return this.taskTypeFinalStatusMap()[taskType] ?? fallbackStatus;
+    const schema = this.taskService.getSchema(taskType);
+    if (schema && typeof schema.finalStatus === 'number') {
+      return schema.finalStatus;
+    }
+    return fallbackStatus;
+  }
+
+  private buildPayload(status: number): TaskCustomData | null {
+    const schema = this.currentSchema();
+    if (schema?.fields && schema.fields.length > 0) {
+      const applicable = getApplicableFields(schema, status);
+      const resolvedForStatus = this.resolvedFields.filter((entry) =>
+        applicable.some((rule) => rule.field === entry.rule.field)
+      );
+
+      if (this.customFieldsGroup.invalid) {
+        this.customFieldsGroup.markAllAsTouched();
+        return null;
+      }
+
+      return buildPayloadFromGroup(this.customFieldsGroup, resolvedForStatus);
+    }
+
+    const fallbackControl = this.statusForm.controls['fallbackJson'];
+    const parsedResult = parseTaskCustomDataJson(fallbackControl.value);
+    if (!parsedResult.isValid) {
+      fallbackControl.setErrors({ invalidJson: true });
+      return null;
+    }
+
+    fallbackControl.setErrors(null);
+    return parsedResult.data;
   }
 
   private loadTaskTypeMetadata(): void {
@@ -300,32 +360,18 @@ export class TaskWorkflowBoardComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (taskTypes) => this.setTaskTypeMetadata(taskTypes),
-        error: () => this.setFallbackTaskTypeMetadata()
+        error: () => this.setTaskTypeMetadata([])
       });
   }
 
   private setTaskTypeMetadata(taskTypes: readonly TaskTypeSchemaDto[]): void {
-    if (taskTypes.length === 0) {
-      this.setFallbackTaskTypeMetadata();
-      return;
-    }
-
-    const taskTypesMap: Record<string, number> = { ...DEFAULT_TASK_FINAL_STATUS_BY_TYPE };
-    for (const taskType of taskTypes) {
-      if (typeof taskType.finalStatus === 'number') {
-        taskTypesMap[taskType.taskType] = taskType.finalStatus;
-      }
-    }
-
-    this.taskTypeFinalStatusMap.set(taskTypesMap);
     this.taskTypeOptions.set(taskTypes.map((taskType) => taskType.taskType));
     this.ensureCreateTaskTypeIsSelected();
-  }
 
-  private setFallbackTaskTypeMetadata(): void {
-    this.taskTypeOptions.set(FALLBACK_TASK_TYPE_OPTIONS);
-    this.taskTypeFinalStatusMap.set(DEFAULT_TASK_FINAL_STATUS_BY_TYPE);
-    this.ensureCreateTaskTypeIsSelected();
+    const selected = this.selectedTask();
+    if (selected) {
+      this.refreshSchemaContext(selected);
+    }
   }
 
   private ensureCreateTaskTypeIsSelected(): void {
@@ -342,53 +388,6 @@ export class TaskWorkflowBoardComponent implements OnInit {
     }
   }
 
-  private resetStatusSpecificFields(): void {
-    const dynamicControls = [
-      'priceA',
-      'priceB',
-      'receipt',
-      'specification',
-      'branchName',
-      'versionNumber',
-      'fallbackJson'
-    ] as const;
-
-    for (const controlName of dynamicControls) {
-      const control = this.statusForm.controls[controlName];
-      resetControl(control);
-      control.clearValidators();
-      control.updateValueAndValidity({ emitEvent: false });
-    }
-  }
-
-  private hydrateStatusFields(task: BaseTaskDto): void {
-    const data = task.customFields ?? {};
-    const adapter = getTaskWorkflowAdapter(task.taskType);
-    if (adapter) {
-      adapter.hydrate(this.statusForm, data);
-      return;
-    }
-
-    this.statusForm.controls['fallbackJson'].setValue(JSON.stringify(data, null, 2), { emitEvent: false });
-  }
-
-  private buildPayload(taskType: string, status: number): TaskCustomData {
-    const adapter = getTaskWorkflowAdapter(taskType);
-    if (adapter) {
-      return adapter.buildPayload(this.statusForm, status);
-    }
-
-    const fallbackControl = this.statusForm.controls['fallbackJson'];
-    const parsedResult = parseTaskCustomDataJson(fallbackControl.value);
-    if (parsedResult.isValid) {
-      fallbackControl.setErrors(null);
-      return parsedResult.data;
-    }
-
-    fallbackControl.setErrors({ invalidJson: true });
-    return {};
-  }
-
   private loadTaskDetails(taskId: number): void {
     this.taskService
       .getTask(taskId)
@@ -400,10 +399,9 @@ export class TaskWorkflowBoardComponent implements OnInit {
           }
 
           this.selectedTask.set(taskDetails);
-          this.resetStatusSpecificFields();
-          this.hydrateStatusFields(taskDetails);
           this.statusForm.controls['nextAssignedToUserId'].setValue(taskDetails.assignedToUserId);
           this.statusForm.controls['newStatus'].setValue(this.getSuggestedStatus(taskDetails));
+          this.refreshSchemaContext(taskDetails);
         },
         error: () => {
           // Errors are propagated to the global error service.

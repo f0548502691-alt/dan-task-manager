@@ -1,49 +1,44 @@
+export const CREATED_TASK_STATUS = 1;
 export const CLOSED_TASK_STATUS = 99;
 
 export const TASK_STATUS = {
-  CREATED: 1,
-  STATUS_2: 2,
-  STATUS_3: 3,
-  STATUS_4: 4,
+  CREATED: CREATED_TASK_STATUS,
   CLOSED: CLOSED_TASK_STATUS
 } as const;
 
 export const DEFAULT_STATUS_LABELS: Readonly<Record<number, string>> = {
   [TASK_STATUS.CREATED]: 'Created',
-  [TASK_STATUS.STATUS_2]: 'Status 2',
-  [TASK_STATUS.STATUS_3]: 'Status 3',
-  [TASK_STATUS.STATUS_4]: 'Status 4',
   [TASK_STATUS.CLOSED]: 'Closed'
-};
-
-export const TASK_STATUS_LABELS_BY_TYPE: Readonly<Record<string, Readonly<Record<number, string>>>> = {
-  Procurement: {
-    [TASK_STATUS.CREATED]: 'Created',
-    [TASK_STATUS.STATUS_2]: 'Supplier offers received',
-    [TASK_STATUS.STATUS_3]: 'Purchase completed',
-    [TASK_STATUS.CLOSED]: 'Closed'
-  },
-  Development: {
-    [TASK_STATUS.CREATED]: 'Created',
-    [TASK_STATUS.STATUS_2]: 'Specification completed',
-    [TASK_STATUS.STATUS_3]: 'Development completed',
-    [TASK_STATUS.STATUS_4]: 'Distribution completed',
-    [TASK_STATUS.CLOSED]: 'Closed'
-  }
-};
-
-export const DEFAULT_TASK_FINAL_STATUS_BY_TYPE: Readonly<Record<string, number>> = {
-  Procurement: TASK_STATUS.STATUS_3,
-  Development: TASK_STATUS.STATUS_4
 };
 
 export type TaskCustomData = Record<string, unknown>;
 
+export interface TaskFieldRuleDto {
+  field: string;
+  type: string;
+  required: boolean;
+  minLength?: number | null;
+  maxLength?: number | null;
+  minValue?: number | null;
+  maxValue?: number | null;
+  arrayLength?: number | null;
+  minItems?: number | null;
+  maxItems?: number | null;
+  elementType?: string | null;
+  pattern?: string | null;
+  appliesFromStatus?: number | null;
+  appliesToStatus?: number | null;
+  allowedValues?: readonly string[] | null;
+  isIndexed?: boolean;
+}
+
 export interface TaskTypeSchemaDto {
   taskType: string;
+  displayName?: string;
   finalStatus?: number | null;
   isActive: boolean;
   version: number;
+  fields?: readonly TaskFieldRuleDto[];
 }
 
 export interface PagedResultDto<T> {

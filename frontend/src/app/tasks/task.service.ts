@@ -25,10 +25,19 @@ export class TaskService {
   private readonly _currentUserId = signal<number | null>(null);
   private readonly _tasks = signal<readonly BaseTaskDto[]>([]);
   private readonly _isLoading = signal(false);
+  private readonly _schemasByTaskType = signal<Readonly<Record<string, TaskTypeSchemaDto>>>({});
 
   readonly currentUserId = this._currentUserId.asReadonly();
   readonly tasks = this._tasks.asReadonly();
   readonly isLoading = this._isLoading.asReadonly();
+  readonly schemasByTaskType = this._schemasByTaskType.asReadonly();
+
+  getSchema(taskType: string | null | undefined): TaskTypeSchemaDto | undefined {
+    if (!taskType) {
+      return undefined;
+    }
+    return this._schemasByTaskType()[taskType];
+  }
 
   setCurrentUserId(userId: number | null): void {
     this._currentUserId.set(userId);
@@ -107,7 +116,7 @@ export class TaskService {
 
     return this.http.get<TaskTypeSchemaDto[]>('/api/task-types').pipe(
       map((taskTypes) =>
-        taskTypes
+        (Array.isArray(taskTypes) ? taskTypes : [])
           .filter(
             (taskType) =>
               taskType.isActive &&
@@ -116,8 +125,17 @@ export class TaskService {
           )
           .sort((left, right) => left.taskType.localeCompare(right.taskType))
       ),
+      tap((taskTypes) => this.cacheSchemas(taskTypes)),
       catchError((error) => this.handleHttpError(error))
     );
+  }
+
+  private cacheSchemas(taskTypes: readonly TaskTypeSchemaDto[]): void {
+    const next: Record<string, TaskTypeSchemaDto> = {};
+    for (const taskType of taskTypes) {
+      next[taskType.taskType] = taskType;
+    }
+    this._schemasByTaskType.set(next);
   }
 
   clearError(): void {
