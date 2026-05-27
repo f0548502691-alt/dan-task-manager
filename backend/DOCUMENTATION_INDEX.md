@@ -27,6 +27,11 @@
 | [API_ERROR_CODES.md](API_ERROR_CODES.md) | HTTP codes & error messages | Debugging API issues |
 | [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) | REST endpoint specs | Making API calls |
 
+### 🖥️ Frontend
+| Document | Contains | Usage |
+|----------|----------|-------|
+| [../frontend/README.md](../frontend/README.md) | Angular workflow board, schema-driven fields, setup, and troubleshooting | Maintaining the task UI |
+
 ### 💻 Code Examples
 | Document | Contains | Level |
 |----------|----------|-------|
@@ -51,9 +56,11 @@
 
 #### 💻 **Write code**
 → Read [BEST_PRACTICES.md](BEST_PRACTICES.md)  
+→ For task UI work, read [../frontend/README.md](../frontend/README.md)
 
 #### ➕ **Add new features**
 → Check [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md) for patterns  
+→ Update backend task type metadata before adding frontend field components
 
 #### 🧪 **Run tests**
 → `dotnet test`  
@@ -166,6 +173,7 @@ Implementation:
 | Error Messages | [API_ERROR_CODES.md](API_ERROR_CODES.md) |
 | Workflow Rules | [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) - Workflow Rules section |
 | Handler Validation | [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md) |
+| Schema-driven task fields | [../frontend/README.md](../frontend/README.md) |
 | Best Practices | [BEST_PRACTICES.md](BEST_PRACTICES.md) |
 | Project Status | [IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md) |
 | Setup Instructions | [GETTING_STARTED.md](GETTING_STARTED.md) |
