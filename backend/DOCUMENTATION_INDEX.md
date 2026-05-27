@@ -13,6 +13,7 @@
 |----------|---------|----------|
 | [GETTING_STARTED.md](GETTING_STARTED.md) | **START HERE** - Quick setup & navigation | 5 min |
 | [IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md) | Full project overview & architecture | 10 min |
+| [../frontend/README.md](../frontend/README.md) | Angular workflow board, dynamic fields & CSS scoping | 5 min |
 
 ### 🏗️ Architecture & Design
 | Document | Focus | Best For |
@@ -51,6 +52,7 @@
 
 #### 💻 **Write code**
 → Read [BEST_PRACTICES.md](BEST_PRACTICES.md)  
+→ For Angular UI work, read [../frontend/README.md](../frontend/README.md)
 
 #### ➕ **Add new features**
 → Check [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md) for patterns  
@@ -62,6 +64,7 @@
 #### 🐛 **Debug issues**
 → See [API_ERROR_CODES.md](API_ERROR_CODES.md)  
 → Check [BEST_PRACTICES.md](BEST_PRACTICES.md) error handling section
+→ For form layout or scoped CSS issues, see [../frontend/README.md](../frontend/README.md)
 
 ---
 
@@ -166,6 +169,8 @@ Implementation:
 | Error Messages | [API_ERROR_CODES.md](API_ERROR_CODES.md) |
 | Workflow Rules | [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) - Workflow Rules section |
 | Handler Validation | [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md) |
+| Angular workflow UI | [../frontend/README.md](../frontend/README.md) |
+| CSS scoping and dynamic field styling | [../frontend/README.md](../frontend/README.md) - Styling and Angular CSS scoping section |
 | Best Practices | [BEST_PRACTICES.md](BEST_PRACTICES.md) |
 | Project Status | [IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md) |
 | Setup Instructions | [GETTING_STARTED.md](GETTING_STARTED.md) |
