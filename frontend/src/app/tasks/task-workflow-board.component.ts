@@ -54,7 +54,6 @@ export class TaskWorkflowBoardComponent implements OnInit {
   readonly createInFlight = signal(false);
   readonly submitInFlight = signal(false);
   readonly closeInFlight = signal(false);
-  readonly taskTypeMetadataInFlight = signal(false);
   readonly successMessage = signal<string | null>(null);
 
   readonly taskTypeOptions = computed<readonly TaskTypeOption[]>(() =>
@@ -154,7 +153,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
           this.selectTask(task);
         },
         error: () => {
-          // Errors are propagated to taskService.error.
+          // Errors are propagated to the global error service.
         }
       });
   }
@@ -220,7 +219,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
           this.statusForm.controls['newStatus'].setValue(this.getSuggestedStatus(response.task));
         },
         error: () => {
-          // Errors are propagated to taskService.error.
+          // Errors are propagated to the global error service.
         }
       });
   }
@@ -263,7 +262,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
           resetControl(closeNotesControl);
         },
         error: () => {
-          // Errors are propagated to taskService.error.
+          // Errors are propagated to the global error service.
         }
       });
   }
@@ -326,14 +325,9 @@ export class TaskWorkflowBoardComponent implements OnInit {
   }
 
   private loadTaskTypeMetadata(): void {
-    this.taskTypeMetadataInFlight.set(true);
-
     this.taskService
       .getTaskTypes()
-      .pipe(
-        takeUntilDestroyed(this.destroyRef),
-        finalize(() => this.taskTypeMetadataInFlight.set(false))
-      )
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (taskTypes) => this.setTaskTypeMetadata(taskTypes),
         error: () => this.setFallbackTaskTypeMetadata()
@@ -423,7 +417,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
           this.statusForm.controls['newStatus'].setValue(this.getSuggestedStatus(taskDetails));
         },
         error: () => {
-          // Errors are propagated to taskService.error.
+          // Errors are propagated to the global error service.
         }
       });
   }

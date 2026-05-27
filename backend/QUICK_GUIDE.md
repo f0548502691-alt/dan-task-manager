@@ -274,7 +274,6 @@ builder.Services.AddTransient<ITaskHandler, TestingTaskHandler>();
 | קובץ | תיאור |
 |------|-------|
 | [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md) | **תיעוד מלא ומפורט** |
-| [STRATEGY_EXAMPLES.cs](STRATEGY_EXAMPLES.cs) | דוגמאות קוד עובדות |
 | [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) | סיכום טכני |
 | [README.md](README.md) | תיעוד כללי |
 

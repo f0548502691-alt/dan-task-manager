@@ -256,7 +256,6 @@ Coverage: All critical paths
    - REST API examples
    - Test scenarios
 
-2. **WORKFLOW_EXAMPLES.cs** (300+ lines)
    - Code examples
    - cURL/Postman examples
    - Complete workflows
@@ -504,7 +503,6 @@ The system is **extensible**, **testable**, and **maintainable** with clear sepa
 For questions about the implementation:
 - Review [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) for API details
 - Check [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md) for handler pattern
-- See [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs) for code examples
 - Run unit tests: `dotnet test`
 
 ---

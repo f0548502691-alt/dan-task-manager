@@ -1,8 +1,7 @@
-import { computed, inject, Injectable, signal } from '@angular/core';
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { catchError, finalize, map, Observable, of, switchMap, tap, throwError } from 'rxjs';
+import { inject, Injectable, signal } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { catchError, finalize, map, Observable, of, tap, throwError } from 'rxjs';
 import {
-  ApiErrorResponse,
   BaseTaskDto,
   ChangeStatusWorkflowRequest,
   ChangeStatusWorkflowResponse,
@@ -12,31 +11,28 @@ import {
   PagedResultDto,
   TASK_STATUS,
   TaskCustomData,
-  CreateTaskRequest,
-  UpdateTaskRequest
+  CreateTaskRequest
 } from './task.interfaces';
+import { AppErrorService } from '../core/app-error.service';
+import { extractErrorMessage } from '../core/error-message.utils';
 
 @Injectable({ providedIn: 'root' })
 export class TaskService {
   private readonly http = inject(HttpClient);
+  private readonly appErrorService = inject(AppErrorService);
   private readonly apiUrl = '/api/tasks';
 
   private readonly _currentUserId = signal<number | null>(null);
   private readonly _tasks = signal<readonly BaseTaskDto[]>([]);
   private readonly _isLoading = signal(false);
-  private readonly _error = signal<string | null>(null);
 
   readonly currentUserId = this._currentUserId.asReadonly();
   readonly tasks = this._tasks.asReadonly();
   readonly isLoading = this._isLoading.asReadonly();
-  readonly error = this._error.asReadonly();
-
-  readonly taskCount = computed(() => this._tasks().length);
-  readonly hasTasks = computed(() => this.taskCount() > 0);
 
   setCurrentUserId(userId: number | null): void {
     this._currentUserId.set(userId);
-    this._error.set(null);
+    this.clearErrorsState();
 
     if (userId === null) {
       this._tasks.set([]);
@@ -45,7 +41,7 @@ export class TaskService {
 
     void this.refreshCurrentUserTasks().subscribe({
       error: () => {
-        // Error details are already stored in the `error` signal.
+        // Error details are shown through the global error service.
       }
     });
   }
@@ -58,7 +54,7 @@ export class TaskService {
     }
 
     this._isLoading.set(true);
-    this._error.set(null);
+    this.clearErrorsState();
 
     return this.http.get<PagedResultDto<unknown> | unknown[]>(`${this.apiUrl}/user/${userId}`).pipe(
       map((response) => this.normalizeTaskCollection(response)),
@@ -70,14 +66,14 @@ export class TaskService {
   }
 
   getTask(taskId: number): Observable<BaseTaskDto> {
-    this._error.set(null);
+    this.clearErrorsState();
     return this.http.get<BaseTaskDto>(`${this.apiUrl}/${taskId}`).pipe(
       catchError((error) => this.handleHttpError(error))
     );
   }
 
   createTask(request: CreateTaskRequest): Observable<BaseTaskDto> {
-    this._error.set(null);
+    this.clearErrorsState();
 
     return this.http.post<unknown>(this.apiUrl, request).pipe(
       map((response) => this.normalizeTask(response)),
@@ -87,7 +83,7 @@ export class TaskService {
   }
 
   changeTaskStatus(taskId: number, request: ChangeStatusWorkflowRequest): Observable<ChangeStatusWorkflowResponse> {
-    this._error.set(null);
+    this.clearErrorsState();
 
     return this.http.post<unknown>(`${this.apiUrl}/${taskId}/change-status`, request).pipe(
       map((response) => this.normalizeChangeStatusResponse(response)),
@@ -97,7 +93,7 @@ export class TaskService {
   }
 
   closeTask(taskId: number, request: CloseTaskRequest): Observable<CloseTaskResponse> {
-    this._error.set(null);
+    this.clearErrorsState();
 
     return this.http.post<unknown>(`${this.apiUrl}/${taskId}/close`, request).pipe(
       map((response) => this.normalizeCloseResponse(response)),
@@ -107,7 +103,7 @@ export class TaskService {
   }
 
   getTaskTypes(): Observable<readonly TaskTypeSchemaDto[]> {
-    this._error.set(null);
+    this.clearErrorsState();
 
     return this.http.get<TaskTypeSchemaDto[]>('/api/task-types').pipe(
       map((taskTypes) =>
@@ -126,33 +122,8 @@ export class TaskService {
     );
   }
 
-  updateTask(taskId: number, request: UpdateTaskRequest): Observable<void> {
-    this._error.set(null);
-
-    return this.http.put<void>(`${this.apiUrl}/${taskId}`, request).pipe(
-      switchMap(() => {
-        const currentUserId = this._currentUserId();
-        if (currentUserId === null) {
-          return of(void 0);
-        }
-
-        return this.refreshCurrentUserTasks().pipe(map(() => void 0));
-      }),
-      catchError((error) => this.handleHttpError(error))
-    );
-  }
-
-  deleteTask(taskId: number): Observable<void> {
-    this._error.set(null);
-
-    return this.http.delete<void>(`${this.apiUrl}/${taskId}`).pipe(
-      tap(() => this.removeTaskFromState(taskId)),
-      catchError((error) => this.handleHttpError(error))
-    );
-  }
-
   clearError(): void {
-    this._error.set(null);
+    this.clearErrorsState();
   }
 
   private syncTaskWithState(task: BaseTaskDto): void {
@@ -196,14 +167,10 @@ export class TaskService {
 
   private normalizeChangeStatusResponse(payload: unknown): ChangeStatusWorkflowResponse {
     const response = this.asRecord(payload);
-    const task = this.normalizeTask(response['task']);
-    const newStatus = this.toNumber(response['newStatus'], task.currentStatus);
 
     return {
-      success: this.toBoolean(response['success']),
       message: this.toStringValue(response['message'], ''),
-      newStatus,
-      task
+      task: this.normalizeTask(response['task'])
     };
   }
 
@@ -211,7 +178,6 @@ export class TaskService {
     const response = this.asRecord(payload);
 
     return {
-      success: this.toBoolean(response['success']),
       message: this.toStringValue(response['message'], ''),
       task: this.normalizeTask(response['task'])
     };
@@ -219,22 +185,12 @@ export class TaskService {
 
   private normalizeTask(payload: unknown): BaseTaskDto {
     const task = this.asRecord(payload);
-    const assignedToUserPayload = task['assignedToUser'];
-    const assignedToUser =
-      assignedToUserPayload && typeof assignedToUserPayload === 'object' && !Array.isArray(assignedToUserPayload)
-        ? {
-            id: this.toNumber((assignedToUserPayload as Record<string, unknown>)['id']),
-            name: this.toStringValue((assignedToUserPayload as Record<string, unknown>)['name'], ''),
-            email: this.toStringValue((assignedToUserPayload as Record<string, unknown>)['email'], '')
-          }
-        : null;
 
     return {
       id: this.toNumber(task['id']),
       taskType: this.toStringValue(task['taskType'], ''),
       currentStatus: this.toNumber(task['currentStatus'], TASK_STATUS.CREATED),
       assignedToUserId: this.toNumber(task['assignedToUserId']),
-      assignedToUser,
       description: this.toStringValue(task['description'], ''),
       customFields: this.extractCustomFields(task),
       createdAt: this.toStringValue(task['createdAt'], new Date(0).toISOString()),
@@ -283,43 +239,12 @@ export class TaskService {
     return typeof value === 'string' ? value : fallback;
   }
 
-  private toBoolean(value: unknown): boolean {
-    return value === true;
-  }
-
   private handleHttpError(error: unknown): Observable<never> {
-    const message = this.extractErrorMessage(error);
-    this._error.set(message);
+    const message = extractErrorMessage(error);
     return throwError(() => new Error(message));
   }
 
-  private extractErrorMessage(error: unknown): string {
-    if (!(error instanceof HttpErrorResponse)) {
-      return 'Unexpected error while communicating with the server.';
-    }
-
-    const payload = error.error;
-    if (this.isApiErrorResponse(payload)) {
-      return payload.error;
-    }
-
-    if (typeof payload === 'string' && payload.trim().length > 0) {
-      return payload;
-    }
-
-    if (typeof error.message === 'string' && error.message.trim().length > 0) {
-      return error.message;
-    }
-
-    return 'Unexpected server error.';
-  }
-
-  private isApiErrorResponse(payload: unknown): payload is ApiErrorResponse {
-    return (
-      payload !== null &&
-      typeof payload === 'object' &&
-      'error' in payload &&
-      typeof (payload as { error: unknown }).error === 'string'
-    );
+  private clearErrorsState(): void {
+    this.appErrorService.clearError();
   }
 }

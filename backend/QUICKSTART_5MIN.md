@@ -85,7 +85,6 @@ curl -X POST http://localhost:5000/api/tasks \
 - ✅ App running? → Read [GETTING_STARTED.md](GETTING_STARTED.md)
 - ✅ Want API docs? → See [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md)
 - ✅ Need help? → Check [API_ERROR_CODES.md](API_ERROR_CODES.md)
-- ✅ Want code? → Study [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs)
 
 ---
 
@@ -146,7 +145,6 @@ dotnet test
 |------|------|
 | Setup help | [GETTING_STARTED.md](GETTING_STARTED.md) |
 | API endpoints | [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) |
-| Code examples | [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs) |
 | All docs | [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) |
 
 ---

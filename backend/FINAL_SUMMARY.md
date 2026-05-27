@@ -47,7 +47,6 @@
 | קובץ | סוג | תיאור |
 |------|-----|-------|
 | `STRATEGY_PATTERN_DOCS.md` | 📖 | תיעוד מקיף עם דיאגרמות |
-| `STRATEGY_EXAMPLES.cs` | 💻 | 6 דוגמאות קוד עובדות |
 | `IMPLEMENTATION_SUMMARY.md` | 📋 | סיכום טכני |
 | `QUICK_GUIDE.md` | ⚡ | מדריך התחלה מהיר |
 | `IMPLEMENTATION_CHECKLIST.md` | ✅ | checklist מלא |
@@ -179,7 +178,6 @@ Content-Type: application/json
    - עקרונות בסיסיים
    - איך להרחיב
 
-3. **[STRATEGY_EXAMPLES.cs](STRATEGY_EXAMPLES.cs)** 💻
    - דוגמאות קוד עובדות
    - אפשרויות שימוש
    - REST API examples
@@ -303,13 +301,10 @@ dan-task-manager/
 ├── DanTaskManager.csproj (updated)
 ├── README.md
 ├── QUICKSTART.md
-├── EXAMPLES.cs
 ├── STRATEGY_PATTERN_DOCS.md ⭐
-├── STRATEGY_EXAMPLES.cs
 ├── IMPLEMENTATION_SUMMARY.md
 ├── QUICK_GUIDE.md
 ├── IMPLEMENTATION_CHECKLIST.md
-├── strategy-config.json
 ├── setup.sh
 └── setup.bat
 ```

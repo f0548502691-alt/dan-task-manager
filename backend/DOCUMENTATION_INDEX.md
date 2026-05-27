@@ -30,9 +30,6 @@
 ### 💻 Code Examples
 | Document | Contains | Level |
 |----------|----------|-------|
-| [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs) | Service usage examples & scenarios | Intermediate |
-| [STRATEGY_EXAMPLES.cs](STRATEGY_EXAMPLES.cs) | Handler implementations | Intermediate |
-| [EXAMPLES.cs](EXAMPLES.cs) | General usage patterns | Beginner |
 
 ---
 
@@ -54,11 +51,9 @@
 
 #### 💻 **Write code**
 → Read [BEST_PRACTICES.md](BEST_PRACTICES.md)  
-→ Study [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs)
 
 #### ➕ **Add new features**
 → Check [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md) for patterns  
-→ Review handler examples in [STRATEGY_EXAMPLES.cs](STRATEGY_EXAMPLES.cs)
 
 #### 🧪 **Run tests**
 → `dotnet test`  
@@ -83,12 +78,10 @@
 1. [IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md) - Overview
 2. [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md) - Architecture
 3. [BEST_PRACTICES.md](BEST_PRACTICES.md) - Conventions
-4. [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs) - Examples
 
 #### **QA / Tester**
 1. [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) - Workflows
 2. [API_ERROR_CODES.md](API_ERROR_CODES.md) - Error cases
-3. [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs) - Test scenarios
 
 #### **DevOps / Infrastructure**
 1. [GETTING_STARTED.md](GETTING_STARTED.md) - Deployment
@@ -132,9 +125,6 @@ Documentation:
 ├── 📖 DOCUMENTATION_INDEX.md            (This file)
 │
 Code Examples:
-├── 💻 EXAMPLES.cs                      General examples
-├── 💻 STRATEGY_EXAMPLES.cs             Handler examples
-├── 💻 WORKFLOW_EXAMPLES.cs             Service examples
 │
 Implementation:
 ├── Domain/
@@ -176,7 +166,6 @@ Implementation:
 | Error Messages | [API_ERROR_CODES.md](API_ERROR_CODES.md) |
 | Workflow Rules | [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) - Workflow Rules section |
 | Handler Validation | [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md) |
-| Code Examples | [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs) or [STRATEGY_EXAMPLES.cs](STRATEGY_EXAMPLES.cs) |
 | Best Practices | [BEST_PRACTICES.md](BEST_PRACTICES.md) |
 | Project Status | [IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md) |
 | Setup Instructions | [GETTING_STARTED.md](GETTING_STARTED.md) |
@@ -258,7 +247,6 @@ Test Cases:                35+
 → See [API_ERROR_CODES.md](API_ERROR_CODES.md)
 
 ### Code Examples?
-→ Check [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs)
 
 ### Design Questions?
 → Read [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md)

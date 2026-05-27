@@ -18,38 +18,11 @@ export const DEFAULT_STATUS_LABELS: Readonly<Record<number, string>> = {
 
 export type TaskCustomData = Record<string, unknown>;
 
-export interface UserBriefDto {
-  id: number;
-  name: string;
-  email: string;
-}
-
-export interface TaskFieldSchemaDto {
-  field: string;
-  type: string;
-  required: boolean;
-  minLength?: number | null;
-  maxLength?: number | null;
-  minValue?: number | null;
-  maxValue?: number | null;
-  arrayLength?: number | null;
-  minItems?: number | null;
-  maxItems?: number | null;
-  elementType?: string | null;
-  pattern?: string | null;
-  appliesFromStatus?: number | null;
-  appliesToStatus?: number | null;
-  allowedValues?: string[] | null;
-  isIndexed: boolean;
-}
-
 export interface TaskTypeSchemaDto {
   taskType: string;
-  displayName: string;
   finalStatus?: number | null;
   isActive: boolean;
   version: number;
-  fields: TaskFieldSchemaDto[];
 }
 
 export interface PagedResultDto<T> {
@@ -65,7 +38,6 @@ export interface BaseTaskDto {
   taskType: string;
   currentStatus: number;
   assignedToUserId: number;
-  assignedToUser?: UserBriefDto | null;
   description: string;
   customFields?: TaskCustomData;
   createdAt: string;
@@ -77,10 +49,6 @@ export interface CreateTaskRequest {
   description: string;
   assignedToUserId: number;
   customFields?: TaskCustomData;
-}
-
-export interface UpdateTaskRequest {
-  description?: string;
 }
 
 export interface ChangeStatusWorkflowRequest {
@@ -95,18 +63,16 @@ export interface CloseTaskRequest {
 }
 
 export interface ChangeStatusWorkflowResponse {
-  success: boolean;
   message: string;
-  newStatus: number;
   task: BaseTaskDto;
 }
 
 export interface CloseTaskResponse {
-  success: boolean;
   message: string;
   task: BaseTaskDto;
 }
 
 export interface ApiErrorResponse {
   error: string;
+  code?: string;
 }
