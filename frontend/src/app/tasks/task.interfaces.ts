@@ -10,9 +10,9 @@ export const TASK_STATUS = {
 
 export const DEFAULT_STATUS_LABELS: Readonly<Record<number, string>> = {
   [TASK_STATUS.CREATED]: 'Created',
-  [TASK_STATUS.STATUS_2]: 'In progress',
-  [TASK_STATUS.STATUS_3]: 'In progress',
-  [TASK_STATUS.STATUS_4]: 'In progress',
+  [TASK_STATUS.STATUS_2]: 'Status 2',
+  [TASK_STATUS.STATUS_3]: 'Status 3',
+  [TASK_STATUS.STATUS_4]: 'Status 4',
   [TASK_STATUS.CLOSED]: 'Closed'
 };
 
@@ -32,7 +32,7 @@ export const TASK_STATUS_LABELS_BY_TYPE: Readonly<Record<string, Readonly<Record
   }
 };
 
-export const TASK_FINAL_STATUS_BY_TYPE: Readonly<Record<string, number>> = {
+export const DEFAULT_TASK_FINAL_STATUS_BY_TYPE: Readonly<Record<string, number>> = {
   Procurement: TASK_STATUS.STATUS_3,
   Development: TASK_STATUS.STATUS_4
 };
@@ -45,6 +45,42 @@ export interface UserBriefDto {
   email: string;
 }
 
+export interface TaskFieldSchemaDto {
+  field: string;
+  type: string;
+  required: boolean;
+  minLength?: number | null;
+  maxLength?: number | null;
+  minValue?: number | null;
+  maxValue?: number | null;
+  arrayLength?: number | null;
+  minItems?: number | null;
+  maxItems?: number | null;
+  elementType?: string | null;
+  pattern?: string | null;
+  appliesFromStatus?: number | null;
+  appliesToStatus?: number | null;
+  allowedValues?: string[] | null;
+  isIndexed: boolean;
+}
+
+export interface TaskTypeSchemaDto {
+  taskType: string;
+  displayName: string;
+  finalStatus?: number | null;
+  isActive: boolean;
+  version: number;
+  fields: TaskFieldSchemaDto[];
+}
+
+export interface PagedResultDto<T> {
+  items: T[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+}
+
 export interface BaseTaskDto {
   id: number;
   taskType: string;
@@ -55,14 +91,6 @@ export interface BaseTaskDto {
   customFields?: TaskCustomData;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface PagedResult<T> {
-  items: T[];
-  page: number;
-  pageSize: number;
-  totalCount: number;
-  totalPages: number;
 }
 
 export interface CreateTaskRequest {
@@ -83,6 +111,7 @@ export interface ChangeStatusWorkflowRequest {
 }
 
 export interface CloseTaskRequest {
+  nextAssignedToUserId: number;
   finalNotes: string;
 }
 

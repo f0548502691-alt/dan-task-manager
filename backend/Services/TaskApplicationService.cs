@@ -197,10 +197,11 @@ public class TaskApplicationService : ITaskApplicationService
 
     public Task<WorkflowResult> CloseAsync(
         int taskId,
+        int nextAssignedToUserId,
         string finalNotes,
         CancellationToken cancellationToken = default)
     {
-        return _workflowService.CloseTaskAsync(taskId, finalNotes, cancellationToken);
+        return _workflowService.CloseTaskAsync(taskId, nextAssignedToUserId, finalNotes, cancellationToken);
     }
 
     private async Task<PagedResult<TaskSummaryDto>> QueryTaskSummariesAsync(

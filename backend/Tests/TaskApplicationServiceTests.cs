@@ -71,6 +71,7 @@ public class TaskApplicationServiceTests
 
         public Task<WorkflowResult> CloseTaskAsync(
             int taskId,
+            int nextAssignedToUserId,
             string finalNotes,
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();

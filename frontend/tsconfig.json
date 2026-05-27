@@ -11,5 +11,10 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true
   },
+  "angularCompilerOptions": {
+    "strictInjectionParameters": true,
+    "strictInputAccessModifiers": true,
+    "strictTemplates": true
+  },
   "include": ["src/**/*.ts"]
 }

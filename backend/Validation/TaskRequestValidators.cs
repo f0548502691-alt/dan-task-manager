@@ -70,6 +70,10 @@ public class CloseTaskRequestValidator : AbstractValidator<CloseTaskRequest>
 {
     public CloseTaskRequestValidator()
     {
+        RuleFor(x => x.NextAssignedToUserId)
+            .GreaterThan(0)
+            .WithMessage("NextAssignedToUserId נדרש");
+
         RuleFor(x => x.FinalNotes)
             .NotEmpty()
             .WithMessage("FinalNotes is required");
