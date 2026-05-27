@@ -25,6 +25,44 @@ Adopt Signal Store when at least one of these is true:
 - For the current task workflow UI, existing Angular Signals in `TaskService` are sufficient.
 - No immediate migration to Signal Store is required.
 
+## Angular Bootstrap and Runtime
+
+The frontend is a standalone Angular application with zoneless change detection. Keep the application shell wired through `frontend/src/main.ts`:
+
+```ts
+bootstrapApplication(AppComponent, {
+  providers: [provideHttpClient(), provideZonelessChangeDetection()]
+});
+```
+
+### Intent
+- `bootstrapApplication` owns root startup; `AppComponent` is standalone and imports `TaskWorkflowBoardComponent` directly.
+- `provideHttpClient()` is registered once at bootstrap for services such as `TaskService`.
+- `provideZonelessChangeDetection()` removes the Zone.js runtime requirement and matches the existing signal-driven, `OnPush` component architecture.
+
+### Build and dependency constraints
+- `frontend/angular.json` points the browser entry to `src/main.ts` and keeps `polyfills` empty.
+- `frontend/package.json` should not include `zone.js` or `@angular/platform-browser-dynamic` for normal application startup.
+- Add new UI capabilities as standalone components/providers. Do not introduce an `AppModule`/`BrowserModule` shell unless intentionally reversing the standalone architecture.
+
+### Zoneless update guidance
+- Template-affecting async state should flow through Angular-aware primitives: signals/computed values, Reactive Forms controls, HttpClient streams that update signals, or explicit change detector APIs for non-Angular callbacks.
+- Browser timers, DOM APIs, and third-party callbacks are not Zone.js-patched. If one mutates component state, write to a signal or call `ChangeDetectorRef.markForCheck()` after the mutation.
+- Keep component subscriptions scoped with `takeUntilDestroyed(this.destroyRef)`.
+
+Example:
+
+```ts
+someExternalCallback((message) => {
+  this.successMessage.set(message);
+});
+```
+
+### Setup and troubleshooting
+- Use `npm --prefix frontend start` for local development; it runs `ng serve --proxy-config proxy.conf.json` and forwards `/api` to `http://localhost:8080`.
+- Use `npm --prefix frontend build` to verify the standalone zoneless bundle.
+- If a build or runtime change expects `zone.js`, first check whether the integration can be expressed with signals, reactive forms, or explicit change detection. Reintroducing Zone.js changes the runtime contract and should be a deliberate architecture decision.
+
 ## Client Baseline (Angular)
 
 Use the following checklist as the default baseline for client-side task workflow work:
@@ -51,3 +89,4 @@ Use the following checklist as the default baseline for client-side task workflo
 - [OK] Closing a task from the UI is implemented in `task-workflow-board` via `submitCloseTask()`.
 - [OK] Hard-coded user ID wiring is implemented in `TaskWorkflowBoardComponent` (`DEFAULT_CURRENT_USER_ID = 1` + `setCurrentUserId` on init).
 - [OK] Strict mode is explicitly configured in `frontend/tsconfig.json` (`"strict": true`).
+- [OK] Standalone zoneless bootstrap is configured in `src/main.ts`; `angular.json` has no Zone.js polyfill and `package.json` has no Zone.js dependency.
