@@ -46,12 +46,7 @@ public class TasksControllerErrorContractTests
         Assert.Contains("TaskType 'Bug' is not supported", exception.Message);
         Assert.Contains("Development, Procurement", exception.Message);
         mediator.Verify(m => m.Send(
-                It.Is<IRequest<TaskCreationResult>>(command =>
-                    command is CreateTaskCommand createTaskCommand &&
-                    createTaskCommand.TaskType == request.TaskType &&
-                    createTaskCommand.Description == request.Description &&
-                    createTaskCommand.AssignedToUserId == request.AssignedToUserId &&
-                    createTaskCommand.CustomDataJson == "{\"priority\":\"high\"}"),
+                It.Is<IRequest<TaskCreationResult>>(command => IsExpectedCreateTaskCommand(command, request)),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -98,11 +93,27 @@ public class TasksControllerErrorContractTests
         Assert.Equal(StatusCodes.Status404NotFound, exception.StatusCode);
         Assert.Equal("not_found", exception.Code);
         mediator.Verify(m => m.Send(
-                It.Is<IRequest<TaskDetailsDto?>>(query =>
-                    query is GetTaskByIdQuery getTaskByIdQuery &&
-                    getTaskByIdQuery.TaskId == 404),
+                It.Is<IRequest<TaskDetailsDto?>>(query => IsExpectedGetTaskByIdQuery(query, 404)),
                 It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    private static bool IsExpectedCreateTaskCommand(
+        IRequest<TaskCreationResult> command,
+        CreateTaskRequest request)
+    {
+        var createTaskCommand = command as CreateTaskCommand;
+        return createTaskCommand != null &&
+            createTaskCommand.TaskType == request.TaskType &&
+            createTaskCommand.Description == request.Description &&
+            createTaskCommand.AssignedToUserId == request.AssignedToUserId &&
+            createTaskCommand.CustomDataJson == "{\"priority\":\"high\"}";
+    }
+
+    private static bool IsExpectedGetTaskByIdQuery(IRequest<TaskDetailsDto?> query, int expectedTaskId)
+    {
+        var getTaskByIdQuery = query as GetTaskByIdQuery;
+        return getTaskByIdQuery != null && getTaskByIdQuery.TaskId == expectedTaskId;
     }
 
     private static TasksController CreateController(
