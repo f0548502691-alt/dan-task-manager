@@ -1,4 +1,5 @@
 using DanTaskManager.Data;
+using DanTaskManager.Domain.Handlers;
 using DanTaskManager.Middleware;
 using DanTaskManager.Services;
 using FluentValidation;
