@@ -1,622 +1,289 @@
-# 🔧 Extension Guide - Adding New Features to Dan Task Manager
+# Extension Guide
 
-## 📖 Table of Contents
+DanTaskManager is designed so most task-type changes are added without editing
+the workflow engine. The central rule is:
 
-1. [Adding New Handler Type](#adding-new-handler-type)
-2. [Adding New Endpoint](#adding-new-endpoint)
-3. [Adding Validation Rule](#adding-validation-rule)
-4. [Common Extension Scenarios](#common-extension-scenarios)
-5. [Testing Extensions](#testing-extensions)
+- Use metadata for task types whose status rules can be expressed as field
+  definitions.
+- Use a code-backed handler only when validation needs custom logic that the
+  metadata model cannot represent.
 
----
+The general workflow invariants live in `Services/TaskWorkflowService.cs`.
+Per-type rules come from ordered `ITaskWorkflowRuleProvider` implementations:
 
-## 🎯 Adding New Handler Type
+| Provider | Priority | Source |
+|----------|----------|--------|
+| `MetadataTaskWorkflowRuleProvider` | `0` | `TaskTypeMetadata` and `TaskFieldDefinition` rows |
+| `HandlerTaskWorkflowRuleProvider` | `100` | DI-discovered `IRegisterableTaskHandler` classes |
 
-### Step 1: Create Handler Class
+Lower priority wins. If metadata and a handler claim the same task type,
+metadata handles the type at runtime. `TaskTypeConflictValidator` logs the
+overlap at startup, or fails startup when
+`TaskTypeConflictValidation:FailOnConflict` is `true`.
+
+## Supported field-rule model
+
+Metadata-backed task types use `TaskFieldDefinition` rows. The API exposes the
+same model through `POST /api/task-types/{taskType}/fields` and
+`PUT /api/task-types/{taskType}/fields/{field}`.
+
+| Field | Purpose |
+|-------|---------|
+| `FieldKey` / `field` | JSON property inside request `customFields`. |
+| `DataType` / `type` | `string`, `number`, `array`, `object`, `boolean`, or `stringOrNumber`. |
+| `IsRequired` / `required` | Whether the field must exist for the matching status. |
+| `MinLength`, `MaxLength` | String constraints. |
+| `MinValue`, `MaxValue` | Numeric constraints. |
+| `ArrayLength`, `MinItems`, `MaxItems`, `ElementType` | Array constraints. |
+| `RegexPattern` / `pattern` | Named pattern (`valid_git_branch`, `semantic_version`) or a regular expression. |
+| `AllowedValuesJson` / `allowedValues` | Enum-like list for string values. |
+| `AppliesFromStatus`, `AppliesToStatus` | Status range where the rule applies. |
+| `IsIndexed` / `isIndexed` | Requests a SQL Server computed column + index for scalar custom fields. |
+
+`JsonIndexBootstrapper` materializes indexes at API startup for scalar fields
+marked `IsIndexed = true`. Arrays and objects are intentionally skipped.
+
+## Add a metadata-backed task type
+
+Use this path when validation is declarative.
+
+### 1. Create the task type
+
+```bash
+curl -X POST http://localhost:8080/api/task-types \
+  -H "Content-Type: application/json" \
+  -d '{
+    "taskType": "Legal",
+    "displayName": "Legal Review",
+    "finalStatus": 3,
+    "isActive": true
+  }'
+```
+
+Constraints:
+
+- `finalStatus` must be at least created status `1`.
+- `finalStatus` must be less than closed status `99`.
+- Task-type lookup is case-insensitive, but clients should use the canonical
+  `taskType` returned by `GET /api/task-types`.
+
+### 2. Add status field rules
+
+Status `2` requires a document URL:
+
+```bash
+curl -X POST http://localhost:8080/api/task-types/Legal/fields \
+  -H "Content-Type: application/json" \
+  -d '{
+    "field": "documentUrl",
+    "type": "string",
+    "required": true,
+    "minLength": 10,
+    "appliesFromStatus": 2,
+    "appliesToStatus": 2,
+    "isIndexed": false
+  }'
+```
+
+Status `3` requires a decision from a fixed set:
+
+```bash
+curl -X POST http://localhost:8080/api/task-types/Legal/fields \
+  -H "Content-Type: application/json" \
+  -d '{
+    "field": "decision",
+    "type": "string",
+    "required": true,
+    "allowedValues": ["Approved", "Rejected", "NeedsChanges"],
+    "appliesFromStatus": 3,
+    "appliesToStatus": 3,
+    "isIndexed": true
+  }'
+```
+
+### 3. Verify the schema
+
+```bash
+curl http://localhost:8080/api/task-types/Legal
+```
+
+The frontend reads `GET /api/task-types` and renders dynamic fields from this
+schema. Unknown task types can still use the fallback JSON editor, but the best
+developer experience comes from complete metadata.
+
+### 4. Exercise the workflow
+
+```bash
+curl -X POST http://localhost:8080/api/tasks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "taskType": "Legal",
+    "description": "Review vendor contract",
+    "assignedToUserId": 1,
+    "customFields": {}
+  }'
+```
+
+Move from status `1` to `2`:
+
+```bash
+curl -X POST http://localhost:8080/api/tasks/3/change-status \
+  -H "Content-Type: application/json" \
+  -d '{
+    "newStatus": 2,
+    "nextAssignedToUserId": 2,
+    "customFields": {
+      "documentUrl": "https://example.test/contracts/42"
+    }
+  }'
+```
+
+Then move from status `2` to `3`, and close through
+`POST /api/tasks/{id}/close`. Do not move directly to status `99` with
+`change-status`.
+
+## Seed a metadata-backed task type in code
+
+For demo data or baseline product task types, add rows in
+`Data/ApplicationDbContext.SeedData`.
+
+1. Add one `TaskTypeMetadata` row with a stable Id, code, display name, final
+   status, active flag, version, and deterministic timestamps.
+2. Add one `TaskFieldDefinition` row per status field rule.
+3. If the schema is already deployed, create a migration:
+
+   ```bash
+   cd backend
+   dotnet ef migrations add AddLegalTaskType
+   ```
+
+4. Commit the generated migration and
+   `Migrations/ApplicationDbContextModelSnapshot.cs`.
+
+The current initial migration demonstrates this pattern for `Procurement`,
+`Development`, and `Marketing`.
+
+## Add a code-backed task type
+
+Use this path when validation requires custom parsing, external checks, or logic
+that does not fit the field-rule model.
+
+### 1. Implement `IRegisterableTaskHandler`
 
 ```csharp
-// Domain/Handlers/QATaskHandler.cs
-using DanTaskManager.Domain;
 using System.Text.Json;
 
 namespace DanTaskManager.Domain.Handlers;
 
-/// <summary>
-/// QA task handler with specific validation
-/// </summary>
-public class QATaskHandler : ITaskHandler
+public sealed class SecurityReviewTaskHandler : IRegisterableTaskHandler
 {
-    /// <summary>
-    /// Handler identifier
-    /// </summary>
-    public string TaskType => "QA";
+    public string TaskType => "SecurityReview";
 
-    /// <summary>
-    /// Final status for QA tasks
-    /// </summary>
-    public int FinalStatus => 3;
+    public int FinalStatus => 2;
 
-    /// <summary>
-    /// Validate status transitions for QA tasks
-    /// </summary>
     public ValidationResult ValidateStatusChange(
         string currentDataJson,
         int currentStatus,
         int nextStatus,
         string newDataJson)
     {
-        // Status 1 → 2: Setup
-        if (nextStatus == 2)
-            return ValidateStatusTwo(newDataJson);
-
-        // Status 2 → 3: Testing
-        if (nextStatus == 3)
-            return ValidateStatusThree(newDataJson);
-
-        return ValidationResult.Success();
-    }
-
-    /// <summary>
-    /// Validate Status 2 (Setup)
-    /// Requires: testEnvironment, testCases
-    /// </summary>
-    private ValidationResult ValidateStatusTwo(string dataJson)
-    {
-        try
+        if (nextStatus != 2)
         {
-            var json = JsonDocument.Parse(dataJson);
-            var root = json.RootElement;
-
-            // Check testEnvironment
-            if (!root.TryGetProperty("testEnvironment", out var env))
-                return ValidationResult.Failure("'testEnvironment' field is required");
-
-            if (env.ValueKind != JsonValueKind.String || string.IsNullOrEmpty(env.GetString()))
-                return ValidationResult.Failure("'testEnvironment' must be a non-empty string");
-
-            // Check testCases array
-            if (!root.TryGetProperty("testCases", out var testCases))
-                return ValidationResult.Failure("'testCases' array is required");
-
-            if (testCases.ValueKind != JsonValueKind.Array)
-                return ValidationResult.Failure("'testCases' must be an array");
-
-            var count = testCases.GetArrayLength();
-            if (count < 1)
-                return ValidationResult.Failure("'testCases' must contain at least 1 test case");
-
             return ValidationResult.Success();
         }
-        catch (JsonException)
-        {
-            return ValidationResult.Failure("Invalid JSON format");
-        }
-    }
 
-    /// <summary>
-    /// Validate Status 3 (Testing - Final)
-    /// Requires: testResults, bugsFound
-    /// </summary>
-    private ValidationResult ValidateStatusThree(string dataJson)
-    {
         try
         {
-            var json = JsonDocument.Parse(dataJson);
-            var root = json.RootElement;
+            using var document = JsonDocument.Parse(newDataJson);
+            var root = document.RootElement;
 
-            // Check testResults
-            if (!root.TryGetProperty("testResults", out var results))
-                return ValidationResult.Failure("'testResults' field is required");
-
-            if (results.ValueKind != JsonValueKind.String)
-                return ValidationResult.Failure("'testResults' must be a string");
-
-            var resultsValue = results.GetString();
-            if (string.IsNullOrEmpty(resultsValue) || !new[] { "PASSED", "FAILED", "PARTIAL" }.Contains(resultsValue))
-                return ValidationResult.Failure("'testResults' must be PASSED, FAILED, or PARTIAL");
-
-            // Check bugsFound (optional but if present, must be valid)
-            if (root.TryGetProperty("bugsFound", out var bugs))
+            if (!root.TryGetProperty("riskLevel", out var riskLevel) ||
+                riskLevel.ValueKind != JsonValueKind.String)
             {
-                if (bugs.ValueKind != JsonValueKind.Array)
-                    return ValidationResult.Failure("'bugsFound' must be an array if provided");
+                return ValidationResult.Failure("Status 2 requires a 'riskLevel' field");
             }
 
-            return ValidationResult.Success();
+            var value = riskLevel.GetString();
+            return value is "Low" or "Medium" or "High"
+                ? ValidationResult.Success()
+                : ValidationResult.Failure("'riskLevel' must be Low, Medium, or High");
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
-            return ValidationResult.Failure("Invalid JSON format");
+            return ValidationResult.Failure($"Invalid JSON payload: {ex.Message}");
         }
     }
 }
 ```
 
-### Step 2: Register Handler
+### 2. Let DI discover it
+
+No manual registration is needed. `Program.cs` calls:
 
 ```csharp
-// Program.cs
-builder.Services.AddTransient<ITaskHandler, QATaskHandler>();
-
-// Full example:
-services.AddTransient<ITaskHandler, ProcurementTaskHandler>();
-services.AddTransient<ITaskHandler, DevelopmentTaskHandler>();
-services.AddTransient<ITaskHandler, QATaskHandler>(); // NEW
+builder.Services.AddTaskHandlersFromAssembly(typeof(Program).Assembly);
 ```
 
-### Step 3: Write Tests
-
-```csharp
-// Tests/QAHandlerTests.cs
-using DanTaskManager.Domain.Handlers;
-using System.Text.Json;
-
-namespace DanTaskManager.Tests;
-
-public class QAHandlerTests
-{
-    private readonly QATaskHandler _handler = new();
-
-    [Fact]
-    public void ValidateStatusTwo_WithRequiredFields_ShouldPass()
-    {
-        // Arrange
-        var data = JsonSerializer.Serialize(new
-        {
-            testEnvironment = "Staging",
-            testCases = new[] { "TC001", "TC002", "TC003" }
-        });
-
-        // Act
-        var result = _handler.ValidateStatusChange("", 1, 2, data);
-
-        // Assert
-        Assert.True(result.IsValid);
-    }
-
-    [Fact]
-    public void ValidateStatusTwo_MissingTestEnvironment_ShouldFail()
-    {
-        // Arrange
-        var data = JsonSerializer.Serialize(new
-        {
-            testCases = new[] { "TC001" }
-        });
-
-        // Act
-        var result = _handler.ValidateStatusChange("", 1, 2, data);
-
-        // Assert
-        Assert.False(result.IsValid);
-        Assert.Contains("testEnvironment", result.Message);
-    }
-
-    [Fact]
-    public void ValidateStatusThree_WithAllFields_ShouldPass()
-    {
-        // Arrange
-        var data = JsonSerializer.Serialize(new
-        {
-            testResults = "PASSED",
-            bugsFound = new[] { "BUG001", "BUG002" }
-        });
-
-        // Act
-        var result = _handler.ValidateStatusChange("", 2, 3, data);
-
-        // Assert
-        Assert.True(result.IsValid);
-    }
-
-    [Fact]
-    public void ValidateStatusThree_InvalidTestResults_ShouldFail()
-    {
-        // Arrange
-        var data = JsonSerializer.Serialize(new
-        {
-            testResults = "UNKNOWN"
-        });
-
-        // Act
-        var result = _handler.ValidateStatusChange("", 2, 3, data);
-
-        // Assert
-        Assert.False(result.IsValid);
-        Assert.Contains("PASSED, FAILED, or PARTIAL", result.Message);
-    }
-}
-```
-
-### Step 4: Test It
-
-```bash
-# Run tests
-dotnet test
-
-# Run application
-dotnet run
-
-# Test with API
-curl -X POST http://localhost:5000/api/tasks \
-  -H "Content-Type: application/json" \
-  -d '{
-    "taskType": "QA",
-    "description": "Test new feature",
-    "assignedToUserId": 1
-  }'
-```
-
----
-
-## ➕ Adding New Endpoint
-
-### Example: Get Task Statistics
-
-#### Step 1: Add Method to Service Interface
-
-```csharp
-// Services/ITaskWorkflowService.cs
-public interface ITaskWorkflowService
-{
-    // ... existing methods ...
-    
-    /// <summary>
-    /// Get task statistics for a user
-    /// </summary>
-    Task<TaskStatistics> GetUserStatisticsAsync(int userId);
-}
-
-/// <summary>
-/// Task statistics
-/// </summary>
-public class TaskStatistics
-{
-    public int UserId { get; set; }
-    public int TotalTasks { get; set; }
-    public int CompletedTasks { get; set; }
-    public int InProgressTasks { get; set; }
-    public Dictionary<string, int> TasksByType { get; set; } = new();
-}
-```
-
-#### Step 2: Implement in Service
-
-```csharp
-// Services/TaskWorkflowService.cs
-public async Task<TaskStatistics> GetUserStatisticsAsync(int userId)
-{
-    var tasks = await _context.Tasks
-        .Where(t => t.AssignedToUserId == userId)
-        .ToListAsync();
-
-    var stats = new TaskStatistics
-    {
-        UserId = userId,
-        TotalTasks = tasks.Count,
-        CompletedTasks = tasks.Count(t => t.CurrentStatus == 99),
-        InProgressTasks = tasks.Count(t => t.CurrentStatus > 0 && t.CurrentStatus < 99),
-        TasksByType = tasks
-            .GroupBy(t => t.TaskType)
-            .ToDictionary(g => g.Key, g => g.Count())
-    };
-
-    return stats;
-}
-```
-
-#### Step 3: Add Controller Endpoint
-
-```csharp
-// Controllers/TasksController.cs
-/// <summary>
-/// Get task statistics for user
-/// </summary>
-[HttpGet("user/{userId}/statistics")]
-public async Task<ActionResult<TaskStatistics>> GetUserStatistics(int userId)
-{
-    var stats = await _workflowService.GetUserStatisticsAsync(userId);
-    
-    if (stats == null || stats.TotalTasks == 0)
-        return NotFound(new { error = "No tasks found for user" });
-    
-    return Ok(stats);
-}
-```
-
-#### Step 4: Test It
-
-```bash
-# Test endpoint
-curl http://localhost:5000/api/tasks/user/1/statistics
-
-# Response:
-{
-  "userId": 1,
-  "totalTasks": 5,
-  "completedTasks": 2,
-  "inProgressTasks": 3,
-  "tasksByType": {
-    "Procurement": 2,
-    "Development": 3
-  }
-}
-```
-
----
-
-## 🔍 Adding Validation Rule
-
-### Example: Prevent Duplicate Task Types for User
-
-#### Step 1: Add Validation to Service
-
-```csharp
-// Services/TaskWorkflowService.cs
-private async Task<ValidationResult> ValidateUniqueTaskTypeAsync(int userId, string taskType)
-{
-    var existingTask = await _context.Tasks
-        .FirstOrDefaultAsync(t =>
-            t.AssignedToUserId == userId &&
-            t.TaskType == taskType &&
-            t.CurrentStatus < 99); // Not closed
-
-    if (existingTask != null)
-        return ValidationResult.Failure($"User already has an active {taskType} task");
-
-    return ValidationResult.Success();
-}
-```
-
-#### Step 2: Use in Workflow
-
-```csharp
-// In ChangeStatusAsync or appropriate place
-public async Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, string newDataJson)
-{
-    var task = await _context.Tasks.FindAsync(taskId);
-    
-    // ... existing validations ...
-    
-    // New: Check unique constraint
-    var uniqueValidation = await ValidateUniqueTaskTypeAsync(task.AssignedToUserId, task.TaskType);
-    if (!uniqueValidation.IsValid)
-        return WorkflowResult.FailureResult(uniqueValidation.Message);
-    
-    // ... rest of implementation ...
-}
-```
-
-#### Step 3: Write Test
-
-```csharp
-[Fact]
-public async Task ChangeStatus_WithDuplicateTaskType_ShouldFail()
-{
-    // Arrange: Two Procurement tasks for same user
-    var task1 = new BaseTask { TaskType = "Procurement", AssignedToUserId = 1, CurrentStatus = 0 };
-    var task2 = new BaseTask { TaskType = "Procurement", AssignedToUserId = 1, CurrentStatus = 0 };
-    
-    _context.Tasks.Add(task1);
-    _context.Tasks.Add(task2);
-    await _context.SaveChangesAsync();
-
-    // Act: Try to move second task to Status 1
-    var result = await _service.ChangeStatusAsync(task2.Id, 1, "{}");
-
-    // Assert
-    Assert.False(result.Success);
-    Assert.Contains("already has an active", result.Message);
-}
-```
-
----
-
-## 📋 Common Extension Scenarios
-
-### Scenario 1: Add Task Priority Levels
-
-```csharp
-// Add to BaseTask
-public enum TaskPriority { Low = 1, Medium = 2, High = 3 }
-public TaskPriority Priority { get; set; }
-
-// Migration
-ALTER TABLE Tasks ADD Priority INT DEFAULT 2;
-
-// Use in sorting
-var tasks = await _context.Tasks
-    .Where(t => t.AssignedToUserId == userId)
-    .OrderByDescending(t => t.Priority)
-    .ThenByDescending(t => t.CreatedAt)
-    .ToListAsync();
-```
-
-### Scenario 2: Add Task Comments/Notes
-
-```csharp
-// Domain/TaskComment.cs
-public class TaskComment
-{
-    public int Id { get; set; }
-    public int TaskId { get; set; }
-    public int UserId { get; set; }
-    public string Comment { get; set; }
-    public DateTime CreatedAt { get; set; }
-    
-    public BaseTask? Task { get; set; }
-    public AppUser? User { get; set; }
-}
-
-// Add to DbContext
-public DbSet<TaskComment> Comments { get; set; }
-
-// Add endpoint
-[HttpPost("{taskId}/comments")]
-public async Task<IActionResult> AddComment(int taskId, [FromBody] string comment)
-{
-    // Implementation
-}
-```
-
-### Scenario 3: Add Approval Workflow
-
-```csharp
-// New handler
-public class ApprovalTaskHandler : ITaskHandler
-{
-    public string TaskType => "Approval";
-    public int FinalStatus => 2;
-    
-    // Validates that approver comments are present
-    private ValidationResult ValidateStatusTwo(string dataJson)
-    {
-        var json = JsonDocument.Parse(dataJson);
-        var root = json.RootElement;
-        
-        if (!root.TryGetProperty("approverComments", out var comments))
-            return ValidationResult.Failure("Approver comments required");
-            
-        return ValidationResult.Success();
-    }
-}
-```
-
-### Scenario 4: Add Deadline Tracking
-
-```csharp
-// Add to BaseTask
-public DateTime? Deadline { get; set; }
-
-// Validation
-private ValidationResult ValidateDeadline(BaseTask task)
-{
-    if (task.Deadline.HasValue && task.Deadline < DateTime.UtcNow)
-        return ValidationResult.Failure("Task deadline has passed");
-    
-    return ValidationResult.Success();
-}
-
-// Status warning
-if (task.Deadline.HasValue && task.Deadline < DateTime.UtcNow.AddDays(1))
-    // Log warning or notify user
-}
-```
-
----
-
-## 🧪 Testing Extensions
-
-### Unit Test Template
-
-```csharp
-public class ExtensionFeatureTests : IAsyncLifetime
-{
-    private readonly DbContextOptions<ApplicationDbContext> _options;
-    private ApplicationDbContext _context = null!;
-    private ITaskWorkflowService _service = null!;
-
-    public async Task InitializeAsync()
-    {
-        _options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase("TestDb")
-            .Options;
-        
-        _context = new ApplicationDbContext(_options);
-        await _context.Database.EnsureCreatedAsync();
-        
-        var handlers = new ITaskHandler[] { new YourNewHandler() };
-        _service = new TaskWorkflowService(
-            _context,
-            new TaskHandlerFactory(handlers),
-            new MockLogger());
-    }
-
-    [Fact]
-    public async Task YourNewFeature_WithValidInput_ShouldSucceed()
-    {
-        // Arrange
-        var task = new BaseTask { /* ... */ };
-        _context.Tasks.Add(task);
-        await _context.SaveChangesAsync();
-
-        // Act
-        var result = await _service.YourNewMethod(/* ... */);
-
-        // Assert
-        Assert.True(result.Success);
-    }
-
-    public async Task DisposeAsync()
-    {
-        await _context.Database.EnsureDeletedAsync();
-        _context.Dispose();
-    }
-}
-```
-
-### Integration Test Template
-
-```csharp
-// Test the full flow from API to database
-[Fact]
-public async Task FullWorkflow_WithNewFeature_ShouldPass()
-{
-    // 1. Create task
-    // 2. Verify initial state
-    // 3. Perform operation
-    // 4. Verify side effects
-    // 5. Clean up
-}
-```
-
----
-
-## 📚 Best Practices for Extensions
-
-✅ **Follow SOLID Principles**
-- Single Responsibility: One handler per task type
-- Open/Closed: Extend, don't modify existing code
-- Liskov: Handlers follow ITaskHandler contract
-- Interface Segregation: Only implement needed methods
-- Dependency Inversion: Depend on abstractions
-
-✅ **Maintain Consistency**
-- Use same naming conventions
-- Follow existing patterns
-- Write XML documentation
-- Add appropriate logging
-
-✅ **Test Thoroughly**
-- Unit tests for new logic
-- Integration tests for workflows
-- Edge cases
-- Error scenarios
-
-✅ **Document Changes**
-- Update README if significant
-- Add examples
-- Document breaking changes
-- Update architecture diagrams
-
----
-
-## 🔗 Related Documentation
-
-- Architecture: [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md)
-- Workflows: [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md)
-- Best Practices: [BEST_PRACTICES.md](BEST_PRACTICES.md)
-
----
-
-## 🎓 Summary
-
-To extend the system:
-
-1. **New Handler**: Implement ITaskHandler, register in Program.cs
-2. **New Endpoint**: Add to interface, implement in service, add to controller
-3. **New Validation**: Add validation method, integrate into workflow
-4. **New Datatype**: Add handler with appropriate validation
-
-All extensions follow the same patterns and principles as the existing code.
-
-**Happy extending! 🚀**
+`TaskHandlerRegistrationExtensions` registers every public, non-abstract class
+that implements `IRegisterableTaskHandler`.
+
+### 3. Add tests
+
+Cover both the handler and the application workflow:
+
+- Handler unit tests for every status-specific rule.
+- `TaskWorkflowService` tests for movement and close behavior.
+- API or MediatR handler tests when request/response behavior changes.
+
+### 4. Consider frontend metadata
+
+`GET /api/task-types` returns handler-backed task types with an empty `fields`
+array. The frontend can create and move them through the fallback JSON editor,
+but it cannot render guided controls unless equivalent metadata exists. If the
+logic is handler-backed but the UI still needs field hints, add inactive or
+non-conflicting metadata carefully and verify the conflict behavior.
+
+## Add a new endpoint
+
+Follow the existing application structure:
+
+1. Add request/response contracts under `Contracts/Requests` or a service DTO in
+   `Services/QueryModels.cs`.
+2. Add a MediatR command/query under `Application/Tasks/<UseCase>`.
+3. Keep controller methods thin: validate the HTTP request, send the command or
+   query, and translate not-found/validation failures through `ApiException`
+   types.
+4. Put business rules in services, not controllers.
+5. Add tests for the handler/service and any controller-specific validation.
+
+Use stable error `code` values for new failures. See `docs/API_ERROR_CODES.md`.
+
+## Add database fields or tables
+
+1. Update the domain entity and `ApplicationDbContext` configuration.
+2. Add or update seed data only when it should exist in every environment.
+3. Generate a migration from `/backend`.
+4. Review generated SQL for constraints, indexes, cascade behavior, and data
+   backfills.
+5. Commit the migration and model snapshot.
+
+Startup applies migrations automatically when migrations exist, but production
+deployments should still treat migrations as an explicit release step.
+
+## Common pitfalls
+
+| Pitfall | Avoidance |
+|---------|-----------|
+| Adding a handler for a metadata-backed task type | Metadata has priority `0`; the handler is shadowed. Use one source or enable `TaskTypeConflictValidation:FailOnConflict`. |
+| Moving to status `99` through `change-status` | Use `POST /api/tasks/{id}/close`; closed status is not a normal transition. |
+| Sending `customDataJson` or `newDataJson` from clients | Public requests use `customFields`. `CustomDataJson` is internal storage. |
+| Creating another initial migration | The initial migration already exists. Generate migrations only for model changes. |
+| Marking arrays or objects as indexed | `JsonIndexBootstrapper` only materializes scalar `string`, `number`, and `stringOrNumber` fields. |
+| Forgetting `nextAssignedToUserId` | Status changes and close requests require the next assignee to exist. |
+
+## Related docs
+
+- `docs/WORKFLOW.md` - workflow invariants, providers, and status constants.
+- `docs/QUICKSTART.md` - setup, migration, seed, and smoke-test runbook.
+- `docs/API_ERROR_CODES.md` - stable error-code contract.
+- `docs/BEST_PRACTICES.md` - local coding conventions.

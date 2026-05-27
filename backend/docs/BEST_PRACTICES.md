@@ -1,553 +1,176 @@
-# 📖 Best Practices & Code Conventions
+# Best Practices
 
-## 🏗️ Architecture Principles
+These conventions keep the backend consistent with the current architecture.
+They are based on the code paths in `Program.cs`, `Controllers/`,
+`Application/Tasks/`, `Services/`, `Domain/`, and `Data/ApplicationDbContext.cs`.
 
-### 1. Separation of Concerns
-```csharp
-// ❌ Bad: Mixed concerns
-public class TaskController
+## Layering
+
+| Layer | Responsibility | Avoid |
+|-------|----------------|-------|
+| Controllers | HTTP routing, request validation, translating results to API responses | Business rules, EF queries, task-type validation |
+| MediatR commands/queries | Use-case entry points under `Application/Tasks/<UseCase>` | Reimplementing workflow logic |
+| Application services | Task/user orchestration and persistence | HTTP-specific response construction |
+| `TaskWorkflowService` | General workflow invariants: status movement, close rules, assignee checks, JSON object checks | Per-type field rules |
+| Rule providers | Per-type validation from metadata or handlers | Database writes |
+| EF model | Schema, constraints, seed data, relationships | Runtime-only behavior |
+
+Controllers should throw `ApiValidationException`, `ApiNotFoundException`, or
+`WorkflowValidationException` for error responses. The global middleware emits
+the public `{ error, code }` shape.
+
+## Public API DTOs
+
+Use the current request property names:
+
+```json
 {
-    public void UpdateTask(int id)
-    {
-        // Validation
-        // Database access
-        // Business logic
-        // HTTP response
-    }
-}
-
-// ✅ Good: Separated concerns
-public class TasksController
-{
-    private readonly ITaskWorkflowService _service;
-    
-    public async Task<IActionResult> ChangeStatus(int id, ChangeStatusWorkflowRequest request)
-    {
-        // HTTP handling only
-        var result = await _service.ChangeStatusAsync(id, request.NewStatus, request.NewDataJson);
-        return result.Success ? Ok(result) : BadRequest(new { error = result.Message });
-    }
-}
-
-public class TaskWorkflowService : ITaskWorkflowService
-{
-    public async Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, string newDataJson)
-    {
-        // Business logic only
-        // Validation
-        // Handler delegation
-        // Database updates
-    }
+  "taskType": "Marketing",
+  "description": "Launch campaign",
+  "assignedToUserId": 1,
+  "customFields": {}
 }
 ```
 
-### 2. Dependency Injection
-```csharp
-// ❌ Bad: Tightly coupled
-public class TaskWorkflowService
+```json
 {
-    public TaskWorkflowService()
-    {
-        _context = new ApplicationDbContext();
-        _factory = new TaskHandlerFactory();
-    }
-}
-
-// ✅ Good: Injected dependencies
-public class TaskWorkflowService
-{
-    private readonly ApplicationDbContext _context;
-    private readonly TaskHandlerFactory _factory;
-    
-    public TaskWorkflowService(
-        ApplicationDbContext context,
-        TaskHandlerFactory factory,
-        ILogger<TaskWorkflowService> logger)
-    {
-        _context = context;
-        _factory = factory;
-        _logger = logger;
-    }
-}
-
-// Registered in Program.cs
-services.AddScoped<ITaskWorkflowService, TaskWorkflowService>();
-```
-
-### 3. Single Responsibility
-```csharp
-// ❌ Bad: Multiple responsibilities
-public class TaskHandler
-{
-    public void ProcessTask()
-    {
-        // Validate status
-        // Update database
-        // Send email
-        // Log activity
-        // Create audit entry
-    }
-}
-
-// ✅ Good: Single responsibility
-public class ProcurementTaskHandler : ITaskHandler
-{
-    // ONLY validates procurement-specific rules
-    public ValidationResult ValidateStatusChange(...)
-    {
-        // Validate prices
-        // Validate receipt
-        return ValidationResult.Success();
-    }
+  "newStatus": 2,
+  "nextAssignedToUserId": 2,
+  "customFields": {
+    "campaignName": "Spring campaign",
+    "targetAudience": "B2B"
+  }
 }
 ```
 
----
+Do not add new client-facing uses of `customDataJson` or `newDataJson`.
+`BaseTask.CustomDataJson` is the storage column; controllers map public
+`customFields` into that internal JSON string.
 
-## 📝 Code Standards
+List endpoints return `PagedResult<T>` with `items`, `page`, `pageSize`,
+`totalCount`, and `totalPages`. List task summaries intentionally omit
+`customFields`; use task detail reads for editable custom data.
 
-### Naming Conventions
+## Workflow rules
 
-#### Classes
+Status constants live in `Domain/WorkflowConstants.cs`:
+
+- Created status: `1`
+- Closed status: `99`
+
+General rules:
+
+- Forward movement must be exactly `+1`.
+- Backward movement may target any lower status greater than or equal to `1`.
+- The same status is invalid.
+- Status `99` is reachable only through `POST /api/tasks/{id}/close`.
+- Close requires the task type's final status.
+- Closed tasks cannot be updated, deleted, moved, or closed again.
+- Status changes and close requests require an existing `nextAssignedToUserId`.
+- `customFields` must be a JSON object.
+
+When adding behavior, keep these invariants in `TaskWorkflowService`; add
+task-type-specific rules through metadata or an `IRegisterableTaskHandler`.
+
+## Task-type extension rules
+
+Prefer metadata:
+
+- Add or update `TaskTypeMetadata`.
+- Add one `TaskFieldDefinition` row per field rule.
+- Use `GET /api/task-types` to verify what the frontend sees.
+
+Use handlers only for custom logic:
+
+- Implement `IRegisterableTaskHandler`.
+- Do not manually register it; `AddTaskHandlersFromAssembly` discovers it.
+- Keep handlers focused on validation and close-data behavior delegated through
+  rule providers.
+
+Avoid duplicate rule sources for a task type. Metadata provider priority `0`
+wins over handler provider priority `100`, so a duplicate handler may never run.
+Enable `TaskTypeConflictValidation:FailOnConflict` when you want startup to fail
+instead of logging a warning.
+
+## EF Core and migrations
+
+The EF model lives in `Data/ApplicationDbContext.cs`; the current repository
+includes an initial migration under `Migrations/`.
+
+When changing schema or seed data:
+
+1. Update entities and model configuration.
+2. Generate a descriptive migration from `/backend`:
+
+   ```bash
+   dotnet ef migrations add AddSomeFeature
+   ```
+
+3. Review the generated migration for constraints, delete behavior, indexes, and
+   deterministic seed values.
+4. Commit the migration and `Migrations/ApplicationDbContextModelSnapshot.cs`.
+
+Do not create another initial migration for setup. Startup currently applies
+migrations automatically because migrations exist; deployments may still choose
+to run `dotnet ef database update` out-of-band.
+
+For indexed custom fields, set `IsIndexed = true` only for scalar values.
+`JsonIndexBootstrapper` creates SQL Server computed columns and indexes for
+`string`, `number`, and `stringOrNumber` fields and skips arrays/objects.
+
+## Error handling
+
+Use stable error codes:
+
 ```csharp
-// Handlers
-public class ProcurementTaskHandler
-public class DevelopmentTaskHandler
-
-// Services
-public class TaskWorkflowService
-public class TaskStatusService
-
-// Controllers
-public class TasksController
-public class UsersController
-
-// Request/Response DTOs
-public class CreateTaskRequest
-public class ChangeStatusWorkflowRequest
-public class WorkflowResult
+throw new ApiValidationException("Description is required");
+throw new ApiNotFoundException("Task not found");
+throw new WorkflowValidationException(result.Message, result.Code);
 ```
 
-#### Methods
-```csharp
-// Async methods
-public async Task<TaskWorkflowResult> ChangeStatusAsync(...)
-public async Task<IEnumerable<BaseTask>> GetUserTasksAsync(...)
+Add new codes deliberately and document them in `docs/API_ERROR_CODES.md`.
+Clients should not parse localized or human-readable text.
 
-// Validation methods
-public ValidationResult ValidateStatusChange(...)
-private ValidationResult ValidateStatusTwo(...)
+## Testing
 
-// Helper methods
-private bool IsValidGitBranchName(string branch)
-private decimal ParsePrice(string priceString)
+Match test coverage to the layer being changed:
+
+- Field-rule or handler change: unit tests for valid and invalid payloads.
+- Workflow invariant change: `TaskWorkflowService` tests for status movement,
+  close behavior, assignee checks, and closed-task immutability.
+- Application/MediatR change: command/query handler tests.
+- EF projection or query shape change: tests for `PagedResult<T>`, summaries,
+  and details.
+- API contract change: request validation and response/error shape tests.
+- Migration or schema change: verify the generated migration and snapshot.
+
+Run the backend suite from `/backend`:
+
+```bash
+dotnet test
 ```
 
-#### Properties
-```csharp
-// Domain models
-public int Id { get; set; }
-public string TaskType { get; set; }
-public int CurrentStatus { get; set; }
+The Angular scaffold currently has a placeholder test script:
 
-// Request DTOs
-public int NewStatus { get; set; }
-public string NewDataJson { get; set; }
-
-// Result objects
-public bool Success { get; set; }
-public string Message { get; set; }
+```bash
+npm --prefix frontend test
 ```
 
----
+Run the frontend build when changing TypeScript, templates, CSS, dependencies,
+or public API assumptions:
 
-## ✅ Validation Patterns
-
-### 1. Request Validation
-```csharp
-// ✅ Good: Validate at entry point
-[HttpPost]
-public async Task<IActionResult> CreateTask(CreateTaskRequest request)
-{
-    // Validate input
-    if (string.IsNullOrWhiteSpace(request.TaskType))
-        return BadRequest(new { error = "TaskType cannot be empty" });
-    
-    if (string.IsNullOrWhiteSpace(request.Description))
-        return BadRequest(new { error = "Description cannot be empty" });
-    
-    // Check if user exists
-    var user = await _context.Users.FindAsync(request.AssignedToUserId);
-    if (user == null)
-        return BadRequest(new { error = $"User {request.AssignedToUserId} not found" });
-    
-    // Check if handler exists
-    if (!_factory.HasHandler(request.TaskType))
-        return BadRequest(new { error = $"Unknown task type: {request.TaskType}" });
-    
-    // Proceed with creation
-    return CreatedAtAction(...);
-}
+```bash
+npm --prefix frontend run build
 ```
 
-### 2. State Validation
-```csharp
-// ✅ Good: Validate state transitions
-public async Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, string newDataJson)
-{
-    var task = await _context.Tasks.FindAsync(taskId);
-    
-    // Check if closed
-    if (task.CurrentStatus == 99)
-        return WorkflowResult.Failure("Task is closed");
-    
-    // Validate movement
-    var movement = ValidateStatusMovement(task.CurrentStatus, newStatus);
-    if (!movement.IsValid)
-        return WorkflowResult.Failure(movement.Message);
-    
-    // Delegate to handler
-    var handler = _factory.GetHandler(task.TaskType);
-    var validation = handler.ValidateStatusChange(...);
-    if (!validation.IsValid)
-        return WorkflowResult.Failure(validation.Message);
-    
-    return WorkflowResult.Success();
-}
-```
+## Documentation updates
 
-### 3. Data Validation (Handler)
-```csharp
-// ✅ Good: Parse and validate JSON
-private ValidationResult ValidateStatusTwo(string dataJson)
-{
-    try
-    {
-        var json = JsonDocument.Parse(dataJson);
-        
-        // Check field exists
-        if (!json.RootElement.TryGetProperty("prices", out var pricesElement))
-            return ValidationResult.Failure("'prices' field not found");
-        
-        // Check is array
-        if (pricesElement.ValueKind != JsonValueKind.Array)
-            return ValidationResult.Failure("'prices' must be an array");
-        
-        // Check count
-        var count = pricesElement.GetArrayLength();
-        if (count != 2)
-            return ValidationResult.Failure($"'prices' must have exactly 2 items, found {count}");
-        
-        // Check each element
-        foreach (var item in pricesElement.EnumerateArray())
-        {
-            if (item.ValueKind != JsonValueKind.String || string.IsNullOrEmpty(item.GetString()))
-                return ValidationResult.Failure("Each price must be a non-empty string");
-        }
-        
-        return ValidationResult.Success();
-    }
-    catch (JsonException)
-    {
-        return ValidationResult.Failure("Invalid JSON format");
-    }
-}
-```
+Update docs in the same change when behavior affects:
 
----
+- Setup or migration steps (`README.md`, `docs/QUICKSTART.md`).
+- Public API request/response/error contracts (`docs/API_ERROR_CODES.md`).
+- Workflow rules or provider behavior (`docs/WORKFLOW.md`).
+- Extension mechanisms (`docs/EXTENSION_GUIDE.md`).
+- Frontend expectations, if a frontend guide exists on the branch.
 
-## 🔄 Workflow Patterns
-
-### Status Movement Logic
-```csharp
-// ✅ Good: Clear, documented logic
-private StatusMovementValidation ValidateStatusMovement(int currentStatus, int newStatus, int finalStatus)
-{
-    // Forward movement: must be exactly +1
-    if (newStatus > currentStatus)
-    {
-        if (newStatus != currentStatus + 1)
-            return new StatusMovementValidation 
-            { 
-                IsValid = false, 
-                Message = $"Forward movement must be exactly +1. Current: {currentStatus}, Requested: {newStatus}"
-            };
-        
-        // Check final status
-        if (currentStatus >= finalStatus)
-            return new StatusMovementValidation 
-            { 
-                IsValid = false, 
-                Message = $"Task reached final status: {finalStatus}"
-            };
-    }
-    
-    // Backward movement: can go to any lower status
-    else if (newStatus < currentStatus)
-    {
-        // Allowed
-    }
-    
-    // Same status: not allowed
-    else
-    {
-        return new StatusMovementValidation 
-        { 
-            IsValid = false, 
-            Message = "Cannot move to same status"
-        };
-    }
-    
-    return new StatusMovementValidation { IsValid = true };
-}
-```
-
----
-
-## 📦 Response Patterns
-
-### Success Response
-```csharp
-// ✅ Consistent response format
-public class WorkflowResult
-{
-    public bool Success { get; set; }
-    public string Message { get; set; }
-    public int? NewStatus { get; set; }
-    public BaseTask? UpdatedTask { get; set; }
-
-    public static WorkflowResult Success(string message = "", int newStatus = 0, BaseTask? task = null)
-    {
-        return new WorkflowResult
-        {
-            Success = true,
-            Message = message,
-            NewStatus = newStatus,
-            UpdatedTask = task
-        };
-    }
-
-    public static WorkflowResult Failure(string message)
-    {
-        return new WorkflowResult
-        {
-            Success = false,
-            Message = message
-        };
-    }
-}
-
-// Usage
-return WorkflowResult.Success("Status changed to 2", 2, updatedTask);
-return WorkflowResult.Failure("Invalid movement");
-```
-
-### HTTP Endpoint Pattern
-```csharp
-// ✅ Good: Clear HTTP handling
-[HttpPost("{id}/change-status")]
-public async Task<IActionResult> ChangeStatusWorkflow(
-    int id,
-    [FromBody] ChangeStatusWorkflowRequest request)
-{
-    // Input validation
-    if (request.NewStatus < 0)
-        return BadRequest(new { error = "Invalid status" });
-    
-    // Call service
-    var result = await _workflowService.ChangeStatusAsync(id, request.NewStatus, request.NewDataJson);
-    
-    // Return appropriate response
-    if (!result.Success)
-        return BadRequest(new { error = result.Message });
-    
-    return Ok(new
-    {
-        success = true,
-        message = result.Message,
-        newStatus = result.NewStatus,
-        task = result.UpdatedTask
-    });
-}
-```
-
----
-
-## 🧪 Testing Patterns
-
-### Unit Test Structure
-```csharp
-// ✅ Good: AAA pattern (Arrange, Act, Assert)
-[Fact]
-public async Task ChangeStatus_ForwardMovement_Plus1_ShouldSucceed()
-{
-    // Arrange - Set up data
-    var task = new BaseTask { CurrentStatus = 1 };
-    _context.Tasks.Add(task);
-    await _context.SaveChangesAsync();
-
-    // Act - Execute operation
-    var result = await _service.ChangeStatusAsync(task.Id, 2, "{}");
-
-    // Assert - Verify results
-    Assert.True(result.Success);
-    Assert.Equal(2, result.NewStatus);
-    Assert.NotNull(result.UpdatedTask);
-}
-```
-
-### Error Path Testing
-```csharp
-// ✅ Good: Test error paths
-[Fact]
-public async Task ChangeStatus_InvalidJump_ShouldFail()
-{
-    // Arrange
-    var task = new BaseTask { CurrentStatus = 1 };
-    _context.Tasks.Add(task);
-    await _context.SaveChangesAsync();
-
-    // Act
-    var result = await _service.ChangeStatusAsync(task.Id, 3, "{}");
-
-    // Assert
-    Assert.False(result.Success);
-    Assert.Contains("exactly +1", result.Message);
-}
-```
-
----
-
-## 🔐 Error Handling
-
-### Try-Catch Pattern
-```csharp
-// ✅ Good: Specific error handling
-public async Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, string newDataJson)
-{
-    try
-    {
-        var task = await _context.Tasks.FindAsync(taskId);
-        if (task == null)
-            return WorkflowResult.Failure($"Task {taskId} not found");
-
-        // Business logic...
-        
-        await _context.SaveChangesAsync();
-        return WorkflowResult.Success("Status changed", newStatus, task);
-    }
-    catch (DbUpdateException ex)
-    {
-        _logger.LogError(ex, $"Database error updating task {taskId}");
-        return WorkflowResult.Failure("Database error - please try again");
-    }
-    catch (Exception ex)
-    {
-        _logger.LogError(ex, $"Unexpected error in ChangeStatusAsync for task {taskId}");
-        return WorkflowResult.Failure("An unexpected error occurred");
-    }
-}
-```
-
-### Logging Pattern
-```csharp
-// ✅ Good: Structured logging
-public async Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, string newDataJson)
-{
-    _logger.LogInformation($"Attempting to change task {taskId} status from {task.CurrentStatus} to {newStatus}");
-    
-    try
-    {
-        // Operation...
-        _logger.LogInformation($"Successfully changed task {taskId} status to {newStatus}");
-        return WorkflowResult.Success(...);
-    }
-    catch (Exception ex)
-    {
-        _logger.LogError(ex, $"Failed to change task {taskId} status");
-        return WorkflowResult.Failure("Operation failed");
-    }
-}
-```
-
----
-
-## 📚 Documentation Standards
-
-### XML Comments
-```csharp
-/// <summary>
-/// Changes task status with workflow validation
-/// </summary>
-/// <param name="taskId">The task ID</param>
-/// <param name="newStatus">The new status</param>
-/// <param name="newDataJson">Handler-specific data as JSON</param>
-/// <returns>WorkflowResult indicating success or failure</returns>
-/// <remarks>
-/// Validates:
-/// - Task is not closed (Status 99)
-/// - Forward movement is exactly +1
-/// - Backward movement is to any lower status
-/// - Handler-specific validation passes
-/// </remarks>
-public async Task<WorkflowResult> ChangeStatusAsync(
-    int taskId,
-    int newStatus,
-    string newDataJson)
-{
-    // Implementation
-}
-```
-
-### Endpoint Documentation
-```csharp
-/// <summary>
-/// Change task status with workflow rules
-/// </summary>
-/// <remarks>
-/// Request body must contain:
-/// - newStatus: int (next status)
-/// - newDataJson: string (handler-specific data)
-/// 
-/// Workflow rules:
-/// - Forward movement: +1 only
-/// - Backward movement: to any lower status
-/// - Closed tasks (99): cannot be changed
-/// 
-/// Returns 200 on success, 400 on validation error
-/// </remarks>
-[HttpPost("{id}/change-status")]
-public async Task<IActionResult> ChangeStatusWorkflow(int id, ChangeStatusWorkflowRequest request)
-{
-    // Implementation
-}
-```
-
----
-
-## ✨ Summary of Best Practices
-
-✅ **Separation of Concerns** - Controllers handle HTTP, Services handle business logic  
-✅ **Dependency Injection** - Inject dependencies, don't create them  
-✅ **Single Responsibility** - Each class has one reason to change  
-✅ **Validation** - Validate at entry points and in services  
-✅ **Clear Naming** - Names explain purpose and behavior  
-✅ **Consistent Responses** - Use standard result/response classes  
-✅ **Error Handling** - Catch specific exceptions, log appropriately  
-✅ **Unit Testing** - Test success and error paths  
-✅ **Documentation** - Comments explain why, not what  
-✅ **Logging** - Track important operations and errors  
-
----
-
-## 🚀 Next Steps
-
-1. **Run Tests**: `dotnet test` - Ensure all tests pass
-2. **Build Project**: `dotnet build` - Check for compilation errors
-3. **Run Application**: `dotnet run` - Start the server
-4. **Test Endpoints**: Use Postman or curl to test APIs
-5. **Extend System**: Add new handlers for additional task types
-
----
-
-**Follow these patterns to maintain code quality and consistency! 💪**
+Prefer updating existing docs over creating overlapping pages.
