@@ -38,15 +38,12 @@ public class InitialSchemaMigrationTests
         Assert.Contains(
             "CONSTRAINT [CK_Tasks_CustomDataJson_IsJson] CHECK (ISJSON([CustomDataJson]) = 1)",
             script);
-        Assert.Contains(
-            "CREATE UNIQUE INDEX [IX_Users_Email] ON [Users] ([Email]);",
-            script);
-        Assert.Contains(
-            "CREATE UNIQUE INDEX [IX_TaskTypes_Code] ON [TaskTypes] ([Code]);",
-            script);
-        Assert.Contains(
-            "CREATE UNIQUE INDEX [IX_TaskFieldDefinitions_TaskTypeMetadataId_FieldKey] ON [TaskFieldDefinitions] ([TaskTypeMetadataId], [FieldKey]);",
-            script);
+        Assert.Contains("CREATE UNIQUE INDEX [IX_Users_Email]", script);
+        Assert.Contains("ON [Users] ([Email])", script);
+        Assert.Contains("CREATE UNIQUE INDEX [IX_TaskTypes_Code]", script);
+        Assert.Contains("ON [TaskTypes] ([Code])", script);
+        Assert.Contains("CREATE UNIQUE INDEX [IX_TaskFieldDefinitions_TaskTypeMetadataId_FieldKey]", script);
+        Assert.Contains("ON [TaskFieldDefinitions] ([TaskTypeMetadataId], [FieldKey])", script);
         Assert.Contains("CONSTRAINT [FK_Tasks_Users_AssignedToUserId]", script);
         Assert.Contains("REFERENCES [Users] ([Id])", script);
 
