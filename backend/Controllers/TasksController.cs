@@ -8,6 +8,8 @@ using DanTaskManager.Application.Tasks.GetTasksByType;
 using DanTaskManager.Application.Tasks.GetTasksByUser;
 using DanTaskManager.Application.Tasks.UpdateTaskDescription;
 using DanTaskManager.Application.Tasks.UserExists;
+using DanTaskManager.Contracts.Requests.Common;
+using DanTaskManager.Contracts.Requests.Tasks;
 using DanTaskManager.Domain;
 using DanTaskManager.Services;
 using FluentValidation;
@@ -66,7 +68,7 @@ public class TasksController : ControllerBase
         var task = await _mediator.Send(new GetTaskByIdQuery(id), HttpContext.RequestAborted);
         if (task == null)
         {
-            return NotFound();
+            throw new ApiNotFoundException("משימה לא נמצאה");
         }
 
         return Ok(task);
@@ -98,7 +100,7 @@ public class TasksController : ControllerBase
         var userExists = await _mediator.Send(new UserExistsQuery(userId), HttpContext.RequestAborted);
         if (!userExists)
         {
-            return NotFound("User does not exist");
+            throw new ApiNotFoundException("משתמש לא קיים");
         }
 
         var tasks = await _mediator.Send(
@@ -116,7 +118,7 @@ public class TasksController : ControllerBase
         var validation = await _createTaskValidator.ValidateAsync(request, HttpContext.RequestAborted);
         if (!validation.IsValid)
         {
-            return BadRequest(new { error = BuildValidationErrorMessage(validation.Errors.Select(e => e.ErrorMessage)) });
+            throw new ApiValidationException(BuildValidationErrorMessage(validation.Errors.Select(e => e.ErrorMessage)));
         }
 
         var result = await _mediator.Send(
@@ -131,14 +133,13 @@ public class TasksController : ControllerBase
         {
             if (result.SupportedTaskTypes.Count > 0)
             {
-                return BadRequest(new
-                {
-                    error = result.Message,
-                    supportedTaskTypes = result.SupportedTaskTypes
-                });
+                var supportedTypes = string.Join(", ", result.SupportedTaskTypes);
+                throw new ApiValidationException(
+                    $"{result.Message}. Supported task types: {supportedTypes}",
+                    "task_type_validation_failed");
             }
 
-            return BadRequest(new { error = result.Message });
+            throw new ApiValidationException(result.Message, "task_creation_failed");
         }
 
         var task = result.CreatedTask!;
@@ -163,7 +164,7 @@ public class TasksController : ControllerBase
         var validation = await _changeStatusValidator.ValidateAsync(request, HttpContext.RequestAborted);
         if (!validation.IsValid)
         {
-            return BadRequest(new { error = BuildValidationErrorMessage(validation.Errors.Select(e => e.ErrorMessage)) });
+            throw new ApiValidationException(BuildValidationErrorMessage(validation.Errors.Select(e => e.ErrorMessage)));
         }
 
         var result = await _mediator.Send(
@@ -205,7 +206,7 @@ public class TasksController : ControllerBase
         var validation = await _closeTaskValidator.ValidateAsync(request, HttpContext.RequestAborted);
         if (!validation.IsValid)
         {
-            return BadRequest(new { error = BuildValidationErrorMessage(validation.Errors.Select(e => e.ErrorMessage)) });
+            throw new ApiValidationException(BuildValidationErrorMessage(validation.Errors.Select(e => e.ErrorMessage)));
         }
 
         var result = await _mediator.Send(
@@ -246,7 +247,7 @@ public class TasksController : ControllerBase
             var task = await _mediator.Send(new GetTaskByIdQuery(id), HttpContext.RequestAborted);
             if (task == null)
             {
-                return NotFound();
+                throw new ApiNotFoundException("משימה לא נמצאה");
             }
 
             throw new WorkflowValidationException("Closed tasks are immutable and cannot be updated");
@@ -267,7 +268,7 @@ public class TasksController : ControllerBase
             var task = await _mediator.Send(new GetTaskByIdQuery(id), HttpContext.RequestAborted);
             if (task == null)
             {
-                return NotFound();
+                throw new ApiNotFoundException("משימה לא נמצאה");
             }
 
             throw new WorkflowValidationException("Closed tasks are immutable and cannot be deleted");
@@ -294,78 +295,4 @@ public class TasksController : ControllerBase
     {
         return string.Join("; ", errors.Where(e => !string.IsNullOrWhiteSpace(e)).Distinct());
     }
-}
-
-/// <summary>
-/// בקשה ליצירת משימה חדשה
-/// </summary>
-public class CreateTaskRequest
-{
-    /// <summary>
-    /// סוג המשימה (Procurement, Development, וכו')
-    /// </summary>
-    public string TaskType { get; set; } = string.Empty;
-
-    /// <summary>
-    /// תיאור המשימה
-    /// </summary>
-    public string Description { get; set; } = string.Empty;
-
-    /// <summary>
-    /// ID של המשתמש שמוקצה למשימה
-    /// </summary>
-    public int AssignedToUserId { get; set; }
-
-    /// <summary>
-    /// אובייקט customFields עם נתונים ספציפיים לסוג המשימה
-    /// </summary>
-    public JsonElement? CustomFields { get; set; }
-}
-
-/// <summary>
-/// בקשה לעדכון משימה
-/// </summary>
-public class UpdateTaskRequest
-{
-    /// <summary>
-    /// תיאור חדש
-    /// </summary>
-    public string? Description { get; set; }
-}
-
-/// <summary>
-/// בקשה לשינוי סטטוס עם כללי Workflow
-/// </summary>
-public class ChangeStatusWorkflowRequest
-{
-    /// <summary>
-    /// הסטטוס החדש (תנועה קדימה: בדיוק +1, תנועה אחורה: לכל סטטוס נמוך)
-    /// </summary>
-    public int NewStatus { get; set; }
-
-    /// <summary>
-    /// המשתמש שאליו המשימה תוקצה לאחר שינוי הסטטוס
-    /// </summary>
-    public int NextAssignedToUserId { get; set; }
-
-    /// <summary>
-    /// customFields חדשים עם נתונים מעודכנים
-    /// </summary>
-    public JsonElement? CustomFields { get; set; }
-}
-
-/// <summary>
-/// בקשה לסגירת משימה
-/// </summary>
-public class CloseTaskRequest
-{
-    /// <summary>
-    /// המשתמש שאליו המשימה תוקצה בעת הסגירה
-    /// </summary>
-    public int NextAssignedToUserId { get; set; }
-
-    /// <summary>
-    /// הערות סופיות על המשימה
-    /// </summary>
-    public string FinalNotes { get; set; } = string.Empty;
 }

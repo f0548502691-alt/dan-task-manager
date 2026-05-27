@@ -1,3 +1,5 @@
+using DanTaskManager.Contracts.Requests.TaskTypes;
+using DanTaskManager.Domain;
 using DanTaskManager.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -32,7 +34,7 @@ public class TaskTypesController : ControllerBase
         var schema = _metadataService.GetTaskType(taskType);
         if (schema == null)
         {
-            return NotFound();
+            throw new ApiNotFoundException("סוג משימה לא נמצא");
         }
 
         return Ok(schema);
@@ -52,16 +54,7 @@ public class TaskTypesController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(request.TaskType))
         {
-            return BadRequest(new { error = "TaskType is required" });
-        }
-
-        if (!DanTaskManager.Domain.WorkflowConstants.IsSupportedTaskType(request.TaskType))
-        {
-            return BadRequest(new
-            {
-                error = $"Unsupported task type: {request.TaskType}",
-                supportedTaskTypes = DanTaskManager.Domain.WorkflowConstants.SupportedTaskTypes
-            });
+            throw new ApiValidationException("TaskType נדרש");
         }
 
         var result = _metadataService.UpsertTaskType(
@@ -73,7 +66,7 @@ public class TaskTypesController : ControllerBase
 
         if (!result.Success)
         {
-            return BadRequest(new { error = result.Message });
+            throw new ApiValidationException(result.Message, "task_type_validation_failed");
         }
 
         return Ok(result.TaskType);
@@ -98,7 +91,7 @@ public class TaskTypesController : ControllerBase
 
         if (string.IsNullOrWhiteSpace(request.Field))
         {
-            return BadRequest(new { error = "Field is required" });
+            throw new ApiValidationException("Field נדרש");
         }
 
         var result = _metadataService.UpsertFieldDefinition(taskType, new UpsertFieldDefinitionCommand
@@ -123,7 +116,7 @@ public class TaskTypesController : ControllerBase
 
         if (!result.Success)
         {
-            return BadRequest(new { error = result.Message });
+            throw new ApiValidationException(result.Message, "task_type_field_validation_failed");
         }
 
         return Ok(result.TaskType);
@@ -142,27 +135,3 @@ public class TaskTypesController : ControllerBase
         return UpsertTaskTypeField(taskType, normalizedRequest);
     }
 }
-
-public record UpsertTaskTypeRequest(
-    string TaskType,
-    string? DisplayName,
-    int? FinalStatus,
-    bool IsActive = true);
-
-public record UpsertTaskTypeFieldRequest(
-    string Field,
-    string Type = "string",
-    bool Required = true,
-    int? MinLength = null,
-    int? MaxLength = null,
-    decimal? MinValue = null,
-    decimal? MaxValue = null,
-    int? ArrayLength = null,
-    int? MinItems = null,
-    int? MaxItems = null,
-    string? ElementType = null,
-    string? Pattern = null,
-    int? AppliesFromStatus = null,
-    int? AppliesToStatus = null,
-    List<string>? AllowedValues = null,
-    bool IsIndexed = false);

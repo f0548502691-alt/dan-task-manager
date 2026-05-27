@@ -1,4 +1,4 @@
-using DanTaskManager.Controllers;
+using DanTaskManager.Contracts.Requests.Tasks;
 using FluentValidation;
 using System.Text.Json;
 
