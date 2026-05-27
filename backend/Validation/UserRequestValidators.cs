@@ -9,16 +9,16 @@ public class CreateUserRequestValidator : AbstractValidator<CreateUserRequest>
     {
         RuleFor(x => x.Name)
             .NotEmpty()
-            .WithMessage("Name נדרש")
+            .WithMessage("Name is required")
             .MaximumLength(255)
-            .WithMessage("Name לא יכול להיות ארוך מ-255 תווים");
+            .WithMessage("Name cannot exceed 255 characters");
 
         RuleFor(x => x.Email)
             .NotEmpty()
-            .WithMessage("Email נדרש")
+            .WithMessage("Email is required")
             .EmailAddress()
-            .WithMessage("Email לא תקין")
+            .WithMessage("Email format is invalid")
             .MaximumLength(255)
-            .WithMessage("Email לא יכול להיות ארוך מ-255 תווים");
+            .WithMessage("Email cannot exceed 255 characters");
     }
 }

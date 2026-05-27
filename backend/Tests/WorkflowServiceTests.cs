@@ -91,7 +91,7 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
 
         // Assert
         Assert.False(result.Success);
-        Assert.Contains("בדיוק ב-1 סטטוס", result.Message);
+        Assert.Contains("exactly +1", result.Message);
     }
 
     // === Backward Movement Tests ===
@@ -222,7 +222,7 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
 
         // Assert
         Assert.False(result.Success);
-        Assert.Contains("לא נתמך", result.Message);
+        Assert.Contains("Unsupported", result.Message);
     }
 
     // === Closed Status Tests ===
@@ -241,7 +241,7 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
 
         // Assert
         Assert.False(result.Success);
-        Assert.Contains("סגורה", result.Message);
+        Assert.Contains("closed", result.Message);
     }
 
     // === Close Task Tests ===
@@ -280,7 +280,7 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
 
         // Assert
         Assert.False(result.Success);
-        Assert.Contains("כבר סגורה", result.Message);
+        Assert.Contains("already closed", result.Message);
     }
 
     [Fact]
@@ -291,7 +291,7 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
 
         // Assert
         Assert.False(result.Success);
-        Assert.Contains("רק מסטטוס סופי", result.Message);
+        Assert.Contains("only be closed from final status", result.Message);
     }
 
     [Fact]
@@ -397,7 +397,7 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
 
         // Assert
         Assert.False(result.Success);
-        Assert.Contains("סטטוס סופי", result.Message);
+        Assert.Contains("final status", result.Message);
     }
 
     // === Mock Logger ===

@@ -22,7 +22,7 @@ public abstract class StatusValidationTaskHandlerBase : ITaskHandler
         if (currentStatus >= FinalStatus && nextStatus > currentStatus)
         {
             return ValidationResult.Failure(
-                $"לא ניתן להעביר משימת {TaskType} מעבר לסטטוס {FinalStatus}");
+                $"Cannot advance {TaskType} task beyond final status {FinalStatus}");
         }
 
         if (_statusValidators.TryGetValue(nextStatus, out var validator))

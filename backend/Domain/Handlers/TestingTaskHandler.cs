@@ -23,7 +23,7 @@ public class TestingTaskHandler : ITaskHandler
         if (currentStatus >= FinalStatus && nextStatus > currentStatus)
         {
             return ValidationResult.Failure(
-                $"לא ניתן להעביר משימת Testing מעבר לסטטוס {FinalStatus}");
+                $"Cannot advance Testing task beyond final status {FinalStatus}");
         }
 
         if (nextStatus == 2)
@@ -48,21 +48,21 @@ public class TestingTaskHandler : ITaskHandler
 
             if (!root.TryGetProperty("testCases", out var testCasesElement))
             {
-                return ValidationResult.Failure("בסטטוס 2, נדרש שדה 'testCases'");
+                return ValidationResult.Failure("Status 2 requires a 'testCases' field");
             }
 
             if (testCasesElement.ValueKind != JsonValueKind.Number ||
                 !testCasesElement.TryGetInt32(out var testCases) ||
                 testCases <= 0)
             {
-                return ValidationResult.Failure("'testCases' חייב להיות מספר שלם גדול מ-0");
+                return ValidationResult.Failure("'testCases' must be an integer greater than 0");
             }
 
             return ValidationResult.Success();
         }
         catch (JsonException ex)
         {
-            return ValidationResult.Failure($"שגיאה בפענוח JSON: {ex.Message}");
+            return ValidationResult.Failure($"Invalid JSON payload: {ex.Message}");
         }
     }
 
@@ -76,7 +76,7 @@ public class TestingTaskHandler : ITaskHandler
             if (!root.TryGetProperty("coverage", out var coverageElement) ||
                 coverageElement.ValueKind != JsonValueKind.String)
             {
-                return ValidationResult.Failure("בסטטוס 3, נדרש שדה 'coverage' כמחרוזת אחוזים");
+                return ValidationResult.Failure("Status 3 requires a 'coverage' field formatted as a percentage string");
             }
 
             var coverage = coverageElement.GetString();
@@ -85,21 +85,21 @@ public class TestingTaskHandler : ITaskHandler
                 !int.TryParse(coverage.TrimEnd('%'), out var coveragePercent) ||
                 coveragePercent is < 0 or > 100)
             {
-                return ValidationResult.Failure("'coverage' חייב להיות בפורמט אחוזים תקין, לדוגמה 85%");
+                return ValidationResult.Failure("'coverage' must be a valid percentage format, for example 85%");
             }
 
             if (!root.TryGetProperty("summary", out var summaryElement) ||
                 summaryElement.ValueKind != JsonValueKind.String ||
                 string.IsNullOrWhiteSpace(summaryElement.GetString()))
             {
-                return ValidationResult.Failure("בסטטוס 3, נדרש שדה 'summary' לא ריק");
+                return ValidationResult.Failure("Status 3 requires a non-empty 'summary' field");
             }
 
             return ValidationResult.Success();
         }
         catch (JsonException ex)
         {
-            return ValidationResult.Failure($"שגיאה בפענוח JSON: {ex.Message}");
+            return ValidationResult.Failure($"Invalid JSON payload: {ex.Message}");
         }
     }
 }

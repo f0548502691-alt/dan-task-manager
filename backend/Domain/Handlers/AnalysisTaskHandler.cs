@@ -22,7 +22,7 @@ public class AnalysisTaskHandler : ITaskHandler
         if (currentStatus >= FinalStatus && nextStatus > currentStatus)
         {
             return ValidationResult.Failure(
-                $"לא ניתן להעביר משימת Analysis מעבר לסטטוס {FinalStatus}");
+                $"Cannot advance Analysis task beyond final status {FinalStatus}");
         }
 
         if (nextStatus != 2)
@@ -39,14 +39,14 @@ public class AnalysisTaskHandler : ITaskHandler
                 reportElement.ValueKind != JsonValueKind.String ||
                 string.IsNullOrWhiteSpace(reportElement.GetString()))
             {
-                return ValidationResult.Failure("בסטטוס 2, נדרש שדה 'analysisReport' לא ריק");
+                return ValidationResult.Failure("Status 2 requires a non-empty 'analysisReport' field");
             }
 
             return ValidationResult.Success();
         }
         catch (JsonException ex)
         {
-            return ValidationResult.Failure($"שגיאה בפענוח JSON: {ex.Message}");
+            return ValidationResult.Failure($"Invalid JSON payload: {ex.Message}");
         }
     }
 }

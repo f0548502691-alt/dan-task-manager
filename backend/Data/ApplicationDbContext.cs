@@ -272,42 +272,42 @@ public class ApplicationDbContext : DbContext
             new AppUser
             {
                 Id = 1,
-                Name = "דן כהן",
+                Name = "Dan Cohen",
                 Email = "dan@example.com",
                 CreatedAt = SeedTimestampUtc
             },
             new AppUser
             {
                 Id = 2,
-                Name = "רות לוי",
+                Name = "Ruth Levi",
                 Email = "ruth@example.com",
                 CreatedAt = SeedTimestampUtc
             },
             new AppUser
             {
                 Id = 3,
-                Name = "משה אברהם",
+                Name = "Moshe Avraham",
                 Email = "moshe@example.com",
                 CreatedAt = SeedTimestampUtc
             },
             new AppUser
             {
                 Id = 4,
-                Name = "נועה ישראלי",
+                Name = "Noa Israeli",
                 Email = "noa@example.com",
                 CreatedAt = SeedTimestampUtc
             },
             new AppUser
             {
                 Id = 5,
-                Name = "איתן ברק",
+                Name = "Eitan Barak",
                 Email = "eitan@example.com",
                 CreatedAt = SeedTimestampUtc
             },
             new AppUser
             {
                 Id = 6,
-                Name = "מיכל גל",
+                Name = "Michal Gal",
                 Email = "michal@example.com",
                 CreatedAt = SeedTimestampUtc
             }
@@ -426,7 +426,7 @@ public class ApplicationDbContext : DbContext
             {
                 Id = 1,
                 TaskType = "Procurement",
-                Description = "איסוף הצעות מחיר לציוד חדש",
+                Description = "Collect supplier quotes for new equipment",
                 CurrentStatus = WorkflowConstants.CreatedStatus,
                 AssignedToUserId = 1,
                 CustomDataJson = "{}",
@@ -437,7 +437,7 @@ public class ApplicationDbContext : DbContext
             {
                 Id = 2,
                 TaskType = "Development",
-                Description = "פיתוח מודול ניהול משתמשים",
+                Description = "Develop the user management module",
                 CurrentStatus = WorkflowConstants.CreatedStatus,
                 AssignedToUserId = 2,
                 CustomDataJson = "{}",

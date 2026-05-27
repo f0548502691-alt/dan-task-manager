@@ -53,7 +53,7 @@ public class TaskApplicationServiceTests
                 "{}"));
 
         Assert.False(result.Success);
-        Assert.Contains("לא נתמך", result.Message);
+        Assert.Contains("Unsupported", result.Message);
         Assert.Equal(
             new[] { "Development", "Procurement" },
             result.SupportedTaskTypes);

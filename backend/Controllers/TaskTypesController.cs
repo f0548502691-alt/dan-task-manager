@@ -52,14 +52,14 @@ public class TaskTypesController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(request.TaskType))
         {
-            return BadRequest(new { error = "TaskType נדרש" });
+            return BadRequest(new { error = "TaskType is required" });
         }
 
         if (!DanTaskManager.Domain.WorkflowConstants.IsSupportedTaskType(request.TaskType))
         {
             return BadRequest(new
             {
-                error = $"סוג משימה לא נתמך: {request.TaskType}",
+                error = $"Unsupported task type: {request.TaskType}",
                 supportedTaskTypes = DanTaskManager.Domain.WorkflowConstants.SupportedTaskTypes
             });
         }
@@ -91,14 +91,14 @@ public class TaskTypesController : ControllerBase
         {
             return BadRequest(new
             {
-                error = $"סוג משימה לא נתמך: {taskType}",
+                error = $"Unsupported task type: {taskType}",
                 supportedTaskTypes = DanTaskManager.Domain.WorkflowConstants.SupportedTaskTypes
             });
         }
 
         if (string.IsNullOrWhiteSpace(request.Field))
         {
-            return BadRequest(new { error = "Field נדרש" });
+            return BadRequest(new { error = "Field is required" });
         }
 
         var result = _metadataService.UpsertFieldDefinition(taskType, new UpsertFieldDefinitionCommand

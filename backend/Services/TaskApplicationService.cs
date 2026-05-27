@@ -94,7 +94,7 @@ public class TaskApplicationService : ITaskApplicationService
     {
         if (!await UserExistsAsync(command.AssignedToUserId, cancellationToken))
         {
-            return TaskCreationResult.FailureResult("משתמש לא קיים");
+            return TaskCreationResult.FailureResult("User does not exist");
         }
 
         if (!TryNormalizeJson(command.CustomDataJson, out var normalizedJson, out var jsonError))
@@ -106,7 +106,7 @@ public class TaskApplicationService : ITaskApplicationService
         {
             var supportedTaskTypes = GetSupportedTaskTypes();
             return TaskCreationResult.FailureResult(
-                $"סוג משימה לא נתמך: {command.TaskType}",
+                $"Unsupported task type: {command.TaskType}",
                 supportedTaskTypes);
         }
 
@@ -133,7 +133,7 @@ public class TaskApplicationService : ITaskApplicationService
         var createdTask = await GetByIdAsync(task.Id, cancellationToken);
         if (createdTask == null)
         {
-            return TaskCreationResult.FailureResult("המשימה נוצרה אך לא ניתן היה לטעון אותה מחדש");
+            return TaskCreationResult.FailureResult("Task was created but could not be loaded afterward");
         }
 
         return TaskCreationResult.SuccessResult(createdTask);
@@ -282,7 +282,7 @@ public class TaskApplicationService : ITaskApplicationService
             if (doc.RootElement.ValueKind != JsonValueKind.Object)
             {
                 normalizedJson = "{}";
-                errorMessage = "customFields חייב להיות אובייקט JSON";
+                errorMessage = "customFields must be a JSON object";
                 return false;
             }
 
@@ -292,7 +292,7 @@ public class TaskApplicationService : ITaskApplicationService
         catch (JsonException ex)
         {
             normalizedJson = "{}";
-            errorMessage = $"JSON לא תקין: {ex.Message}";
+            errorMessage = $"Invalid JSON payload: {ex.Message}";
             return false;
         }
     }

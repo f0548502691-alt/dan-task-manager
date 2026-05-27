@@ -181,7 +181,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
         }
         catch (JsonException ex)
         {
-            return ValidationResult.Failure($"שגיאה בפענוח JSON: {ex.Message}");
+            return ValidationResult.Failure($"Invalid JSON payload: {ex.Message}");
         }
 
         return ValidationResult.Success();
@@ -576,7 +576,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
     {
         if (string.IsNullOrWhiteSpace(fieldRule.Field))
         {
-            return ValidationResult.Failure("נמצאה חוקיות שדה לא תקינה (Field חסר)");
+            return ValidationResult.Failure("Invalid field rule definition found (missing Field)");
         }
 
         if (!root.TryGetProperty(fieldRule.Field, out var fieldElement))
@@ -587,14 +587,14 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
             }
 
             return ValidationResult.Failure(
-                $"בסטטוס {status}, נדרש שדה '{fieldRule.Field}'");
+                $"Status {status} requires field '{fieldRule.Field}'");
         }
 
         if (!IsTypeMatch(fieldElement, fieldRule.Type))
         {
             var expectedType = string.IsNullOrWhiteSpace(fieldRule.Type) ? "any" : fieldRule.Type;
             return ValidationResult.Failure(
-                $"השדה '{fieldRule.Field}' חייב להיות מסוג '{expectedType}'");
+                $"Field '{fieldRule.Field}' must be of type '{expectedType}'");
         }
 
         if (fieldElement.ValueKind == JsonValueKind.String)
@@ -603,19 +603,19 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
 
             if (fieldRule.Required && string.IsNullOrWhiteSpace(stringValue))
             {
-                return ValidationResult.Failure($"השדה '{fieldRule.Field}' לא יכול להיות ריק");
+                return ValidationResult.Failure($"Field '{fieldRule.Field}' cannot be empty");
             }
 
             if (fieldRule.MinLength.HasValue && stringValue.Length < fieldRule.MinLength.Value)
             {
                 return ValidationResult.Failure(
-                    $"השדה '{fieldRule.Field}' חייב להכיל לפחות {fieldRule.MinLength.Value} תווים");
+                    $"Field '{fieldRule.Field}' must contain at least {fieldRule.MinLength.Value} characters");
             }
 
             if (fieldRule.MaxLength.HasValue && stringValue.Length > fieldRule.MaxLength.Value)
             {
                 return ValidationResult.Failure(
-                    $"השדה '{fieldRule.Field}' לא יכול להכיל יותר מ-{fieldRule.MaxLength.Value} תווים");
+                    $"Field '{fieldRule.Field}' cannot contain more than {fieldRule.MaxLength.Value} characters");
             }
 
             var allowedValuesResult = ValidateAllowedValues(fieldRule, stringValue);
@@ -637,7 +637,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
             var normalizedValue = GetScalarAsString(fieldElement);
             if (fieldRule.Required && string.IsNullOrWhiteSpace(normalizedValue))
             {
-                return ValidationResult.Failure($"השדה '{fieldRule.Field}' לא יכול להיות ריק");
+                return ValidationResult.Failure($"Field '{fieldRule.Field}' cannot be empty");
             }
 
             var patternResult = ValidatePattern(fieldRule, normalizedValue);
@@ -666,19 +666,19 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
             if (fieldRule.ArrayLength.HasValue && elements.Count != fieldRule.ArrayLength.Value)
             {
                 return ValidationResult.Failure(
-                    $"השדה '{fieldRule.Field}' חייב להכיל בדיוק {fieldRule.ArrayLength.Value} פריטים");
+                    $"Field '{fieldRule.Field}' must contain exactly {fieldRule.ArrayLength.Value} items");
             }
 
             if (fieldRule.MinItems.HasValue && elements.Count < fieldRule.MinItems.Value)
             {
                 return ValidationResult.Failure(
-                    $"השדה '{fieldRule.Field}' חייב להכיל לפחות {fieldRule.MinItems.Value} פריטים");
+                    $"Field '{fieldRule.Field}' must contain at least {fieldRule.MinItems.Value} items");
             }
 
             if (fieldRule.MaxItems.HasValue && elements.Count > fieldRule.MaxItems.Value)
             {
                 return ValidationResult.Failure(
-                    $"השדה '{fieldRule.Field}' לא יכול להכיל יותר מ-{fieldRule.MaxItems.Value} פריטים");
+                    $"Field '{fieldRule.Field}' cannot contain more than {fieldRule.MaxItems.Value} items");
             }
 
             if (!string.IsNullOrWhiteSpace(fieldRule.ElementType))
@@ -688,7 +688,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
                     if (!IsTypeMatch(element, fieldRule.ElementType))
                     {
                         return ValidationResult.Failure(
-                            $"כל הפריטים בשדה '{fieldRule.Field}' חייבים להיות מסוג '{fieldRule.ElementType}'");
+                            $"All items in field '{fieldRule.Field}' must be of type '{fieldRule.ElementType}'");
                     }
 
                     if (fieldRule.ElementType.Equals("string", StringComparison.OrdinalIgnoreCase))
@@ -697,7 +697,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
                         if (fieldRule.Required && string.IsNullOrWhiteSpace(value))
                         {
                             return ValidationResult.Failure(
-                                $"כל הערכים בשדה '{fieldRule.Field}' חייבים להיות מחרוזות לא ריקות");
+                                $"All values in field '{fieldRule.Field}' must be non-empty strings");
                         }
                     }
                 }
@@ -720,7 +720,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
         }
 
         return ValidationResult.Failure(
-            $"השדה '{fieldRule.Field}' חייב להיות אחד מהערכים המותרים");
+            $"Field '{fieldRule.Field}' must be one of the allowed values");
     }
 
     private static ValidationResult ValidateNumericBoundaries(FieldRuleDefinition fieldRule, string normalizedValue)
@@ -737,19 +737,19 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
                 out var numericValue))
         {
             return ValidationResult.Failure(
-                $"השדה '{fieldRule.Field}' חייב להיות מספר כדי לעמוד בערכי min/max");
+                $"Field '{fieldRule.Field}' must be numeric to satisfy min/max constraints");
         }
 
         if (fieldRule.MinValue.HasValue && numericValue < fieldRule.MinValue.Value)
         {
             return ValidationResult.Failure(
-                $"השדה '{fieldRule.Field}' חייב להיות גדול או שווה ל-{fieldRule.MinValue.Value}");
+                $"Field '{fieldRule.Field}' must be greater than or equal to {fieldRule.MinValue.Value}");
         }
 
         if (fieldRule.MaxValue.HasValue && numericValue > fieldRule.MaxValue.Value)
         {
             return ValidationResult.Failure(
-                $"השדה '{fieldRule.Field}' חייב להיות קטן או שווה ל-{fieldRule.MaxValue.Value}");
+                $"Field '{fieldRule.Field}' must be less than or equal to {fieldRule.MaxValue.Value}");
         }
 
         return ValidationResult.Success();
@@ -772,7 +772,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
             }
 
             return ValidationResult.Failure(
-                $"השדה '{fieldRule.Field}' אינו שם branch תקין");
+                $"Field '{fieldRule.Field}' is not a valid branch name");
         }
 
         if (patternName.Equals("semantic_version", StringComparison.OrdinalIgnoreCase))
@@ -783,7 +783,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
             }
 
             return ValidationResult.Failure(
-                $"השדה '{fieldRule.Field}' חייב להיות בפורמט גרסה תקין (לדוגמה: 1.0.0)");
+                $"Field '{fieldRule.Field}' must be in a valid version format (for example: 1.0.0)");
         }
 
         if (Regex.IsMatch(value, patternName))
@@ -792,7 +792,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
         }
 
         return ValidationResult.Failure(
-            $"השדה '{fieldRule.Field}' לא עומד בתבנית הנדרשת");
+            $"Field '{fieldRule.Field}' does not match the required pattern");
     }
 
     private static bool IsTypeMatch(JsonElement element, string expectedType)
