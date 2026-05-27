@@ -29,6 +29,7 @@ export class TaskService {
   readonly currentUserId = this._currentUserId.asReadonly();
   readonly tasks = this._tasks.asReadonly();
   readonly isLoading = this._isLoading.asReadonly();
+  readonly error = this.appErrorService.error;
 
   setCurrentUserId(userId: number | null): void {
     this._currentUserId.set(userId);
@@ -107,13 +108,17 @@ export class TaskService {
 
     return this.http.get<TaskTypeSchemaDto[]>('/api/task-types').pipe(
       map((taskTypes) =>
-        taskTypes
+        (Array.isArray(taskTypes) ? taskTypes : [])
           .filter(
             (taskType) =>
               taskType.isActive &&
               typeof taskType.taskType === 'string' &&
               taskType.taskType.trim().length > 0
           )
+          .map((taskType) => ({
+            ...taskType,
+            fields: Array.isArray(taskType.fields) ? taskType.fields : []
+          }))
           .sort((left, right) =>
             (left.displayName || left.taskType).localeCompare(right.displayName || right.taskType)
           )

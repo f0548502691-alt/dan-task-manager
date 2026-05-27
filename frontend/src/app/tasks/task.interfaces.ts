@@ -18,11 +18,32 @@ export const DEFAULT_STATUS_LABELS: Readonly<Record<number, string>> = {
 
 export type TaskCustomData = Record<string, unknown>;
 
+export interface TaskFieldSchemaDto {
+  field: string;
+  type: string;
+  required: boolean;
+  minLength?: number | null;
+  maxLength?: number | null;
+  minValue?: number | null;
+  maxValue?: number | null;
+  arrayLength?: number | null;
+  minItems?: number | null;
+  maxItems?: number | null;
+  elementType?: string | null;
+  pattern?: string | null;
+  appliesFromStatus?: number | null;
+  appliesToStatus?: number | null;
+  allowedValues?: readonly string[] | null;
+  isIndexed?: boolean;
+}
+
 export interface TaskTypeSchemaDto {
   taskType: string;
+  displayName?: string;
   finalStatus?: number | null;
   isActive: boolean;
   version: number;
+  fields: readonly TaskFieldSchemaDto[];
 }
 
 export interface PagedResultDto<T> {
