@@ -6,19 +6,12 @@
     <form [formGroup]="createForm" (ngSubmit)="submitCreateTask()">
       <label for="createTaskType">Task type</label>
       <select id="createTaskType" formControlName="createTaskType">
-        @for (type of taskTypeOptions(); track type.value) {
-          <option [ngValue]="type.value">{{ type.label }}</option>
-        }
+        <option *ngFor="let type of taskTypeOptions()" [ngValue]="type">{{ type }}</option>
       </select>
-      @if (taskTypeMetadataInFlight()) {
-        <small class="hint">Loading task type metadata...</small>
-      }
 
       <label for="createTaskDescription">Description</label>
       <textarea id="createTaskDescription" rows="3" formControlName="createTaskDescription"></textarea>
-      @if (isCreateDescriptionInvalid()) {
-        <small>Description is required (minimum 5 characters).</small>
-      }
+      <small *ngIf="isCreateDescriptionInvalid()">Description is required (minimum 5 characters).</small>
 
       <label for="createAssignedToUserId">Assigned user ID</label>
       <input id="createAssignedToUserId" type="number" min="1" formControlName="createAssignedToUserId" />
@@ -32,94 +25,86 @@
   <aside class="task-list-panel">
     <h2>Your tasks</h2>
 
-    @if (taskService.isLoading()) {
-      <p>Loading tasks...</p>
-    }
-    @if (!taskService.isLoading() && taskService.tasks().length === 0) {
-      <p>No tasks assigned for this user.</p>
-    }
+    <p *ngIf="taskService.isLoading()">Loading tasks...</p>
+    <p *ngIf="!taskService.isLoading() && taskService.tasks().length === 0">No tasks assigned for this user.</p>
 
-    @for (task of taskService.tasks(); track task.id) {
-      <button
-        type="button"
-        class="task-list-item"
-        [class.task-list-item--selected]="selectedTask()?.id === task.id"
-        (click)="selectTask(task)"
-      >
-        <span class="task-list-item__title">#{{ task.id }} - {{ task.description }}</span>
-        <span class="task-list-item__meta">{{ task.taskType }} | {{ taskStatusLabel(task.currentStatus) }}</span>
-      </button>
-    }
+    <button
+      *ngFor="let task of taskService.tasks(); trackBy: trackByTaskId"
+      type="button"
+      class="task-list-item"
+      [class.task-list-item--selected]="selectedTask()?.id === task.id"
+      (click)="selectTask(task)"
+    >
+      <span class="task-list-item__title">#{{ task.id }} - {{ task.description }}</span>
+      <span class="task-list-item__meta">{{ task.taskType }} | {{ taskStatusLabel(task.currentStatus) }}</span>
+    </button>
   </aside>
 
-  @if (selectedTask(); as task) {
-    <section class="editor-panel">
-      <h3>Update task #{{ task.id }}</h3>
-      <p class="editor-panel__subtitle">
-        Type: <strong>{{ task.taskType }}</strong> | Current status:
-        <strong>{{ taskStatusLabel(task.currentStatus) }}</strong>
-      </p>
+  <section class="editor-panel" *ngIf="selectedTask() as task; else chooseTaskTemplate">
+    <h3>Update task #{{ task.id }}</h3>
+    <p class="editor-panel__subtitle">
+      Type: <strong>{{ task.taskType }}</strong> | Current status:
+      <strong>{{ taskStatusLabel(task.currentStatus) }}</strong>
+    </p>
 
-      <form [formGroup]="statusForm" (ngSubmit)="submitStatusUpdate()">
-        <label for="newStatus">New status</label>
-        <select id="newStatus" formControlName="newStatus">
-          <option [ngValue]="null" disabled>Select a status</option>
-          @for (option of statusOptions(); track option.value) {
-            <option [ngValue]="option.value">
-              {{ option.label }}
-            </option>
-          }
-        </select>
+    <form [formGroup]="statusForm" (ngSubmit)="submitStatusUpdate()">
+      <label for="newStatus">New status</label>
+      <select id="newStatus" formControlName="newStatus">
+        <option [ngValue]="null" disabled>Select a status</option>
+        <option *ngFor="let option of statusOptions()" [ngValue]="option.value">
+          {{ option.label }}
+        </option>
+      </select>
 
-        <label for="nextAssignedToUserId">Next assigned user ID</label>
-        <input id="nextAssignedToUserId" type="number" min="1" formControlName="nextAssignedToUserId" />
+      <label for="nextAssignedToUserId">Next assigned user ID</label>
+      <input id="nextAssignedToUserId" type="number" min="1" formControlName="nextAssignedToUserId" />
 
-        <app-task-dynamic-fields
-          [form]="statusForm"
-          [schemas]="taskTypeSchemas()"
-          [schema]="selectedTaskSchema()"
+      <ng-container *ngIf="hasSchemaForSelected; else fallbackJsonTemplate">
+        <app-dynamic-task-fields
+          [group]="customFieldsGroup"
+          [schema]="currentSchema()"
           [status]="selectedNextStatus"
-        ></app-task-dynamic-fields>
+          [values]="hydrationValues()"
+          (schemaResolved)="onResolvedFieldsChanged($event)"
+        ></app-dynamic-task-fields>
+        <p class="panel-note" *ngIf="!hasApplicableSchemaFields">
+          No fields are required for this status.
+        </p>
+      </ng-container>
 
-        @if (!hasSchemaFieldsForSelectedStatus()) {
-          <label for="fallbackJson">Workflow payload (JSON)</label>
-          <textarea id="fallbackJson" rows="6" formControlName="fallbackJson"></textarea>
-          @if (statusForm.controls['fallbackJson'].hasError('invalidJson')) {
-            <small>The JSON payload is invalid.</small>
-          }
-        }
+      <ng-template #fallbackJsonTemplate>
+        <label for="fallbackJson">Workflow payload (JSON)</label>
+        <textarea id="fallbackJson" rows="6" formControlName="fallbackJson"></textarea>
+        <small *ngIf="statusForm.controls['fallbackJson'].hasError('invalidJson')">
+          The JSON payload is invalid.
+        </small>
+      </ng-template>
 
-        @if (taskService.error()) {
-          <p class="feedback feedback--error">{{ taskService.error() }}</p>
-        }
-        @if (successMessage()) {
-          <p class="feedback feedback--success">{{ successMessage() }}</p>
-        }
+      <p class="feedback feedback--success" *ngIf="successMessage()">{{ successMessage() }}</p>
 
-        <button type="submit" [disabled]="submitInFlight() || statusForm.invalid || !canUpdateSelectedTask()">
-          {{ submitInFlight() ? 'Updating...' : 'Update status' }}
+      <button type="submit" [disabled]="submitInFlight() || statusForm.invalid || task.currentStatus === TASK_STATUS.CLOSED">
+        {{ submitInFlight() ? 'Updating...' : 'Update status' }}
+      </button>
+    </form>
+
+    <section class="close-task-panel">
+      <h4>Close task</h4>
+      <form [formGroup]="closeForm" (ngSubmit)="submitCloseTask()">
+        <label for="closeNotes">Final notes</label>
+        <textarea id="closeNotes" rows="3" formControlName="closeNotes"></textarea>
+        <small *ngIf="isCloseNotesInvalid()">Final notes are required (minimum 3 characters).</small>
+
+        <button type="submit" [disabled]="!canCloseTask(task) || closeInFlight() || closeForm.invalid">
+          {{ closeInFlight() ? 'Closing...' : 'Close task' }}
         </button>
       </form>
-
-      <section class="close-task-panel">
-        <h4>Close task</h4>
-        <form [formGroup]="closeForm" (ngSubmit)="submitCloseTask()">
-          <label for="closeNotes">Final notes</label>
-          <textarea id="closeNotes" rows="3" formControlName="closeNotes"></textarea>
-          @if (isCloseNotesInvalid()) {
-            <small>Final notes are required (minimum 3 characters).</small>
-          }
-
-          <button type="submit" [disabled]="!canCloseTask(task) || closeInFlight() || closeForm.invalid">
-            {{ closeInFlight() ? 'Closing...' : 'Close task' }}
-          </button>
-        </form>
-      </section>
     </section>
-  } @else {
+  </section>
+
+  <ng-template #chooseTaskTemplate>
     <section class="editor-panel editor-panel--placeholder">
       <h3>Select a task</h3>
       <p>Choose a task from the list to open status update fields.</p>
     </section>
-  }
+  </ng-template>
 </section>

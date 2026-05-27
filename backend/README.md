@@ -8,14 +8,31 @@ code — either declaratively via metadata rows, or by implementing a single
 
 ## Quick start
 
+The connection string is no longer hard-coded in `appsettings.json`. Pick one of
+three options to supply it:
+
+```bash
+# Option A — Docker (uses .env at the repo root)
+cp .env.example .env   # then edit DB_* values
+docker compose up -d
+
+# Option B — environment variable (local dotnet run)
+export ConnectionStrings__DefaultConnection="Server=.;Database=DanTaskManager;Trusted_Connection=true;Encrypt=false;TrustServerCertificate=true;"
+
+# Option C — appsettings.Development.json (gitignored)
+#   { "ConnectionStrings": { "DefaultConnection": "..." } }
+```
+
+Then:
+
 ```bash
 cd backend
 dotnet restore
-# Optional: update appsettings.json ConnectionStrings:DefaultConnection
 dotnet run
 ```
 
-Swagger UI is served at `/swagger` when the host is running in Development.
+The app refuses to start with a clear error if no connection string is
+configured. Swagger UI is served at `/swagger` in Development.
 
 To run the test suite:
 

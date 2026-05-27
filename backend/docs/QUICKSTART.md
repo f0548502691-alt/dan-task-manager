@@ -35,11 +35,26 @@ dotnet restore
 ```
 
 ### 2️⃣ הגדרת בסיס הנתונים
-ודא ש-`appsettings.json` מצביע לSQL Server שלך:
+
+**אפשרות א' - Docker (מומלץ):**
+```bash
+cp .env.example .env
+# ערוך את .env עם הסיסמה שלך
+docker compose up -d
+```
+
+**אפשרות ב' - פיתוח מקומי:**
+
+הגדר משתנה סביבה עם מחרוזת החיבור:
+```bash
+export ConnectionStrings__DefaultConnection="Server=YOUR_SERVER;Database=DanTaskManager;Trusted_Connection=true;Encrypt=false;TrustServerCertificate=true;"
+```
+
+או צור קובץ `appsettings.Development.json`:
 ```json
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Server=YOUR_SERVER;Database=DanTaskManager;Trusted_Connection=true;Encrypt=false;"
+    "DefaultConnection": "Server=YOUR_SERVER;Database=DanTaskManager;Trusted_Connection=true;Encrypt=false;TrustServerCertificate=true;"
   }
 }
 ```
@@ -114,7 +129,7 @@ task.CustomDataJson = JsonSerializer.Serialize(customData);
 
 ## 📝 הערות חשובות
 
-1. **SQL Server Connection**: תעדכן את ה-connection string ב-`appsettings.json`
+1. **SQL Server Connection**: הגדר את מחרוזת החיבור דרך משתנה סביבה `ConnectionStrings__DefaultConnection`, קובץ `.env` (ל-Docker), או קובץ `appsettings.Development.json` (לפיתוח מקומי)
 
 2. **CustomDataJson**: 
    - מאוחסן כ-`nvarchar(max)` בבסיס הנתונים

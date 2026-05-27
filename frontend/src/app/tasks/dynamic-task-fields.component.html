@@ -1,0 +1,89 @@
+<div [formGroup]="group" class="dynamic-fields">
+  <ng-container *ngFor="let resolved of resolvedFields; let fieldIndex = index">
+    <ng-container [ngSwitch]="resolved.kind">
+
+      <ng-container *ngSwitchCase="'select'">
+        <label [attr.for]="'field-' + fieldIndex">{{ fieldLabel(resolved.rule) }}</label>
+        <select
+          [id]="'field-' + fieldIndex"
+          [formControlName]="resolved.rule.field"
+        >
+          <option [ngValue]="''" disabled>Select a value</option>
+          <option *ngFor="let option of resolved.rule.allowedValues" [ngValue]="option">{{ option }}</option>
+        </select>
+        <small *ngIf="isInvalid(asFormControl(group.get(resolved.rule.field)))">
+          {{ validationMessage(resolved.rule, asFormControl(group.get(resolved.rule.field))) }}
+        </small>
+      </ng-container>
+
+      <ng-container *ngSwitchCase="'number'">
+        <label [attr.for]="'field-' + fieldIndex">{{ fieldLabel(resolved.rule) }}</label>
+        <input
+          [id]="'field-' + fieldIndex"
+          type="number"
+          [formControlName]="resolved.rule.field"
+          [attr.min]="resolved.rule.minValue ?? null"
+          [attr.max]="resolved.rule.maxValue ?? null"
+        />
+        <small *ngIf="isInvalid(asFormControl(group.get(resolved.rule.field)))">
+          {{ validationMessage(resolved.rule, asFormControl(group.get(resolved.rule.field))) }}
+        </small>
+      </ng-container>
+
+      <ng-container *ngSwitchCase="'checkbox'">
+        <label class="dynamic-fields__checkbox-row">
+          <input type="checkbox" [formControlName]="resolved.rule.field" />
+          <span>{{ fieldLabel(resolved.rule) }}</span>
+        </label>
+        <small *ngIf="isInvalid(asFormControl(group.get(resolved.rule.field)))">
+          {{ validationMessage(resolved.rule, asFormControl(group.get(resolved.rule.field))) }}
+        </small>
+      </ng-container>
+
+      <ng-container *ngSwitchCase="'textarea'">
+        <label [attr.for]="'field-' + fieldIndex">{{ fieldLabel(resolved.rule) }}</label>
+        <textarea
+          [id]="'field-' + fieldIndex"
+          rows="4"
+          [formControlName]="resolved.rule.field"
+        ></textarea>
+        <small *ngIf="isInvalid(asFormControl(group.get(resolved.rule.field)))">
+          {{ validationMessage(resolved.rule, asFormControl(group.get(resolved.rule.field))) }}
+        </small>
+      </ng-container>
+
+      <ng-container *ngSwitchCase="'array-scalar'">
+        <ng-container [formArrayName]="resolved.rule.field">
+          <ng-container
+            *ngFor="let itemControl of asFormArray(group.get(resolved.rule.field)).controls; let itemIndex = index"
+          >
+            <label [attr.for]="'field-' + fieldIndex + '-' + itemIndex">
+              {{ itemLabel(resolved.rule, itemIndex) }}
+            </label>
+            <input
+              [id]="'field-' + fieldIndex + '-' + itemIndex"
+              [type]="(resolved.rule.elementType ?? 'string').toLowerCase() === 'number' ? 'number' : 'text'"
+              [formControlName]="itemIndex"
+            />
+            <small *ngIf="isInvalid(asFormControl(itemControl))">
+              {{ validationMessage(resolved.rule, asFormControl(itemControl)) }}
+            </small>
+          </ng-container>
+        </ng-container>
+      </ng-container>
+
+      <ng-container *ngSwitchDefault>
+        <label [attr.for]="'field-' + fieldIndex">{{ fieldLabel(resolved.rule) }}</label>
+        <input
+          [id]="'field-' + fieldIndex"
+          type="text"
+          [formControlName]="resolved.rule.field"
+        />
+        <small *ngIf="isInvalid(asFormControl(group.get(resolved.rule.field)))">
+          {{ validationMessage(resolved.rule, asFormControl(group.get(resolved.rule.field))) }}
+        </small>
+      </ng-container>
+
+    </ng-container>
+  </ng-container>
+</div>

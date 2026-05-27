@@ -53,33 +53,6 @@ form {
   color: #4c5f78;
 }
 
-label {
-  font-weight: 600;
-}
-
-input,
-textarea,
-select,
-button {
-  font: inherit;
-}
-
-input,
-textarea,
-select {
-  border: 1px solid #c8d0de;
-  border-radius: 0.375rem;
-  padding: 0.5rem 0.625rem;
-}
-
-small {
-  color: #b00020;
-}
-
-.hint {
-  color: #4c5f78;
-}
-
 button[type='submit'] {
   border: 1px solid #3b5bcc;
   border-radius: 0.375rem;

@@ -1,24 +1,19 @@
+export const CREATED_TASK_STATUS = 1;
 export const CLOSED_TASK_STATUS = 99;
 
 export const TASK_STATUS = {
-  CREATED: 1,
-  STATUS_2: 2,
-  STATUS_3: 3,
-  STATUS_4: 4,
+  CREATED: CREATED_TASK_STATUS,
   CLOSED: CLOSED_TASK_STATUS
 } as const;
 
 export const DEFAULT_STATUS_LABELS: Readonly<Record<number, string>> = {
   [TASK_STATUS.CREATED]: 'Created',
-  [TASK_STATUS.STATUS_2]: 'Status 2',
-  [TASK_STATUS.STATUS_3]: 'Status 3',
-  [TASK_STATUS.STATUS_4]: 'Status 4',
   [TASK_STATUS.CLOSED]: 'Closed'
 };
 
 export type TaskCustomData = Record<string, unknown>;
 
-export interface TaskFieldSchemaDto {
+export interface TaskFieldRuleDto {
   field: string;
   type: string;
   required: boolean;
@@ -43,7 +38,7 @@ export interface TaskTypeSchemaDto {
   finalStatus?: number | null;
   isActive: boolean;
   version: number;
-  fields: readonly TaskFieldSchemaDto[];
+  fields?: readonly TaskFieldRuleDto[];
 }
 
 export interface PagedResultDto<T> {
