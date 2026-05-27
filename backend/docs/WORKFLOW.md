@@ -37,6 +37,42 @@ match wins. Two providers ship today:
 | `MetadataTaskWorkflowRuleProvider` | `0` | Database rows in `TaskTypeMetadata` + `TaskFieldDefinition`. No code required to add a type. |
 | `HandlerTaskWorkflowRuleProvider` | `100` | DI-discovered classes implementing `IRegisterableTaskHandler`. Use for rules too complex for declarative metadata. |
 
+### Metadata validation service and DI
+
+`TaskTypeValidationService` is the concrete service behind both metadata
+interfaces:
+
+- `ITaskTypeValidationService` validates per-status field data and final-status
+  values for the workflow provider.
+- `ITaskTypeMetadataService` reads and mutates task-type schemas for
+  `TaskTypesController` and `TaskTypeCatalogService`.
+
+`Program.cs` registers the concrete service once per scope, then maps both
+interfaces back to that same scoped instance:
+
+```csharp
+builder.Services.AddScoped<TaskTypeValidationService>();
+builder.Services.AddScoped<ITaskTypeValidationService>(
+    sp => sp.GetRequiredService<TaskTypeValidationService>());
+builder.Services.AddScoped<ITaskTypeMetadataService>(
+    sp => sp.GetRequiredService<TaskTypeValidationService>());
+```
+
+The runtime path uses the database-backed constructor
+`TaskTypeValidationService(ApplicationDbContext, IMemoryCache)`. It is marked
+with `ActivatorUtilitiesConstructor` because the class also keeps an
+`IOptions<TaskTypeValidationOptions>` constructor for tests and isolated
+in-memory validation rules. If you add another constructor or change the
+registration, keep the production constructor unambiguous; otherwise ASP.NET
+Core DI can fail at startup because multiple constructors look resolvable.
+
+Use the constructor intentionally in tests:
+
+- Use `(ApplicationDbContext, IMemoryCache)` when the test exercises metadata
+  rows, schema upserts, cache invalidation, or active/inactive task types.
+- Use `IOptions<TaskTypeValidationOptions>` only for isolated validation rules
+  that should not touch EF Core or metadata mutation APIs.
+
 Each provider answers four questions per task type:
 
 - `int? GetFinalStatus(string taskType)`

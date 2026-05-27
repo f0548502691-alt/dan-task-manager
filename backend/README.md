@@ -77,6 +77,14 @@ ITaskWorkflowRuleProvider[]    ← ordered by Priority; first CanHandle wins
 A startup `IHostedService` (`TaskTypeConflictValidator`) scans every registered
 rule provider and flags any task-type code claimed by more than one source.
 
+`TaskTypeValidationService` backs both the validation and metadata interfaces.
+It is registered once as a scoped concrete service and both interfaces resolve
+that same scoped instance. The production constructor takes
+`ApplicationDbContext` and `IMemoryCache`; an `IOptions<TaskTypeValidationOptions>`
+constructor exists for explicit in-memory test scenarios, so the production
+constructor is marked with `ActivatorUtilitiesConstructor` to keep ASP.NET Core
+DI activation unambiguous.
+
 ## Adding a new task type
 
 Two supported paths, both **without touching any existing code**:
