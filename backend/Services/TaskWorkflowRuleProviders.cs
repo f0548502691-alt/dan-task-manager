@@ -4,8 +4,10 @@ using DanTaskManager.Domain.Handlers;
 namespace DanTaskManager.Services;
 
 /// <summary>
-/// מקור כללי workflow עבור סוג משימה נתון.
-/// מאפשר להוסיף ספקי חוקים נוספים בלי לשנות את שירות ה-workflow.
+/// Source of per-task-type workflow rules. Adding a new rule source — for
+/// example pulling rules from a remote configuration service — only requires
+/// registering another implementation; <see cref="TaskWorkflowService"/> does
+/// not need to change.
 /// </summary>
 public interface ITaskWorkflowRuleProvider
 {

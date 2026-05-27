@@ -3,10 +3,9 @@ using System.Text.Json;
 namespace DanTaskManager.Domain.Handlers;
 
 /// <summary>
-/// מטפל משימות Procurement
-/// סטטוס סופי: 3
-/// סטטוס 2: דורש מערך של 2 מחרוזות (מחירים)
-/// סטטוס 3: דורש קבלה (מחרוזת)
+/// Procurement task handler. Final status = 3.
+/// Status 2 requires <c>prices</c>: array of exactly 2 non-empty strings.
+/// Status 3 requires <c>receipt</c>: non-empty string.
 /// </summary>
 public class ProcurementTaskHandler : StatusValidationTaskHandlerBase
 {
@@ -23,9 +22,6 @@ public class ProcurementTaskHandler : StatusValidationTaskHandlerBase
 
     public override int FinalStatus => 3;
 
-    /// <summary>
-    /// וולידציה לסטטוס 2: בדיקת מערך מחירים (2 מחרוזות)
-    /// </summary>
     private static ValidationResult ValidateStatusTwo(string newDataJson)
     {
         try
@@ -33,20 +29,17 @@ public class ProcurementTaskHandler : StatusValidationTaskHandlerBase
             using var jsonDoc = JsonDocument.Parse(newDataJson);
             var root = jsonDoc.RootElement;
 
-            // בדיקת קיום שדה "prices"
             if (!root.TryGetProperty("prices", out var pricesElement))
             {
                 return ValidationResult.Failure(
                     "Status 2 requires a 'prices' field containing an array of two quote strings");
             }
 
-            // בדיקה שזהו מערך
             if (pricesElement.ValueKind != JsonValueKind.Array)
             {
                 return ValidationResult.Failure("'prices' must be an array");
             }
 
-            // בדיקה של בדיוק 2 מחרוזות
             var prices = pricesElement.EnumerateArray().ToList();
             if (prices.Count != 2)
             {
@@ -76,9 +69,6 @@ public class ProcurementTaskHandler : StatusValidationTaskHandlerBase
         }
     }
 
-    /// <summary>
-    /// וולידציה לסטטוס 3: בדיקת קבלה (מחרוזת)
-    /// </summary>
     private static ValidationResult ValidateStatusThree(string newDataJson)
     {
         try
@@ -86,14 +76,12 @@ public class ProcurementTaskHandler : StatusValidationTaskHandlerBase
             using var jsonDoc = JsonDocument.Parse(newDataJson);
             var root = jsonDoc.RootElement;
 
-            // בדיקת קיום שדה "receipt"
             if (!root.TryGetProperty("receipt", out var receiptElement))
             {
                 return ValidationResult.Failure(
                     "Status 3 requires a 'receipt' field containing a receipt string");
             }
 
-            // בדיקה שזהו מחרוזת
             if (receiptElement.ValueKind != JsonValueKind.String)
             {
                 return ValidationResult.Failure("'receipt' must be a string");

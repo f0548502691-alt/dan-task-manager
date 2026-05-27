@@ -3,9 +3,8 @@ using System.Text.Json;
 namespace DanTaskManager.Domain.Handlers;
 
 /// <summary>
-/// מטפל משימות Analysis
-/// סטטוס סופי: 2
-/// סטטוס 2: דורש שדה analysisReport
+/// Analysis task handler. Final status = 2.
+/// Status 2 requires a non-empty <c>analysisReport</c> field.
 /// </summary>
 public class AnalysisTaskHandler : IRegisterableTaskHandler
 {

@@ -4,7 +4,9 @@ using System.Text.Json;
 namespace DanTaskManager.Middleware;
 
 /// <summary>
-/// Middleware גלובלי לטיפול בשגיאות API בפורמט עקבי עבור ה-UI.
+/// Global middleware that converts <see cref="ApiException"/> (and any
+/// unhandled exception) into a consistent JSON error response with a stable
+/// <c>code</c> field.
 /// </summary>
 public class GlobalExceptionMiddleware
 {

@@ -8,27 +8,23 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ✅ הוספת DbContext עם SQL Server
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
 );
 
-// ✅ הרשמה אוטומטית של כל Task Handler שקיים באסמבלי
+// Discover every IRegisterableTaskHandler in the assembly by reflection.
+// Adding a code-backed task type does not require touching this file.
 builder.Services.AddTaskHandlersFromAssembly(typeof(Program).Assembly);
 
-// ✅ הרשמה של TaskHandlerFactory
 builder.Services.AddScoped<TaskHandlerFactory>();
 builder.Services.AddScoped<ITaskTypeCatalog, TaskTypeCatalogService>();
 
-// ✅ cache לחוקיות מסוגי משימות
 builder.Services.AddMemoryCache();
 
-// ✅ הרשמת שירות metadata + ולידציה מבוססי DB
 builder.Services.AddScoped<TaskTypeValidationService>();
 builder.Services.AddScoped<ITaskTypeValidationService>(sp => sp.GetRequiredService<TaskTypeValidationService>());
 builder.Services.AddScoped<ITaskTypeMetadataService>(sp => sp.GetRequiredService<TaskTypeValidationService>());
 
-// ✅ הרשמה של Task Workflow Service
 builder.Services.AddScoped<ITaskWorkflowRuleProvider, MetadataTaskWorkflowRuleProvider>();
 builder.Services.AddScoped<ITaskWorkflowRuleProvider, HandlerTaskWorkflowRuleProvider>();
 builder.Services.AddScoped<ITaskWorkflowService, TaskWorkflowService>();
@@ -38,21 +34,16 @@ builder.Services.Configure<TaskTypeConflictValidatorOptions>(
     builder.Configuration.GetSection(TaskTypeConflictValidatorOptions.SectionName));
 builder.Services.AddHostedService<TaskTypeConflictValidator>();
 
-// ✅ הרשמה של FluentValidation validators
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
-// ✅ הרשמה של Application Services
 builder.Services.AddScoped<ITaskApplicationService, TaskApplicationService>();
 builder.Services.AddScoped<IUserApplicationService, UserApplicationService>();
 
-// ✅ הרשמה של MediatR (מיגרציה הדרגתית ל-commands/queries)
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));
 
-// הוספת Swagger/OpenAPI (אופציונלי)
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// הוספת Controllers (אופציונלי)
 builder.Services.AddControllers();
 
 var app = builder.Build();

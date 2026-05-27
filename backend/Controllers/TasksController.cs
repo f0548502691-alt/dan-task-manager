@@ -20,7 +20,9 @@ using System.Text.Json;
 namespace DanTaskManager.Controllers;
 
 /// <summary>
-/// Controller לניהול משימות עם Workflow
+/// Task-management HTTP endpoints. All write paths run through MediatR
+/// commands so the controller stays thin; workflow rules live in the
+/// services layer.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
@@ -46,9 +48,6 @@ public class TasksController : ControllerBase
         _logger = logger;
     }
 
-    /// <summary>
-    /// קבלת כל המשימות
-    /// </summary>
     [HttpGet]
     public async Task<ActionResult<PagedResult<TaskSummaryDto>>> GetTasks(
         [FromQuery] PaginationQuery pagination)
@@ -59,24 +58,18 @@ public class TasksController : ControllerBase
         return Ok(tasks);
     }
 
-    /// <summary>
-    /// קבלת משימה לפי ID
-    /// </summary>
     [HttpGet("{id}")]
     public async Task<ActionResult<TaskDetailsDto>> GetTask(int id)
     {
         var task = await _mediator.Send(new GetTaskByIdQuery(id), HttpContext.RequestAborted);
         if (task == null)
         {
-            throw new ApiNotFoundException("משימה לא נמצאה");
+            throw new ApiNotFoundException("Task not found");
         }
 
         return Ok(task);
     }
 
-    /// <summary>
-    /// קבלת משימות לפי סוג
-    /// </summary>
     [HttpGet("byType/{taskType}")]
     public async Task<ActionResult<PagedResult<TaskSummaryDto>>> GetTasksByType(
         string taskType,
@@ -89,9 +82,6 @@ public class TasksController : ControllerBase
         return Ok(tasks);
     }
 
-    /// <summary>
-    /// קבלת משימות של משתמש מסוים
-    /// </summary>
     [HttpGet("user/{userId}")]
     public async Task<ActionResult<PagedResult<TaskSummaryDto>>> GetUserTasks(
         int userId,
@@ -100,7 +90,7 @@ public class TasksController : ControllerBase
         var userExists = await _mediator.Send(new UserExistsQuery(userId), HttpContext.RequestAborted);
         if (!userExists)
         {
-            throw new ApiNotFoundException("משתמש לא קיים");
+            throw new ApiNotFoundException("User does not exist");
         }
 
         var tasks = await _mediator.Send(
@@ -109,9 +99,6 @@ public class TasksController : ControllerBase
         return Ok(tasks);
     }
 
-    /// <summary>
-    /// יצירת משימה חדשה
-    /// </summary>
     [HttpPost]
     public async Task<ActionResult<TaskDetailsDto>> CreateTask(CreateTaskRequest request)
     {
@@ -154,9 +141,9 @@ public class TasksController : ControllerBase
     }
 
     /// <summary>
-    /// שינוי סטטוס של משימה עם כללי Workflow
-    /// תנועה קדימה: בדיוק +1 סטטוס
-    /// תנועה אחורה: לכל סטטוס נמוך יותר
+    /// Change a task's status. Forward movement is restricted to exactly +1;
+    /// backward movement may target any lower status. Reaching the closed
+    /// status (99) is not allowed here — use <c>POST /{id}/close</c>.
     /// </summary>
     [HttpPost("{id}/change-status")]
     public async Task<IActionResult> ChangeStatusWorkflow(int id, ChangeStatusWorkflowRequest request)
@@ -197,8 +184,8 @@ public class TasksController : ControllerBase
     }
 
     /// <summary>
-    /// סגירת משימה (סטטוס סופי = 99)
-    /// לא ניתן לשנות משימה סגורה
+    /// Close a task (move it to status 99). Only valid from the task type's
+    /// final status; a closed task becomes immutable.
     /// </summary>
     [HttpPost("{id}/close")]
     public async Task<IActionResult> CloseTask(int id, CloseTaskRequest request)
@@ -233,9 +220,6 @@ public class TasksController : ControllerBase
         });
     }
 
-    /// <summary>
-    /// עדכון משימה קיימת (בדיקה בסיסית)
-    /// </summary>
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateTask(int id, UpdateTaskRequest request)
     {
@@ -247,7 +231,7 @@ public class TasksController : ControllerBase
             var task = await _mediator.Send(new GetTaskByIdQuery(id), HttpContext.RequestAborted);
             if (task == null)
             {
-                throw new ApiNotFoundException("משימה לא נמצאה");
+                throw new ApiNotFoundException("Task not found");
             }
 
             throw new WorkflowValidationException("Closed tasks are immutable and cannot be updated");
@@ -256,9 +240,6 @@ public class TasksController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>
-    /// מחיקת משימה
-    /// </summary>
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteTask(int id)
     {
@@ -268,7 +249,7 @@ public class TasksController : ControllerBase
             var task = await _mediator.Send(new GetTaskByIdQuery(id), HttpContext.RequestAborted);
             if (task == null)
             {
-                throw new ApiNotFoundException("משימה לא נמצאה");
+                throw new ApiNotFoundException("Task not found");
             }
 
             throw new WorkflowValidationException("Closed tasks are immutable and cannot be deleted");

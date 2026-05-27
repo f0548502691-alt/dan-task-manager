@@ -4,8 +4,9 @@ using Microsoft.EntityFrameworkCore;
 namespace DanTaskManager.Data;
 
 /// <summary>
-/// DbContext עבור מנהל המשימות
-/// מכיל את ההגדרות של כל הטבלאות בבסיס הנתונים
+/// EF Core context for the task-management database. Owns the entity
+/// configuration and the seed data for users, task-type metadata, and
+/// field-validation rules.
 /// </summary>
 public class ApplicationDbContext : DbContext
 {
@@ -16,24 +17,12 @@ public class ApplicationDbContext : DbContext
     {
     }
 
-    /// <summary>
-    /// טבלת המשתמשים
-    /// </summary>
     public DbSet<AppUser> Users { get; set; } = null!;
 
-    /// <summary>
-    /// טבלת המשימות
-    /// </summary>
     public DbSet<BaseTask> Tasks { get; set; } = null!;
 
-    /// <summary>
-    /// טבלת סוגי משימות (metadata)
-    /// </summary>
     public DbSet<TaskTypeMetadata> TaskTypes { get; set; } = null!;
 
-    /// <summary>
-    /// טבלת חוקיות שדות מותאמים
-    /// </summary>
     public DbSet<TaskFieldDefinition> TaskFieldDefinitions { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -48,9 +37,6 @@ public class ApplicationDbContext : DbContext
         SeedData(modelBuilder);
     }
 
-    /// <summary>
-    /// הגדרת מחלקת AppUser
-    /// </summary>
     private static void ConfigureAppUser(ModelBuilder modelBuilder)
     {
         var appUserBuilder = modelBuilder.Entity<AppUser>();
@@ -84,8 +70,8 @@ public class ApplicationDbContext : DbContext
     }
 
     /// <summary>
-    /// הגדרת מחלקת BaseTask
-    /// כולל הגדרת עמודת JSON עבור CustomDataJson
+    /// Configure <see cref="BaseTask"/>, including the JSON column used for
+    /// per-type custom data and the check constraint that keeps it valid JSON.
     /// </summary>
     private static void ConfigureBaseTask(ModelBuilder modelBuilder)
     {
@@ -107,8 +93,6 @@ public class ApplicationDbContext : DbContext
             .Property(t => t.Description)
             .HasMaxLength(1000);
 
-        // הגדרת עמודת JSON עבור CustomDataJson
-        // EF Core 8 כולל תמיכה מובנית ל-JSON columns בפי SQL Server
         taskBuilder
             .Property(t => t.CustomDataJson)
             .IsRequired()
@@ -136,15 +120,10 @@ public class ApplicationDbContext : DbContext
             .HasForeignKey(t => t.AssignedToUserId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // יצירת אינדקס לשדה TaskType להאצת החיפושים
         taskBuilder
             .HasIndex(t => t.TaskType);
-
     }
 
-    /// <summary>
-    /// הגדרת metadata של סוגי משימות
-    /// </summary>
     private static void ConfigureTaskTypeMetadata(ModelBuilder modelBuilder)
     {
         var taskTypeBuilder = modelBuilder.Entity<TaskTypeMetadata>();
@@ -182,9 +161,6 @@ public class ApplicationDbContext : DbContext
             .IsUnique();
     }
 
-    /// <summary>
-    /// הגדרת חוקיות שדות מותאמים
-    /// </summary>
     private static void ConfigureTaskFieldDefinition(ModelBuilder modelBuilder)
     {
         var fieldBuilder = modelBuilder.Entity<TaskFieldDefinition>();
@@ -233,11 +209,11 @@ public class ApplicationDbContext : DbContext
     }
 
     /// <summary>
-    /// ביצוע Seed של נתונים בסיסיים
+    /// Seed baseline users, task-type metadata (Procurement, Development,
+    /// Marketing), field rules, and a couple of sample tasks.
     /// </summary>
     private static void SeedData(ModelBuilder modelBuilder)
     {
-        // יצירת משתמשים בסיסיים
         var users = new List<AppUser>
         {
             new AppUser
@@ -449,7 +425,6 @@ public class ApplicationDbContext : DbContext
 
         modelBuilder.Entity<TaskFieldDefinition>().HasData(fieldDefinitions);
 
-        // יצירת כמה משימות לדוגמה
         var tasks = new List<BaseTask>
         {
             new BaseTask

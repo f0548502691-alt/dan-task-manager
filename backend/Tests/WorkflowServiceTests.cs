@@ -9,7 +9,7 @@ using System.Text.Json;
 namespace DanTaskManager.Tests;
 
 /// <summary>
-/// בדיקות יחידתיות עבור TaskWorkflowService
+/// Unit tests for <see cref="TaskWorkflowService"/>.
 /// </summary>
 public class TaskWorkflowServiceTests : IAsyncLifetime
 {
@@ -309,7 +309,7 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
 
         // Assert
         Assert.False(result.Success);
-        Assert.Contains("המשתמש הבא לא קיים", result.Message);
+        Assert.Contains("Next assignee does not exist", result.Message);
     }
 
     [Fact]

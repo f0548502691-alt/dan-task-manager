@@ -3,22 +3,20 @@ using System.Text.Json;
 namespace DanTaskManager.Contracts.Requests.Tasks;
 
 /// <summary>
-/// בקשה לשינוי סטטוס עם כללי Workflow
+/// Request body for <c>POST /api/tasks/{id}/change-status</c>.
 /// </summary>
 public class ChangeStatusWorkflowRequest
 {
     /// <summary>
-    /// הסטטוס החדש (תנועה קדימה: בדיוק +1, תנועה אחורה: לכל סטטוס נמוך)
+    /// Target status. Forward moves must equal current + 1; backward moves
+    /// may target any lower status >= 1. The closed status (99) is rejected
+    /// here — use the dedicated close endpoint instead.
     /// </summary>
     public int NewStatus { get; set; }
 
-    /// <summary>
-    /// המשתמש שאליו המשימה תוקצה לאחר שינוי הסטטוס
-    /// </summary>
+    /// <summary>Assignee for the task after the transition.</summary>
     public int NextAssignedToUserId { get; set; }
 
-    /// <summary>
-    /// customFields חדשים עם נתונים מעודכנים
-    /// </summary>
+    /// <summary>New <c>CustomDataJson</c> contents; must satisfy the rules for the target status.</summary>
     public JsonElement? CustomFields { get; set; }
 }

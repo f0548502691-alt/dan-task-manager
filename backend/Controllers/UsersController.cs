@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace DanTaskManager.Controllers;
 
 /// <summary>
-/// Controller לשליפת משתמשים קיימים ומשימותיהם
+/// Read-only HTTP endpoints for users and their tasks.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
@@ -19,9 +19,6 @@ public class UsersController : ControllerBase
         _userService = userService;
     }
 
-    /// <summary>
-    /// קבלת כל המשתמשים
-    /// </summary>
     [HttpGet]
     public async Task<ActionResult<PagedResult<UserSummaryDto>>> GetUsers(
         [FromQuery] PaginationQuery pagination)
@@ -32,9 +29,6 @@ public class UsersController : ControllerBase
         return Ok(users);
     }
 
-    /// <summary>
-    /// קבלת משתמש לפי ID
-    /// </summary>
     [HttpGet("{id}")]
     public async Task<ActionResult<UserDetailsDto>> GetUser(int id)
     {
@@ -42,15 +36,12 @@ public class UsersController : ControllerBase
 
         if (user == null)
         {
-            throw new ApiNotFoundException("משתמש לא נמצא");
+            throw new ApiNotFoundException("User not found");
         }
 
         return Ok(user);
     }
 
-    /// <summary>
-    /// קבלת משימות של משתמש מסוים
-    /// </summary>
     [HttpGet("{id}/tasks")]
     public async Task<ActionResult<PagedResult<TaskSummaryDto>>> GetUserTasks(
         int id,
@@ -59,7 +50,7 @@ public class UsersController : ControllerBase
         var userExists = await _userService.ExistsAsync(id, HttpContext.RequestAborted);
         if (!userExists)
         {
-            throw new ApiNotFoundException("משתמש לא קיים");
+            throw new ApiNotFoundException("User does not exist");
         }
 
         var tasks = await _userService.GetUserTasksAsync(

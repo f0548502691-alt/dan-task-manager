@@ -1,12 +1,8 @@
 namespace DanTaskManager.Contracts.Requests.Tasks;
 
-/// <summary>
-/// בקשה לעדכון משימה
-/// </summary>
+/// <summary>Request body for <c>PUT /api/tasks/{id}</c>.</summary>
 public class UpdateTaskRequest
 {
-    /// <summary>
-    /// תיאור חדש
-    /// </summary>
+    /// <summary>New description; null leaves the existing value untouched.</summary>
     public string? Description { get; set; }
 }

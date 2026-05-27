@@ -5,13 +5,14 @@ using Microsoft.EntityFrameworkCore;
 namespace DanTaskManager.Services;
 
 /// <summary>
-/// ממשק לשירות ניהול workflow של משימות
+/// Workflow-management contract. Enforces the rules that apply to every task
+/// (forward-by-one, backward-free, no-jump-to-closed, final-status guard,
+/// closed-immutability) and delegates per-type validation to the registered
+/// <see cref="ITaskWorkflowRuleProvider"/> implementations.
 /// </summary>
 public interface ITaskWorkflowService
 {
-    /// <summary>
-    /// שינוי סטטוס של משימה עם כללי workflow
-    /// </summary>
+    /// <summary>Advance or rewind a task's status; rejects when general or per-type rules disallow it.</summary>
     Task<WorkflowResult> ChangeStatusAsync(
         int taskId,
         int newStatus,
@@ -19,32 +20,22 @@ public interface ITaskWorkflowService
         string newDataJson,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// סגירת משימה (סטטוס סופי)
-    /// </summary>
+    /// <summary>Move a task to the closed status (<see cref="WorkflowConstants.ClosedStatus"/>).</summary>
     Task<WorkflowResult> CloseTaskAsync(
         int taskId,
         int nextAssignedToUserId,
         string finalNotes,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// בדיקה האם מותר לבצע שינוי במשימה שאינה שינוי סטטוס
-    /// </summary>
+    /// <summary>Check whether a non-status mutation is allowed on the task (i.e. it isn't closed).</summary>
     Task<WorkflowResult> EnsureTaskMutableAsync(
         int taskId,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// קבלת משימות של משתמש מסוים
-    /// </summary>
     Task<IEnumerable<BaseTask>> GetUserTasksAsync(
         int userId,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// קבלת משימה עם פרטיה מלאים
-    /// </summary>
     Task<BaseTask?> GetTaskAsync(int taskId, CancellationToken cancellationToken = default);
 }
 
@@ -71,8 +62,9 @@ public class WorkflowResult
 }
 
 /// <summary>
-/// שירות ניהול Workflow של משימות
-/// מנהל את כללי ה-Workflow כולל תנועה אחורה/קדימה ווולידציה
+/// Workflow service implementation. Owns the general status-movement rules
+/// and delegates per-type validation to <see cref="ITaskWorkflowRuleProvider"/>
+/// instances ordered by <see cref="ITaskWorkflowRuleProvider.Priority"/>.
 /// </summary>
 public class TaskWorkflowService : ITaskWorkflowService
 {
@@ -157,7 +149,6 @@ public class TaskWorkflowService : ITaskWorkflowService
                 validationResult.Message);
         }
 
-        // 6. עדכון המשימה
         var oldStatus = task.CurrentStatus;
         var oldAssignee = task.AssignedToUserId;
         task.CurrentStatus = newStatus;
@@ -292,7 +283,9 @@ public class TaskWorkflowService : ITaskWorkflowService
     }
 
     /// <summary>
-    /// וולידציה של כללי תנועה בין סטטוסים
+    /// Enforce the general status-movement rules: no jumps forward, free movement
+    /// backward, no direct moves to <see cref="WorkflowConstants.ClosedStatus"/>,
+    /// no exits past the type's final status, no same-status moves.
     /// </summary>
     private StatusMovementValidation ValidateStatusMovement(BaseTask task, int newStatus, int? finalStatus)
     {

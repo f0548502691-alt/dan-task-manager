@@ -1,29 +1,25 @@
 namespace DanTaskManager.Domain.Handlers;
 
 /// <summary>
-/// ממשק Strategy למטפלי משימות שונים
-/// כל סוג משימה יכול להיות בעל לוגיקה וולידציה שונה בהתאם לסטטוס
+/// Strategy contract for a code-backed task type. Implementations validate
+/// status transitions and the JSON payload accompanying them; metadata-driven
+/// task types do not need to implement this interface.
 /// </summary>
 public interface ITaskHandler
 {
-    /// <summary>
-    /// סוג המשימה שעבורו מטפל זה אחראי
-    /// </summary>
+    /// <summary>The task-type code this handler is responsible for.</summary>
     string TaskType { get; }
 
-    /// <summary>
-    /// הסטטוס הסופי של המשימה (לא יכול להעבור אותו)
-    /// </summary>
+    /// <summary>The terminal pre-close status for this task type.</summary>
     int FinalStatus { get; }
 
     /// <summary>
-    /// ולידציה של שינוי סטטוס עם בדיקת הנתונים המותאמים
+    /// Validate a proposed status transition together with its new JSON payload.
     /// </summary>
-    /// <param name="currentDataJson">JSON עכשווי של הנתונים המותאמים</param>
-    /// <param name="currentStatus">הסטטוס הנוכחי</param>
-    /// <param name="nextStatus">הסטטוס הבא</param>
-    /// <param name="newDataJson">JSON חדש של הנתונים המותאמים</param>
-    /// <returns>תוצאה עם סטטוס הצלחה והודעה</returns>
+    /// <param name="currentDataJson">The task's existing <c>CustomDataJson</c>.</param>
+    /// <param name="currentStatus">The task's current status before the change.</param>
+    /// <param name="nextStatus">The requested new status.</param>
+    /// <param name="newDataJson">The proposed <c>CustomDataJson</c> after the change.</param>
     ValidationResult ValidateStatusChange(
         string currentDataJson,
         int currentStatus,
@@ -40,28 +36,18 @@ public interface IRegisterableTaskHandler : ITaskHandler
 }
 
 /// <summary>
-/// תוצאה של וולידציה
+/// Outcome of a single validation step. Use <see cref="Success"/> when no
+/// rule was violated and <see cref="Failure(string)"/> with a human-readable
+/// message when one was.
 /// </summary>
 public class ValidationResult
 {
-    /// <summary>
-    /// האם הוולידציה עברה בהצלחה
-    /// </summary>
     public bool IsValid { get; set; }
 
-    /// <summary>
-    /// הודעת שגיאה (אם רלוונטי)
-    /// </summary>
     public string Message { get; set; } = string.Empty;
 
-    /// <summary>
-    /// יצירת תוצאה של הצלחה
-    /// </summary>
     public static ValidationResult Success() => new() { IsValid = true };
 
-    /// <summary>
-    /// יצירת תוצאת שגיאה
-    /// </summary>
     public static ValidationResult Failure(string message) =>
         new() { IsValid = false, Message = message };
 }

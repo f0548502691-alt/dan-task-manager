@@ -2,28 +2,17 @@ using System.Text.Json;
 
 namespace DanTaskManager.Contracts.Requests.Tasks;
 
-/// <summary>
-/// בקשה ליצירת משימה חדשה
-/// </summary>
+/// <summary>Request body for <c>POST /api/tasks</c>.</summary>
 public class CreateTaskRequest
 {
-    /// <summary>
-    /// סוג המשימה (Procurement, Development, וכו')
-    /// </summary>
+    /// <summary>Task-type code (e.g. <c>Procurement</c>, <c>Development</c>, <c>Marketing</c>).</summary>
     public string TaskType { get; set; } = string.Empty;
 
-    /// <summary>
-    /// תיאור המשימה
-    /// </summary>
     public string Description { get; set; } = string.Empty;
 
-    /// <summary>
-    /// ID של המשתמש שמוקצה למשימה
-    /// </summary>
+    /// <summary>Initial assignee user id.</summary>
     public int AssignedToUserId { get; set; }
 
-    /// <summary>
-    /// אובייקט customFields עם נתונים ספציפיים לסוג המשימה
-    /// </summary>
+    /// <summary>Initial <c>CustomDataJson</c> contents; usually empty at creation time.</summary>
     public JsonElement? CustomFields { get; set; }
 }
