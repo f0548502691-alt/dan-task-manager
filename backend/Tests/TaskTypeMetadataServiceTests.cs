@@ -52,6 +52,45 @@ public class TaskTypeMetadataServiceTests : IDisposable
     }
 
     [Fact]
+    public void UpsertTaskType_WithoutFinalStatus_Fails()
+    {
+        var result = _service.UpsertTaskType(new UpsertTaskTypeCommand(
+            TaskType: "QaReview",
+            DisplayName: "QA Review",
+            FinalStatus: null,
+            IsActive: true));
+
+        Assert.False(result.Success);
+        Assert.Contains("FinalStatus is required", result.Message);
+    }
+
+    [Fact]
+    public void UpsertTaskType_WithInvalidFinalStatus_Fails()
+    {
+        var result = _service.UpsertTaskType(new UpsertTaskTypeCommand(
+            TaskType: "QaReview",
+            DisplayName: "QA Review",
+            FinalStatus: 0,
+            IsActive: true));
+
+        Assert.False(result.Success);
+        Assert.Contains("greater than or equal to 1", result.Message);
+    }
+
+    [Fact]
+    public void UpsertTaskType_WithClosedStatusAsFinal_Fails()
+    {
+        var result = _service.UpsertTaskType(new UpsertTaskTypeCommand(
+            TaskType: "QaReview",
+            DisplayName: "QA Review",
+            FinalStatus: 99,
+            IsActive: true));
+
+        Assert.False(result.Success);
+        Assert.Contains("less than 99", result.Message);
+    }
+
+    [Fact]
     public void ValidateStatusData_UsesDbMetadataRules()
     {
         var definitionResult = _service.UpsertFieldDefinition("Development", new UpsertFieldDefinitionCommand
@@ -82,6 +121,22 @@ public class TaskTypeMetadataServiceTests : IDisposable
 
         Assert.False(invalidResult.IsValid);
         Assert.True(validResult.IsValid);
+    }
+
+    [Fact]
+    public void UpsertFieldDefinition_WhenStatusIsAboveFinalStatus_Fails()
+    {
+        var result = _service.UpsertFieldDefinition("Development", new UpsertFieldDefinitionCommand
+        {
+            Field = "postReleaseNote",
+            Type = "string",
+            Required = true,
+            AppliesFromStatus = 5,
+            AppliesToStatus = 5
+        });
+
+        Assert.False(result.Success);
+        Assert.Contains("cannot be greater than FinalStatus", result.Message);
     }
 
     public void Dispose()

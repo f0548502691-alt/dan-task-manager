@@ -24,6 +24,7 @@ public interface ITaskWorkflowService
     /// </summary>
     Task<WorkflowResult> CloseTaskAsync(
         int taskId,
+        int nextAssignedToUserId,
         string finalNotes,
         CancellationToken cancellationToken = default);
 
@@ -172,6 +173,7 @@ public class TaskWorkflowService : ITaskWorkflowService
 
     public async Task<WorkflowResult> CloseTaskAsync(
         int taskId,
+        int nextAssignedToUserId,
         string finalNotes,
         CancellationToken cancellationToken = default)
     {
@@ -184,6 +186,14 @@ public class TaskWorkflowService : ITaskWorkflowService
         if (task.CurrentStatus == WorkflowConstants.ClosedStatus)
         {
             return WorkflowResult.FailureResult("משימה כבר סגורה");
+        }
+
+        var nextAssigneeExists = await _context.Users
+            .AsNoTracking()
+            .AnyAsync(u => u.Id == nextAssignedToUserId, cancellationToken);
+        if (!nextAssigneeExists)
+        {
+            return WorkflowResult.FailureResult("המשתמש הבא לא קיים");
         }
 
         var ruleProvider = ResolveRuleProvider(task.TaskType);
@@ -217,16 +227,20 @@ public class TaskWorkflowService : ITaskWorkflowService
             });
         }
 
+        var oldAssignee = task.AssignedToUserId;
         task.CurrentStatus = WorkflowConstants.ClosedStatus;
+        task.AssignedToUserId = nextAssignedToUserId;
         task.CustomDataJson = updatedJson;
         task.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "משימה {TaskId} סגורה עם הערות: {Notes}",
+            "משימה {TaskId} סגורה עם הערות: {Notes}, הקצאה {OldAssignee}->{NewAssignee}",
             taskId,
-            finalNotes);
+            finalNotes,
+            oldAssignee,
+            nextAssignedToUserId);
 
         return WorkflowResult.SuccessResult(
             WorkflowConstants.ClosedStatus,
