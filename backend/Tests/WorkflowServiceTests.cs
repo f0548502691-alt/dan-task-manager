@@ -21,7 +21,7 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
     public TaskWorkflowServiceTests()
     {
         _options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase("WorkflowServiceTestDb")
+            .UseInMemoryDatabase($"WorkflowServiceTestDb-{Guid.NewGuid()}")
             .Options;
     }
 
@@ -548,7 +548,7 @@ public class TaskWorkflowIntegrationTests : IAsyncLifetime
     public TaskWorkflowIntegrationTests()
     {
         _options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase("WorkflowIntegrationTestDb")
+            .UseInMemoryDatabase($"WorkflowIntegrationTestDb-{Guid.NewGuid()}")
             .Options;
     }
 

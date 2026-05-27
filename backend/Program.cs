@@ -1,11 +1,12 @@
 using DanTaskManager.Data;
+using DanTaskManager.Domain.Handlers;
 using DanTaskManager.Middleware;
 using DanTaskManager.Services;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-var builder = WebApplicationBuilder.CreateBuilder(args);
+var builder = WebApplication.CreateBuilder(args);
 
 // ✅ הוספת DbContext עם SQL Server
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -31,6 +32,11 @@ builder.Services.AddScoped<ITaskTypeMetadataService>(sp => sp.GetRequiredService
 builder.Services.AddScoped<ITaskWorkflowRuleProvider, MetadataTaskWorkflowRuleProvider>();
 builder.Services.AddScoped<ITaskWorkflowRuleProvider, HandlerTaskWorkflowRuleProvider>();
 builder.Services.AddScoped<ITaskWorkflowService, TaskWorkflowService>();
+
+// Startup diagnostic that detects task-type codes claimed by multiple rule providers.
+builder.Services.Configure<TaskTypeConflictValidatorOptions>(
+    builder.Configuration.GetSection(TaskTypeConflictValidatorOptions.SectionName));
+builder.Services.AddHostedService<TaskTypeConflictValidator>();
 
 // ✅ הרשמה של FluentValidation validators
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();

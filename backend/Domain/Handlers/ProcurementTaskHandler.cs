@@ -19,9 +19,9 @@ public class ProcurementTaskHandler : StatusValidationTaskHandlerBase
     {
     }
 
-    public string TaskType => "Procurement";
+    public override string TaskType => "Procurement";
 
-    public int FinalStatus => 3;
+    public override int FinalStatus => 3;
 
     /// <summary>
     /// וולידציה לסטטוס 2: בדיקת מערך מחירים (2 מחרוזות)

@@ -9,11 +9,22 @@ namespace DanTaskManager.Services;
 /// </summary>
 public interface ITaskWorkflowRuleProvider
 {
+    /// <summary>
+    /// Human-readable identifier for the rule source (used in startup diagnostics).
+    /// </summary>
+    string SourceName { get; }
+
     int Priority { get; }
     bool CanHandle(string taskType);
     int? GetFinalStatus(string taskType);
     ValidationResult ValidateStatusChange(BaseTask task, int nextStatus, string newDataJson);
     string BuildCloseData(BaseTask task, string finalNotes);
+
+    /// <summary>
+    /// Enumerate every task-type code this provider currently knows about.
+    /// Used at startup to detect overlap between rule sources.
+    /// </summary>
+    IReadOnlyCollection<string> GetKnownTaskTypes();
 }
 
 internal static class WorkflowCloseData
@@ -42,11 +53,15 @@ internal static class WorkflowCloseData
 public class MetadataTaskWorkflowRuleProvider : ITaskWorkflowRuleProvider
 {
     private readonly ITaskTypeValidationService _validationService;
+    private readonly ITaskTypeMetadataService? _metadataService;
 
     public MetadataTaskWorkflowRuleProvider(ITaskTypeValidationService validationService)
     {
         _validationService = validationService;
+        _metadataService = validationService as ITaskTypeMetadataService;
     }
+
+    public string SourceName => "Metadata";
 
     public int Priority => 0;
 
@@ -60,6 +75,20 @@ public class MetadataTaskWorkflowRuleProvider : ITaskWorkflowRuleProvider
     }
 
     public string BuildCloseData(BaseTask task, string finalNotes) => WorkflowCloseData.Merge(task, finalNotes);
+
+    public IReadOnlyCollection<string> GetKnownTaskTypes()
+    {
+        if (_metadataService == null)
+        {
+            return Array.Empty<string>();
+        }
+
+        return _metadataService
+            .GetTaskTypes()
+            .Where(schema => schema.IsActive)
+            .Select(schema => schema.TaskType)
+            .ToArray();
+    }
 }
 
 public class HandlerTaskWorkflowRuleProvider : ITaskWorkflowRuleProvider
@@ -70,6 +99,8 @@ public class HandlerTaskWorkflowRuleProvider : ITaskWorkflowRuleProvider
     {
         _handlerFactory = handlerFactory;
     }
+
+    public string SourceName => "Handler";
 
     public int Priority => 100;
 
@@ -96,4 +127,9 @@ public class HandlerTaskWorkflowRuleProvider : ITaskWorkflowRuleProvider
     }
 
     public string BuildCloseData(BaseTask task, string finalNotes) => WorkflowCloseData.Merge(task, finalNotes);
+
+    public IReadOnlyCollection<string> GetKnownTaskTypes()
+    {
+        return _handlerFactory.GetRegisteredTaskTypes().ToArray();
+    }
 }
