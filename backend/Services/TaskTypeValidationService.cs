@@ -1,6 +1,7 @@
 using DanTaskManager.Data;
 using DanTaskManager.Domain;
 using DanTaskManager.Domain.Handlers;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
@@ -123,6 +124,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
     private readonly IMemoryCache? _cache;
     private readonly IReadOnlyDictionary<string, TaskTypeDefinition>? _inMemoryTaskTypeMap;
 
+    [ActivatorUtilitiesConstructor]
     public TaskTypeValidationService(
         ApplicationDbContext context,
         IMemoryCache cache)
