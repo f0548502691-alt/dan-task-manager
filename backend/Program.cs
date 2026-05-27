@@ -57,7 +57,10 @@ builder.Services.AddControllers();
 
 var app = builder.Build();
 
-// ✅ יצירת הטבלאות אם לא קיימות (Migration אוטומטי)
+// Single source of truth for the schema is the EF model in ApplicationDbContext.
+// In development we materialize it via EnsureCreated; in production deployments
+// migrations should be applied out-of-band before the app starts. If migrations
+// are added to the project later, they take precedence here.
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -69,8 +72,6 @@ using (var scope = app.Services.CreateScope())
     {
         dbContext.Database.EnsureCreated();
     }
-
-    HybridSchemaBootstrapper.EnsureSchema(dbContext);
 }
 
 // Configure the HTTP request pipeline.

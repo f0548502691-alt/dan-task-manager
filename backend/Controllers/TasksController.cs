@@ -177,7 +177,7 @@ public class TasksController : ControllerBase
 
         if (!result.Success)
         {
-            throw new WorkflowValidationException(result.Message);
+            throw new WorkflowValidationException(result.Message, result.Code);
         }
 
         _logger.LogInformation(
@@ -215,7 +215,7 @@ public class TasksController : ControllerBase
 
         if (!result.Success)
         {
-            throw new WorkflowValidationException(result.Message);
+            throw new WorkflowValidationException(result.Message, result.Code);
         }
 
         _logger.LogInformation(
