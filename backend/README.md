@@ -1,130 +1,149 @@
-# מנהל משימות - DanTaskManager
+# Dan Task Manager Backend
 
-פרויקט .NET 8 עם EF Core ו-SQL Server לניהול משימות גנרי.
+.NET 8 API for task workflow management. Tasks share one persistence model (`BaseTask`)
+and vary by task type through metadata-backed field rules or code-backed handlers.
 
-## 📋 מבנה הפרויקט
+## Current architecture
 
-```
-dan-task-manager/
-├── Domain/
-│   ├── AppUser.cs          # מחלקה המייצגת משתמש
-│   └── BaseTask.cs         # מחלקה למשימה בסיסית
-├── Data/
-│   └── ApplicationDbContext.cs  # DbContext עם הגדרות EF Core
-├── DanTaskManager.csproj   # קובץ הפרויקט
-└── README.md
-```
-
-## 🏗️ מחלקות Domain
-
-### AppUser
-ייצוג משתמש במערכת:
-- `Id`: מזהה ייחודי
-- `Name`: שם המשתמש
-- `Email`: דוא"ל (עם אינדקס ייחודי)
-- `CreatedAt`: תאריך יצירה
-- `Tasks`: קשר לרבות משימות
-
-### BaseTask
-ייצוג משימה עם תמיכה בנתונים משתנים:
-- `Id`: מזהה ייחודי
-- `TaskType`: סוג המשימה (Analysis, Development, Testing, וכו')
-- `CurrentStatus`: סטטוס כמספר (0=לא התחילה, 1=בתהליך, 2=הושלמה, 3=ביוטלה)
-- `AssignedToUserId`: מזהה המשתמש המופקד
-- `AssignedToUser`: קשר למשתמש
-- `Description`: תיאור המשימה
-- **`CustomDataJson`**: JSON המכיל נתונים משתנים בהתאם לסוג המשימה
-- `CreatedAt` / `UpdatedAt`: ניהול תאריכים
-
-## 💾 DbContext - ApplicationDbContext
-
-ההגדרות כוללות:
-
-### תכונות JSON
-`CustomDataJson` מוגדר כעמודת JSON מסוג `nvarchar(max)` התומכת בשמירת נתונים דינאמיים:
-
-```csharp
-taskBuilder
-    .Property(t => t.CustomDataJson)
-    .IsRequired()
-    .HasColumnType("nvarchar(max)")
-    .HasDefaultValue("{}");
+```text
+TasksController / TaskTypesController
+        |
+MediatR commands and queries
+        |
+TaskApplicationService / TaskWorkflowService
+        |
+TaskTypeCatalog + workflow rule providers
+        |
+EF Core SQL Server tables
 ```
 
-### Seed Data - 6 משתמשים
-כברירת מחדל, יש 6 משתמשים בסיסיים:
-1. **דן כהן** (dan@example.com)
-2. **רות לוי** (ruth@example.com)
-3. **משה אברהם** (moshe@example.com)
-4. **נועה ישראלי** (noa@example.com)
-5. **איתן ברק** (eitan@example.com)
-6. **מיכל גל** (michal@example.com)
+Key components:
 
-וכן 3 משימות לדוגמה עם `CustomDataJson` שונה לכל אחת.
+- `Domain/BaseTask.cs` stores common task columns and `CustomDataJson`.
+- `Domain/TaskTypeMetadata.cs` stores task type definitions and field rules.
+- `Services/TaskTypeCatalogService.cs` exposes every supported task type by merging
+  active database metadata with registerable handlers.
+- `Services/TaskTypeValidationService.cs` validates metadata-backed `customFields`
+  and serves task type schemas.
+- `Services/TaskWorkflowService.cs` enforces movement rules, final status rules,
+  assignee changes, and closing.
+- `Services/TaskProjectionExpressions.cs` contains the shared EF projection for
+  paged task summary responses.
 
-## 🔧 Setup והגדרה
+## Task type model
 
-### 1. התקנת Packages
-```bash
-dotnet restore
-```
+Supported task types no longer come from a hard-coded allow-list.
 
-### 2. הגדרת Connection String
-בקובץ `appsettings.json`:
-```json
+1. Active rows in `TaskTypes` are supported and validated by
+   `MetadataTaskWorkflowRuleProvider` (priority `0`).
+2. Classes implementing `IRegisterableTaskHandler` are auto-registered from the
+   API assembly and validated by `HandlerTaskWorkflowRuleProvider` (priority `100`).
+3. `TaskTypeCatalogService` merges both sources for task creation and
+   `GET /api/task-types`.
+
+Seeded metadata-backed types:
+
+| Task type | Final status | Required status data |
+|-----------|--------------|----------------------|
+| `Procurement` | `3` | Status `2`: `prices` array with 2 string values. Status `3`: `receipt` string. |
+| `Development` | `4` | Status `2`: `specification` string, min 10 chars. Status `3`: `branchName`. Status `4`: `versionNumber`. |
+
+Handler-backed examples:
+
+| Task type | Source | Notes |
+|-----------|--------|-------|
+| `Analysis` | `AnalysisTaskHandler : IRegisterableTaskHandler` | Status `2` requires `analysisReport`. |
+| `Testing` | `TestingTaskHandler : IRegisterableTaskHandler` | Status `2` requires `testCases`; status `3` requires `coverage` and `summary`. |
+
+Metadata-backed types do not need a handler. If a task type has both metadata and a
+handler, metadata validation wins because its rule provider has the lower priority.
+
+## Workflow constraints
+
+- Created status is `1` (`WorkflowConstants.CreatedStatus`).
+- Closed status is `99` (`WorkflowConstants.ClosedStatus`).
+- Forward movement must be exactly `+1`.
+- Backward movement may move to any lower status greater than or equal to `1`.
+- `POST /api/tasks/{id}/change-status` requires `nextAssignedToUserId` and a
+  JSON-object `customFields` payload.
+- A task can be closed only from its configured final status, and only through
+  `POST /api/tasks/{id}/close`.
+- Closed tasks cannot be updated, deleted, or moved.
+
+## API shape
+
+Public request/response JSON uses `customFields`; `CustomDataJson` is an internal
+storage column.
+
+```http
+POST /api/tasks
+Content-Type: application/json
+
 {
-  "ConnectionStrings": {
-    "DefaultConnection": "Server=.;Database=DanTaskManager;Trusted_Connection=true;Encrypt=false;"
+  "taskType": "Procurement",
+  "description": "Collect supplier quotes",
+  "assignedToUserId": 1,
+  "customFields": {}
+}
+```
+
+```http
+POST /api/tasks/1/change-status
+Content-Type: application/json
+
+{
+  "newStatus": 2,
+  "nextAssignedToUserId": 2,
+  "customFields": {
+    "prices": ["5000", "4800"]
   }
 }
 ```
 
-### 3. יצירת Migration
-```bash
-dotnet ef migrations add InitialCreate
+List endpoints return `PagedResult<TaskSummaryDto>` and intentionally omit
+`customFields`; fetch `GET /api/tasks/{id}` for hydrated task details.
+
+## Task type schema API
+
+`GET /api/task-types` returns active metadata schemas plus handler-backed schema
+stubs:
+
+```json
+[
+  {
+    "taskType": "Procurement",
+    "displayName": "Procurement",
+    "finalStatus": 3,
+    "isActive": true,
+    "version": 1,
+    "fields": [
+      {
+        "field": "prices",
+        "type": "array",
+        "required": true,
+        "arrayLength": 2,
+        "elementType": "string",
+        "appliesFromStatus": 2,
+        "appliesToStatus": 2,
+        "isIndexed": false
+      }
+    ]
+  }
+]
 ```
 
-### 4. עדכון בסיס הנתונים
+Handler-backed schemas have `fields: []`, `displayName` equal to the handler
+`TaskType`, and `finalStatus` from the handler.
+
+## Local setup
+
 ```bash
+dotnet restore
 dotnet ef database update
+dotnet run --project backend/DanTaskManager.csproj
+dotnet test backend/DanTaskManager.csproj
 ```
 
-## 📝 דוגמה לשימוש ב-CustomDataJson
-
-```csharp
-// יצירת משימה עם נתונים משתנים
-var task = new BaseTask
-{
-    TaskType = "Analysis",
-    Description = "ניתוח",
-    AssignedToUserId = 1,
-    CustomDataJson = @"{
-        ""priority"": ""high"",
-        ""deadline"": ""2026-06-15"",
-        ""estimatedHours"": 8,
-        ""customField"": ""ערך"""
-};
-
-// שמירה בדטה בייס
-context.Tasks.Add(task);
-await context.SaveChangesAsync();
-```
-
-## 📖 הערות חשובות
-
-- **JSON Columns**: EF Core 8 תומך בעבודה עם JSON columns בצורה מובנית
-- **Foreign Keys**: קשר One-to-Many בין AppUser ו-BaseTask עם `OnDelete(DeleteBehavior.Restrict)`
-- **Indexes**: יצירת אינדקס על `Email` ו-`TaskType` להאצת חיפושים
-- **Timestamps**: `CreatedAt` ו-`UpdatedAt` מוגדרים עם `GETUTCDATE()` כברירת מחדל
-
-## 🚀 שלבים הבאים
-
-1. יצירת Controllers לקבלת בקשות API
-2. הוספת Business Logic שכבה
-3. מימוש סינון וחיפוש משימות לפי סוג וסטטוס
-4. הוספת Validation ל-CustomDataJson
-5. יצירת Migration ו-seed לנתונים נוספים
-
----
-
-**נבנה עם:** .NET 8, EF Core 8, SQL Server
+At startup the app applies migrations when present, falls back to `EnsureCreated()`
+otherwise, and then runs `HybridSchemaBootstrapper.EnsureSchema()` so existing
+databases get the task type metadata tables and seeded field definitions.
