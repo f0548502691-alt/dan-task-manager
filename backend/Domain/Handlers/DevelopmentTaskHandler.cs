@@ -39,27 +39,27 @@ public class DevelopmentTaskHandler : StatusValidationTaskHandlerBase
             if (!root.TryGetProperty("specification", out var specElement))
             {
                 return ValidationResult.Failure(
-                    "בסטטוס 2, נדרש שדה 'specification' המכיל טקסט אפיון");
+                    "Status 2 requires a 'specification' field containing specification text");
             }
 
             // בדיקה שזהו מחרוזת
             if (specElement.ValueKind != JsonValueKind.String)
             {
-                return ValidationResult.Failure("'specification' חייב להיות מחרוזת");
+                return ValidationResult.Failure("'specification' must be a string");
             }
 
             var specification = specElement.GetString();
             if (string.IsNullOrWhiteSpace(specification) || specification.Length < 10)
             {
                 return ValidationResult.Failure(
-                    "'specification' חייב להכיל לפחות 10 תווים");
+                    "'specification' must be at least 10 characters long");
             }
 
             return ValidationResult.Success();
         }
         catch (JsonException ex)
         {
-            return ValidationResult.Failure($"שגיאה בפענוח JSON: {ex.Message}");
+            return ValidationResult.Failure($"Invalid JSON payload: {ex.Message}");
         }
     }
 
@@ -77,19 +77,19 @@ public class DevelopmentTaskHandler : StatusValidationTaskHandlerBase
             if (!root.TryGetProperty("branchName", out var branchElement))
             {
                 return ValidationResult.Failure(
-                    "בסטטוס 3, נדרש שדה 'branchName' המכיל שם הבראנץ'");
+                    "Status 3 requires a 'branchName' field containing a branch name");
             }
 
             // בדיקה שזהו מחרוזת
             if (branchElement.ValueKind != JsonValueKind.String)
             {
-                return ValidationResult.Failure("'branchName' חייב להיות מחרוזת");
+                return ValidationResult.Failure("'branchName' must be a string");
             }
 
             var branchName = branchElement.GetString();
             if (string.IsNullOrWhiteSpace(branchName))
             {
-                return ValidationResult.Failure("'branchName' לא יכול להיות ריק");
+                return ValidationResult.Failure("'branchName' cannot be empty");
             }
 
             // בדיקה בסיסית של כללי Git branch names
@@ -97,14 +97,14 @@ public class DevelopmentTaskHandler : StatusValidationTaskHandlerBase
                 branchName.EndsWith(".") || branchName.Contains(" "))
             {
                 return ValidationResult.Failure(
-                    "שם הבראנץ' אינו תקין (לא יכול להכיל //, להסתיים ב-/, . או רווחים)");
+                    "Invalid branch name (cannot contain //, end with / or ., or include spaces)");
             }
 
             return ValidationResult.Success();
         }
         catch (JsonException ex)
         {
-            return ValidationResult.Failure($"שגיאה בפענוח JSON: {ex.Message}");
+            return ValidationResult.Failure($"Invalid JSON payload: {ex.Message}");
         }
     }
 
@@ -122,7 +122,7 @@ public class DevelopmentTaskHandler : StatusValidationTaskHandlerBase
             if (!root.TryGetProperty("versionNumber", out var versionElement))
             {
                 return ValidationResult.Failure(
-                    "בסטטוס 4, נדרש שדה 'versionNumber' המכיל מספר גרסה");
+                    "Status 4 requires a 'versionNumber' field containing a version number");
             }
 
             // בדיקה שזהו מחרוזת או מספר
@@ -138,12 +138,12 @@ public class DevelopmentTaskHandler : StatusValidationTaskHandlerBase
             else
             {
                 return ValidationResult.Failure(
-                    "'versionNumber' חייב להיות מחרוזת או מספר");
+                    "'versionNumber' must be a string or a number");
             }
 
             if (string.IsNullOrWhiteSpace(versionString))
             {
-                return ValidationResult.Failure("'versionNumber' לא יכול להיות ריק");
+                return ValidationResult.Failure("'versionNumber' cannot be empty");
             }
 
             // בדיקה שהוא בפורמט Semantic Versioning (אופציונלי - דוגמה: 1.0.0)
@@ -155,7 +155,7 @@ public class DevelopmentTaskHandler : StatusValidationTaskHandlerBase
                     if (!int.TryParse(part, out _))
                     {
                         return ValidationResult.Failure(
-                            $"'versionNumber' חייב להיות בפורמט SemVer (לדוגמה: 1.0.0), קיבלנו: {versionString}");
+                            $"'versionNumber' must follow SemVer format (for example: 1.0.0), received: {versionString}");
                     }
                 }
             }
@@ -164,7 +164,7 @@ public class DevelopmentTaskHandler : StatusValidationTaskHandlerBase
         }
         catch (JsonException ex)
         {
-            return ValidationResult.Failure($"שגיאה בפענוח JSON: {ex.Message}");
+            return ValidationResult.Failure($"Invalid JSON payload: {ex.Message}");
         }
     }
 }

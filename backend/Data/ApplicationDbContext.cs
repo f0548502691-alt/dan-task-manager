@@ -272,42 +272,42 @@ public class ApplicationDbContext : DbContext
             new AppUser
             {
                 Id = 1,
-                Name = "דן כהן",
+                Name = "Dan Cohen",
                 Email = "dan@example.com",
                 CreatedAt = SeedTimestampUtc
             },
             new AppUser
             {
                 Id = 2,
-                Name = "רות לוי",
+                Name = "Ruth Levi",
                 Email = "ruth@example.com",
                 CreatedAt = SeedTimestampUtc
             },
             new AppUser
             {
                 Id = 3,
-                Name = "משה אברהם",
+                Name = "Moshe Avraham",
                 Email = "moshe@example.com",
                 CreatedAt = SeedTimestampUtc
             },
             new AppUser
             {
                 Id = 4,
-                Name = "נועה ישראלי",
+                Name = "Noa Israeli",
                 Email = "noa@example.com",
                 CreatedAt = SeedTimestampUtc
             },
             new AppUser
             {
                 Id = 5,
-                Name = "איתן ברק",
+                Name = "Eitan Barak",
                 Email = "eitan@example.com",
                 CreatedAt = SeedTimestampUtc
             },
             new AppUser
             {
                 Id = 6,
-                Name = "מיכל גל",
+                Name = "Michal Gal",
                 Email = "michal@example.com",
                 CreatedAt = SeedTimestampUtc
             }
@@ -425,11 +425,11 @@ public class ApplicationDbContext : DbContext
             new BaseTask
             {
                 Id = 1,
-                TaskType = "Analysis",
-                Description = "ניתוח דרישות לפרויקט החדש",
-                CurrentStatus = 1, // בתהליך
+                TaskType = "Procurement",
+                Description = "Collect supplier quotes for new equipment",
+                CurrentStatus = WorkflowConstants.CreatedStatus,
                 AssignedToUserId = 1,
-                CustomDataJson = "{\"priority\": \"high\", \"deadline\": \"2026-06-15\", \"estimatedHours\": 8}",
+                CustomDataJson = "{}",
                 CreatedAt = SeedTimestampUtc,
                 UpdatedAt = SeedTimestampUtc
             },
@@ -437,21 +437,10 @@ public class ApplicationDbContext : DbContext
             {
                 Id = 2,
                 TaskType = "Development",
-                Description = "פיתוח מודול ניהול משתמשים",
-                CurrentStatus = WorkflowConstants.CreatedStatus, // Created
+                Description = "Develop the user management module",
+                CurrentStatus = WorkflowConstants.CreatedStatus,
                 AssignedToUserId = 2,
-                CustomDataJson = "{\"priority\": \"medium\", \"deadline\": \"2026-07-01\", \"estimatedHours\": 16}",
-                CreatedAt = SeedTimestampUtc,
-                UpdatedAt = SeedTimestampUtc
-            },
-            new BaseTask
-            {
-                Id = 3,
-                TaskType = "Testing",
-                Description = "בדיקת תכונות ה-API",
-                CurrentStatus = 2, // הושלמה
-                AssignedToUserId = 3,
-                CustomDataJson = "{\"priority\": \"high\", \"testCases\": 15, \"coverage\": \"85%\"}",
+                CustomDataJson = "{}",
                 CreatedAt = SeedTimestampUtc,
                 UpdatedAt = SeedTimestampUtc
             }

@@ -7,10 +7,10 @@ import {
   ChangeStatusWorkflowResponse,
   CloseTaskRequest,
   CloseTaskResponse,
-  TASK_STATUS,
-  TaskCustomData,
   TaskTypeSchemaDto,
   PagedResultDto,
+  TASK_STATUS,
+  TaskCustomData,
   CreateTaskRequest,
   UpdateTaskRequest
 } from './task.interfaces';
@@ -68,6 +68,13 @@ export class TaskService {
       tap((tasks) => this._tasks.set(tasks)),
       catchError((error) => this.handleHttpError(error)),
       finalize(() => this._isLoading.set(false))
+    );
+  }
+
+  getTask(taskId: number): Observable<BaseTaskDto> {
+    this._error.set(null);
+    return this.http.get<BaseTaskDto>(`${this.apiUrl}/${taskId}`).pipe(
+      catchError((error) => this.handleHttpError(error))
     );
   }
 
@@ -150,7 +157,7 @@ export class TaskService {
 
   private syncTaskWithState(task: BaseTaskDto): void {
     const currentUserId = this._currentUserId();
-    if (currentUserId === null || task.assignedToUserId !== currentUserId || task.currentStatus === TASK_STATUS.CLOSED) {
+    if (currentUserId === null || task.assignedToUserId !== currentUserId) {
       this.removeTaskFromState(task.id);
       return;
     }
@@ -218,44 +225,42 @@ export class TaskService {
         ? {
             id: this.toNumber((assignedToUserPayload as Record<string, unknown>)['id']),
             name: this.toStringValue((assignedToUserPayload as Record<string, unknown>)['name'], ''),
-            email: this.toStringValue((assignedToUserPayload as Record<string, unknown>)['email'], ''),
-            createdAt: this.toStringValue((assignedToUserPayload as Record<string, unknown>)['createdAt'], '')
+            email: this.toStringValue((assignedToUserPayload as Record<string, unknown>)['email'], '')
           }
         : null;
 
     return {
       id: this.toNumber(task['id']),
       taskType: this.toStringValue(task['taskType'], ''),
-      currentStatus: this.toNumber(task['currentStatus'], TASK_STATUS.IN_PROGRESS),
+      currentStatus: this.toNumber(task['currentStatus'], TASK_STATUS.CREATED),
       assignedToUserId: this.toNumber(task['assignedToUserId']),
       assignedToUser,
       description: this.toStringValue(task['description'], ''),
-      customDataJson: this.extractCustomDataJson(task),
+      customFields: this.extractCustomFields(task),
       createdAt: this.toStringValue(task['createdAt'], new Date(0).toISOString()),
       updatedAt: this.toStringValue(task['updatedAt'], new Date(0).toISOString())
     };
   }
 
-  private extractCustomDataJson(task: Record<string, unknown>): string {
+  private extractCustomFields(task: Record<string, unknown>): TaskCustomData {
+    const customFields = task['customFields'];
+    if (typeof customFields === 'object' && customFields !== null && !Array.isArray(customFields)) {
+      return customFields as TaskCustomData;
+    }
+
     const customDataJson = task['customDataJson'];
     if (typeof customDataJson === 'string') {
-      return customDataJson;
+      try {
+        const parsed: unknown = JSON.parse(customDataJson);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          return parsed as TaskCustomData;
+        }
+      } catch {
+        // keep fallback
+      }
     }
 
-    const customFields = task['customFields'];
-    if (customFields === null || customFields === undefined) {
-      return '{}';
-    }
-
-    if (typeof customFields === 'string') {
-      return customFields;
-    }
-
-    if (typeof customFields === 'object' && !Array.isArray(customFields)) {
-      return JSON.stringify(customFields as TaskCustomData);
-    }
-
-    return '{}';
+    return {};
   }
 
   private isPagedResult(value: unknown): value is PagedResultDto<unknown> {

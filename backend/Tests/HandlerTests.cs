@@ -65,7 +65,7 @@ public class ProcurementTaskHandlerTests
 
         // Assert
         Assert.False(result.IsValid);
-        Assert.Contains("ריק", result.Message);
+        Assert.Contains("empty", result.Message);
     }
 
     // === בדיקות סטטוס 3 ===
@@ -126,7 +126,7 @@ public class ProcurementTaskHandlerTests
 
         // Assert
         Assert.False(result.IsValid);
-        Assert.Contains("סטטוס סופי", result.Message);
+        Assert.Contains("final status", result.Message);
     }
 
     [Fact]
@@ -159,7 +159,7 @@ public class DevelopmentTaskHandlerTests
         // Arrange
         var json = JsonSerializer.Serialize(new 
         { 
-            specification = "יש לפתח מודול ניהול משתמשים עם Swagger UI ו-JWT authentication"
+            specification = "Develop a user management module with Swagger UI and JWT authentication"
         });
 
         // Act
@@ -173,7 +173,7 @@ public class DevelopmentTaskHandlerTests
     public void ValidateStatus2_WithTooShortSpecification_ShouldFail()
     {
         // Arrange
-        var json = JsonSerializer.Serialize(new { specification = "קצר" });
+        var json = JsonSerializer.Serialize(new { specification = "short" });
 
         // Act
         var result = _handler.ValidateStatusChange("{}", 1, 2, json);
@@ -202,7 +202,7 @@ public class DevelopmentTaskHandlerTests
     public void ValidateStatus3_WithValidBranchName_ShouldPass()
     {
         // Arrange
-        var currentJson = JsonSerializer.Serialize(new { specification = "תיאור ארוך מספיק..." });
+        var currentJson = JsonSerializer.Serialize(new { specification = "Long enough specification text..." });
         var newJson = JsonSerializer.Serialize(new { branchName = "feature/user-management" });
 
         // Act
@@ -216,7 +216,7 @@ public class DevelopmentTaskHandlerTests
     public void ValidateStatus3_WithDoubleSlashInBranchName_ShouldFail()
     {
         // Arrange
-        var currentJson = JsonSerializer.Serialize(new { specification = "תיאור..." });
+        var currentJson = JsonSerializer.Serialize(new { specification = "Specification..." });
         var newJson = JsonSerializer.Serialize(new { branchName = "feature//user" });
 
         // Act
@@ -230,7 +230,7 @@ public class DevelopmentTaskHandlerTests
     public void ValidateStatus3_WithSpaceInBranchName_ShouldFail()
     {
         // Arrange
-        var currentJson = JsonSerializer.Serialize(new { specification = "תיאור..." });
+        var currentJson = JsonSerializer.Serialize(new { specification = "Specification..." });
         var newJson = JsonSerializer.Serialize(new { branchName = "feature user" });
 
         // Act
@@ -248,7 +248,7 @@ public class DevelopmentTaskHandlerTests
         // Arrange
         var currentJson = JsonSerializer.Serialize(new 
         { 
-            specification = "תיאור...",
+            specification = "Specification...",
             branchName = "feature/user"
         });
         var newJson = JsonSerializer.Serialize(new { versionNumber = "1.2.3" });

@@ -80,6 +80,15 @@ public class TaskTypesController : ControllerBase
         string taskType,
         UpsertTaskTypeFieldRequest request)
     {
+        if (!DanTaskManager.Domain.WorkflowConstants.IsSupportedTaskType(taskType))
+        {
+            return BadRequest(new
+            {
+                error = $"Unsupported task type: {taskType}",
+                supportedTaskTypes = DanTaskManager.Domain.WorkflowConstants.SupportedTaskTypes
+            });
+        }
+
         if (string.IsNullOrWhiteSpace(request.Field))
         {
             throw new ApiValidationException("Field נדרש");

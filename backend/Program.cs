@@ -13,8 +13,9 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
 );
 
-// ✅ הרשמה של Task Handlers
-builder.Services.AddTaskHandlersFromAssembly(typeof(ITaskHandler).Assembly);
+// ✅ הרשמה של Task Handlers עבור הסוגים הנתמכים בלבד
+builder.Services.AddTransient<ITaskHandler, ProcurementTaskHandler>();
+builder.Services.AddTransient<ITaskHandler, DevelopmentTaskHandler>();
 
 // ✅ הרשמה של TaskHandlerFactory
 builder.Services.AddScoped<TaskHandlerFactory>();
