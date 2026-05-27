@@ -60,7 +60,7 @@ someExternalCallback((message) => {
 
 ### Setup and troubleshooting
 - Use `npm --prefix frontend start` for local development; it runs `ng serve --proxy-config proxy.conf.json` and forwards `/api` to `http://localhost:8080`.
-- Use `npm --prefix frontend build` to verify the standalone zoneless bundle.
+- Use `npm --prefix frontend run build` to verify the standalone zoneless bundle.
 - If a build or runtime change expects `zone.js`, first check whether the integration can be expressed with signals, reactive forms, or explicit change detection. Reintroducing Zone.js changes the runtime contract and should be a deliberate architecture decision.
 
 ## Client Baseline (Angular)
