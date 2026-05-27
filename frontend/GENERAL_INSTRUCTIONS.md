@@ -25,6 +25,49 @@ Adopt Signal Store when at least one of these is true:
 - For the current task workflow UI, existing Angular Signals in `TaskService` are sufficient.
 - No immediate migration to Signal Store is required.
 
+## Global Error Handling
+
+### Backend contract
+
+The backend now normalizes handled API errors through `GlobalExceptionMiddleware`:
+
+```json
+{
+  "error": "TaskType נדרש",
+  "code": "validation_failed"
+}
+```
+
+- Display `error` to users.
+- Treat `code` as optional. It is useful for future branching or telemetry, but the UI should not fail if it is absent.
+- Do not parse localized `error` text for business logic.
+
+### Client flow
+
+The root bootstrap in `src/main.ts` wires the error stack:
+
+```ts
+provideHttpClient(withInterceptors([httpErrorInterceptor])),
+{ provide: ErrorHandler, useClass: AppErrorHandler },
+provideZonelessChangeDetection()
+```
+
+Codepaths:
+
+- `src/app/core/error-message.utils.ts` extracts user-facing messages. It prefers backend `{ error, code? }`, then string payloads, then `HttpErrorResponse.message`, then fallback copy.
+- `src/app/core/http-error.interceptor.ts` writes HTTP failures to `AppErrorService` and rethrows `Error(message)`.
+- `src/app/core/app-error-handler.ts` catches unhandled client-side errors, stores the extracted message globally, and logs the original error.
+- `src/app/core/app-error.service.ts` owns the global signal.
+- `src/app/app.component.ts` renders the global banner from `AppErrorService.error()`.
+- `TaskService` still owns feature-level task errors. Each task API method clears both local and global errors before a request, then stores failures in both places.
+
+### Error-handling constraints
+
+- Keep cross-cutting HTTP parsing in `error-message.utils.ts`; components should not inspect `HttpErrorResponse` directly.
+- Preserve the interceptor's `throwError(() => new Error(message))` behavior so subscribers receive a plain `Error` with the displayed message.
+- When adding a new service method, call `clearErrorsState()` before the request and route failures through `handleHttpError()`.
+- Keep the app zoneless-friendly: use signals, observables, or explicit state updates for async error UI.
+
 ## Client Baseline (Angular)
 
 Use the following checklist as the default baseline for client-side task workflow work:
@@ -51,3 +94,15 @@ Use the following checklist as the default baseline for client-side task workflo
 - [OK] Closing a task from the UI is implemented in `task-workflow-board` via `submitCloseTask()`.
 - [OK] Hard-coded user ID wiring is implemented in `TaskWorkflowBoardComponent` (`DEFAULT_CURRENT_USER_ID = 1` + `setCurrentUserId` on init).
 - [OK] Strict mode is explicitly configured in `frontend/tsconfig.json` (`"strict": true`).
+
+## Task API Boundary Notes
+
+The backend public request models live under `backend/Contracts/Requests` and use `customFields` for dynamic task data.
+
+- Status changes send `ChangeStatusWorkflowRequest` with `newStatus`, `nextAssignedToUserId`, and a required `customFields` object.
+- Close requests send `CloseTaskRequest` with `nextAssignedToUserId` and `finalNotes`.
+- List endpoints return `PagedResult<TaskSummaryDto>` and omit `customFields`; detail/change/close responses include task details.
+- `TaskService.normalizeTaskCollection()` accepts both paged results and legacy arrays so the board remains tolerant while the API contract settles.
+- `TaskService.extractCustomDataJson()` accepts either backend `customFields` objects or legacy `customDataJson` strings and stores the normalized string for existing form hydration helpers.
+
+Do not introduce new `newDataJson` payloads in the client. If create-task dynamic fields are added to the UI, align the TypeScript request type with the backend `customFields` contract instead of extending `customDataJson`.

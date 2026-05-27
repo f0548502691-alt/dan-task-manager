@@ -8,6 +8,13 @@
 
 ## 📚 Complete Documentation Guide
 
+### Current API contract notes
+
+- Public task request bodies live under `Contracts/Requests` and use `customFields`, not `newDataJson`.
+- New tasks start at status `1`; closed tasks use status `99`.
+- Handled API errors are returned as `{ "error": "...", "code": "..." }`.
+- Use [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) and [API_ERROR_CODES.md](API_ERROR_CODES.md) as the current source of truth for workflow requests and error handling.
+
 ### 🚀 Quick Reference
 | Document | Purpose | Duration |
 |----------|---------|----------|
@@ -173,8 +180,9 @@ Implementation:
 | What | Where |
 |------|-------|
 | API Endpoints | [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) - REST API Endpoints section |
-| Error Messages | [API_ERROR_CODES.md](API_ERROR_CODES.md) |
+| Error Messages | [API_ERROR_CODES.md](API_ERROR_CODES.md) - `{ error, code }` API error contract |
 | Workflow Rules | [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) - Workflow Rules section |
+| Public Request DTOs | [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) - Public request models section |
 | Handler Validation | [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md) |
 | Code Examples | [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs) or [STRATEGY_EXAMPLES.cs](STRATEGY_EXAMPLES.cs) |
 | Best Practices | [BEST_PRACTICES.md](BEST_PRACTICES.md) |
@@ -218,9 +226,9 @@ Test Cases:                35+
 
 ### Response Pattern
 - Success: 200/201 with data
-- Validation Error: 400 with message
-- Not Found: 404
-- Server Error: 500
+- Validation Error: 400 with `{ error, code }`
+- Not Found: 404 with `{ error, code: "not_found" }`
+- Server Error: 500 with `{ error, code: "internal_server_error" }`
 
 ---
 

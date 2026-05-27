@@ -1,463 +1,150 @@
-# 🔔 API Response Codes & Error Messages
+# API Error Handling Reference
 
-## HTTP Status Codes
+This API returns a consistent JSON shape for handled errors:
 
-| Code | Meaning | Example |
-|------|---------|---------|
-| **200 OK** | ✅ Success | Status changed, task closed, task retrieved |
-| **201 Created** | ✅ Resource created | Task created successfully |
-| **400 Bad Request** | ❌ Invalid request | Validation failed, invalid movement |
-| **404 Not Found** | ❌ Resource missing | Task not found, user not found |
-| **500 Server Error** | ❌ Server issue | Database error, unhandled exception |
-
----
-
-## Error Messages
-
-### Movement Validation Errors
-
-#### ❌ Forward Movement More Than +1
-```
-Status: 400 Bad Request
-
-Response:
+```json
 {
-  "error": "תנועה קדימה חייבת להיות בדיוק ב-1 סטטוס. סטטוס נוכחי: 1, מבוקש: 3"
+  "error": "TaskType נדרש",
+  "code": "validation_failed"
 }
 ```
 
-#### ❌ Same Status (No Change)
-```
-Status: 400 Bad Request
+- `error` is the human-readable message to display. It may be localized and should not be used as a stable branch key.
+- `code` is the machine-readable category. It is optional on older responses, but all handled errors emitted by `GlobalExceptionMiddleware` include it.
 
-Response:
-{
-  "error": "אותו סטטוס - לא ניתן לבקש שינוי לסטטוס זהה"
-}
-```
+## Backend flow
 
-#### ❌ Closed Task (Status 99)
-```
-Status: 400 Bad Request
+| Codepath | Responsibility |
+|----------|----------------|
+| `Domain/ApiException.cs` | Base exception carrying `StatusCode`, `Code`, and message. |
+| `Domain/ApiValidationException.cs` | Maps validation-style failures to HTTP 400. Default code: `validation_failed`. |
+| `Domain/WorkflowValidationException.cs` | Workflow/business validation failure. Inherits from `ApiValidationException` with code `workflow_validation_failed`. |
+| `Domain/ApiNotFoundException.cs` | Resource lookup failure. Maps to HTTP 404 with code `not_found`. |
+| `Middleware/GlobalExceptionMiddleware.cs` | Catches `ApiException`, logs a warning, and serializes `{ error, code }`. Unhandled exceptions become HTTP 500 with code `internal_server_error`. |
+| `Controllers/*Controller.cs` | Throws API exceptions instead of returning ad hoc `BadRequest`/`NotFound` payloads. |
 
-Response:
-{
-  "error": "משימה סגורה - לא ניתן לשנות סטטוס"
-}
-```
+`Program.cs` registers the middleware before HTTPS redirection and controller mapping:
 
-#### ❌ Final Status Exceeded
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "משימה הגיעה לסטטוס סופי: 3. לא ניתן להעביר לסטטוס: 4"
-}
-```
-
----
-
-### Handler Validation Errors
-
-#### ❌ Procurement - Missing Prices
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "'prices' חייב להכיל בדיוק 2 מחרוזות, לא נמצא שדה"
-}
-```
-
-#### ❌ Procurement - Invalid Price Count
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "'prices' חייב להכיל בדיוק 2 מחרוזות, נמצאו 1"
-}
-```
-
-#### ❌ Procurement - Empty Price
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "כל מחיר ב-'prices' חייב להיות מחרוזת לא ריקה"
-}
-```
-
-#### ❌ Procurement - Missing Receipt
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "'receipt' חייב להיות מחרוזת לא ריקה"
-}
-```
-
-#### ❌ Development - Missing Specification
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "'specification' חייב להיות מחרוזת עם לפחות 10 תווים"
-}
-```
-
-#### ❌ Development - Short Specification
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "'specification' חייב להיות לפחות 10 תווים, נמצאו 5"
-}
-```
-
-#### ❌ Development - Invalid Branch Name
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "'branchName' אינו שם תקין של branch: 'feature//invalid' - לא יכול להכיל //"
-}
-```
-
-Or:
-```
-{
-  "error": "'branchName' אינו שם תקין של branch: 'feature/test/' - לא יכול להסתיים ב-/"
-}
-```
-
-Or:
-```
-{
-  "error": "'branchName' אינו שם תקין של branch: 'feature test' - לא יכול להכיל רווחים"
-}
-```
-
-#### ❌ Development - Invalid Version
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "'versionNumber' חייב להיות בפורמט SemVer (major.minor.patch), קיבלנו: '1.2'"
-}
-```
-
----
-
-### Resource Not Found Errors
-
-#### ❌ Task Not Found
-```
-Status: 404 Not Found
-
-Response:
-{
-  "error": "משימה עם ID 999 לא נמצאה"
-}
-```
-
-#### ❌ User Not Found
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "משתמש עם ID 999 לא קיים"
-}
-```
-
----
-
-### Validation Errors (Create/Update)
-
-#### ❌ Invalid Task Type
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "TaskType חייב להיות מחרוזת לא ריקה"
-}
-```
-
-#### ❌ Missing Description
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "Description חייב להיות מחרוזת לא ריקה"
-}
-```
-
-#### ❌ Unknown Task Type
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "TaskType 'Unknown' לא רשום בהנדלרים"
-}
-```
-
----
-
-## Success Responses
-
-### ✅ Status Changed Successfully
-```
-Status: 200 OK
-
-Response:
-{
-  "success": true,
-  "message": "סטטוס עודכן בהצלחה ל-2",
-  "newStatus": 2,
-  "task": {
-    "id": 1,
-    "taskType": "Procurement",
-    "description": "רכישת חומרים",
-    "currentStatus": 2,
-    "assignedToUserId": 1,
-    "customDataJson": "{\"prices\": [\"5000\", \"4800\"]}",
-    "createdAt": "2026-05-25T10:00:00Z",
-    "updatedAt": "2026-05-25T10:05:00Z"
-  }
-}
-```
-
-### ✅ Task Closed Successfully
-```
-Status: 200 OK
-
-Response:
-{
-  "success": true,
-  "message": "משימה סגורה בהצלחה",
-  "newStatus": 99,
-  "task": {
-    "id": 1,
-    "taskType": "Procurement",
-    "description": "רכישת חומרים",
-    "currentStatus": 99,
-    "customDataJson": "{\"prices\": [...], \"receipt\": \"...\", \"finalNotes\": \"משימה הושלמה בהצלחה\", \"closedAt\": \"2026-05-25T10:10:00Z\"}",
-    "createdAt": "2026-05-25T10:00:00Z",
-    "updatedAt": "2026-05-25T10:10:00Z"
-  }
-}
-```
-
-### ✅ Task Created
-```
-Status: 201 Created
-
-Response:
-{
-  "id": 1,
-  "taskType": "Procurement",
-  "description": "רכישת חומרים",
-  "currentStatus": 0,
-  "assignedToUserId": 1,
-  "customDataJson": "{}",
-  "createdAt": "2026-05-25T10:00:00Z",
-  "updatedAt": "2026-05-25T10:00:00Z"
-}
-```
-
-### ✅ Task Retrieved
-```
-Status: 200 OK
-
-Response:
-{
-  "id": 1,
-  "taskType": "Procurement",
-  "description": "רכישת חומרים",
-  "currentStatus": 2,
-  "assignedToUserId": 1,
-  "customDataJson": "{\"prices\": [\"5000\", \"4800\"]}",
-  "createdAt": "2026-05-25T10:00:00Z",
-  "updatedAt": "2026-05-25T10:05:00Z"
-}
-```
-
-### ✅ User Tasks Retrieved
-```
-Status: 200 OK
-
-Response:
-[
-  {
-    "id": 1,
-    "taskType": "Procurement",
-    "description": "רכישת חומרים",
-    "currentStatus": 2,
-    "assignedToUserId": 1,
-    "customDataJson": "{\"prices\": [\"5000\", \"4800\"]}"
-  },
-  {
-    "id": 2,
-    "taskType": "Development",
-    "description": "פיתוח API",
-    "currentStatus": 1,
-    "assignedToUserId": 1,
-    "customDataJson": "{}"
-  }
-]
-```
-
----
-
-## Common Error Scenarios
-
-### Scenario 1: Invalid Forward Jump
-
-```
-🔴 Request
-POST /api/tasks/1/change-status
-{ "newStatus": 3, "newDataJson": "{}" }
-
-Current Status: 1
-
-🔴 Response
-Status: 400 Bad Request
-{
-  "error": "תנועה קדימה חייבת להיות בדיוק ב-1 סטטוס. סטטוס נוכחי: 1, מבוקש: 3"
-}
-
-✅ Solution: Move to status 2 first
-POST /api/tasks/1/change-status
-{ "newStatus": 2, "newDataJson": "{...}" }
-```
-
-### Scenario 2: Missing Handler Data
-
-```
-🔴 Request
-POST /api/tasks/1/change-status
-{ "newStatus": 2, "newDataJson": "{}" }
-
-Current Task: Procurement, Status 1
-
-🔴 Response
-Status: 400 Bad Request
-{
-  "error": "'prices' חייב להכיל בדיוק 2 מחרוזות, לא נמצא שדה"
-}
-
-✅ Solution: Add required data
-POST /api/tasks/1/change-status
-{
-  "newStatus": 2,
-  "newDataJson": "{\"prices\": [\"5000\", \"4800\"]}"
-}
-```
-
-### Scenario 3: Task Already Closed
-
-```
-🔴 Request
-POST /api/tasks/1/change-status
-{ "newStatus": 1, "newDataJson": "{}" }
-
-Task Status: 99 (Closed)
-
-🔴 Response
-Status: 400 Bad Request
-{
-  "error": "משימה סגורה - לא ניתן לשנות סטטוס"
-}
-
-✅ Solution: Cannot be changed. Create new task if needed.
-```
-
-### Scenario 4: Invalid JSON Data
-
-```
-🔴 Request
-POST /api/tasks/1/change-status
-{
-  "newStatus": 2,
-  "newDataJson": "{not valid json}"
-}
-
-Current Task: Procurement, Status 1
-
-🔴 Response
-Status: 400 Bad Request
-{
-  "error": "JSON לא תקין ב-newDataJson"
-}
-
-✅ Solution: Use valid JSON
-POST /api/tasks/1/change-status
-{
-  "newStatus": 2,
-  "newDataJson": "{\"prices\": [\"5000\", \"4800\"]}"
-}
-```
-
----
-
-## Testing Error Handling
-
-### Unit Test Pattern
 ```csharp
-[Fact]
-public async Task ChangeStatus_InvalidMovement_ShouldReturnError()
+app.UseMiddleware<GlobalExceptionMiddleware>();
+app.UseHttpsRedirection();
+app.MapControllers();
+```
+
+## Status and code matrix
+
+| Scenario | Status | Code | Source |
+|----------|--------|------|--------|
+| FluentValidation request failures | 400 | `validation_failed` | `TasksController` validators for create/change/close requests |
+| Create task unsupported type | 400 | `task_type_validation_failed` | `TasksController.CreateTask` |
+| Create task application failure | 400 | `task_creation_failed` | `TasksController.CreateTask` |
+| Workflow movement, assignment, final-status, or closed-task failure | 400 | `workflow_validation_failed` | `WorkflowValidationException` |
+| Task type upsert failure | 400 | `task_type_validation_failed` | `TaskTypesController.UpsertTaskType` |
+| Task type field upsert failure | 400 | `task_type_field_validation_failed` | `TaskTypesController.UpsertTaskTypeField` |
+| Missing task, user, or task type schema | 404 | `not_found` | `ApiNotFoundException` |
+| Unexpected server exception | 500 | `internal_server_error` | `GlobalExceptionMiddleware` fallback |
+
+## Examples
+
+### Request validation failure
+
+```http
+POST /api/tasks/1/change-status
+Content-Type: application/json
+
 {
-    // Arrange
-    var task = await _context.Tasks.FindAsync(1);
-    task!.CurrentStatus = 1;
-
-    // Act
-    var result = await _service.ChangeStatusAsync(1, 3, "{}");
-
-    // Assert
-    Assert.False(result.Success);
-    Assert.Contains("בדיוק ב-1 סטטוס", result.Message);
+  "newStatus": 2,
+  "nextAssignedToUserId": 1,
+  "customFields": []
 }
 ```
 
-### Postman Test Pattern
-```javascript
-// Test status code
-pm.test("Status code is 400", function () {
-    pm.response.to.have.status(400);
-});
-
-// Test error message
-pm.test("Error message contains validation text", function () {
-    pm.expect(pm.response.text()).to.include("תנועה קדימה");
-});
+```json
+{
+  "error": "CustomFields חייב להיות אובייקט JSON",
+  "code": "validation_failed"
+}
 ```
 
----
+`ChangeStatusWorkflowRequest` requires:
 
-## Summary
+- `newStatus > 0`
+- `nextAssignedToUserId > 0`
+- `customFields` present and shaped as a JSON object
 
-| Scenario | Status | Message | Action |
-|----------|--------|---------|--------|
-| ✅ Success | 200 | "סטטוס עודכן בהצלחה" | Proceed |
-| ❌ Invalid jump | 400 | "בדיוק ב-1 סטטוס" | Move +1 first |
-| ❌ Missing data | 400 | "לא נמצא שדה" | Add required data |
-| ❌ Closed task | 400 | "משימה סגורה" | Cannot change |
-| ❌ Not found | 404 | "לא נמצאה" | Create first |
-| ❌ Bad request | 400 | Various | Check input |
-| ❌ Server error | 500 | "שגיאת שרת" | Contact support |
+### Workflow validation failure
 
----
+```http
+POST /api/tasks/1/change-status
+Content-Type: application/json
 
-**Always check the error message for specific guidance on what went wrong and how to fix it! 🔍**
+{
+  "newStatus": 3,
+  "nextAssignedToUserId": 1,
+  "customFields": {}
+}
+```
+
+When the task is currently at status `1`, forward movement must be exactly `+1`, so the response is:
+
+```json
+{
+  "error": "תנועה קדימה חייבת להיות בדיוק ב-1 סטטוס. סטטוס נוכחי: 1, מבוקש: 3",
+  "code": "workflow_validation_failed"
+}
+```
+
+### Resource not found
+
+```http
+GET /api/tasks/999999
+```
+
+```json
+{
+  "error": "משימה לא נמצאה",
+  "code": "not_found"
+}
+```
+
+### Unknown task type on create
+
+```http
+POST /api/tasks
+Content-Type: application/json
+
+{
+  "taskType": "Unknown",
+  "description": "Example",
+  "assignedToUserId": 1,
+  "customFields": {}
+}
+```
+
+```json
+{
+  "error": "סוג משימה לא נתמך: Unknown. Supported task types: Analysis, Development, Procurement, Testing",
+  "code": "task_type_validation_failed"
+}
+```
+
+The supported type names are generated from registered handlers plus metadata-backed task types and are included in the message text. The response no longer includes a separate `supportedTaskTypes` property.
+
+## Frontend handling
+
+The Angular client consumes the same shape through `frontend/src/app/core/error-message.utils.ts`:
+
+1. Prefer `payload.error` when the backend returns an `ApiErrorResponse`.
+2. Fall back to a non-empty string payload.
+3. Fall back to `HttpErrorResponse.message`.
+4. Use `"Unexpected server error."` or `"Unexpected error while communicating with the server."` when no better message exists.
+
+`httpErrorInterceptor` writes the extracted message to `AppErrorService` and rethrows `Error(message)`. `TaskService` also stores the message in its feature-level `error` signal so screens can show local and global error states consistently.
+
+## Extension rules
+
+- Throw `ApiException` subclasses for handled API errors so the middleware preserves the intended status and `code`.
+- Do not return anonymous `{ error = ... }` payloads directly from controllers.
+- Add new request validation to `backend/Validation/*RequestValidators.cs`; keep public request models in `backend/Contracts/Requests`.
+- Display `error` to users. Use `code` only for optional branching or analytics, and keep the UI tolerant of `code` being absent.
+- Add or update examples in this file when a new stable error code is introduced.
