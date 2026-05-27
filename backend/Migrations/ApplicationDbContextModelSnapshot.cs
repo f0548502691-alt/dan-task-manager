@@ -191,6 +191,11 @@ partial class ApplicationDbContextModelSnapshot : ModelSnapshot
             b.Property<int?>("AppliesToStatus")
                 .HasColumnType("int");
 
+            b.Property<bool>("AppliesOnClose")
+                .ValueGeneratedOnAdd()
+                .HasColumnType("bit")
+                .HasDefaultValue(false);
+
             b.Property<int?>("ArrayLength")
                 .HasColumnType("int");
 

@@ -36,6 +36,10 @@ export function getApplicableFields(
 }
 
 export function isFieldApplicableForStatus(rule: TaskFieldRuleDto, status: number): boolean {
+  if (rule.appliesOnClose && rule.appliesFromStatus == null && rule.appliesToStatus == null) {
+    return false;
+  }
+
   const from = rule.appliesFromStatus ?? Number.NEGATIVE_INFINITY;
   const to = rule.appliesToStatus ?? Number.POSITIVE_INFINITY;
   return status >= from && status <= to;

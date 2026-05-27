@@ -36,6 +36,24 @@ public interface IRegisterableTaskHandler : ITaskHandler
 }
 
 /// <summary>
+/// Optional extension point for handlers that need close-specific validation
+/// (for example rules that depend on <c>finalNotes</c>).
+/// </summary>
+public interface ICloseValidationTaskHandler : ITaskHandler
+{
+    /// <summary>
+    /// Validate the payload that will be persisted when a task is closed.
+    /// </summary>
+    /// <param name="currentDataJson">The task's existing <c>CustomDataJson</c>.</param>
+    /// <param name="closeDataJson">The merged JSON that includes close metadata.</param>
+    /// <param name="finalNotes">The close notes supplied by the caller.</param>
+    ValidationResult ValidateClose(
+        string currentDataJson,
+        string closeDataJson,
+        string finalNotes);
+}
+
+/// <summary>
 /// Outcome of a single validation step. Use <see cref="Success"/> when no
 /// rule was violated and <see cref="Failure(string)"/> with a human-readable
 /// message when one was.

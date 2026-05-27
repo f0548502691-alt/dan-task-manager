@@ -28,6 +28,7 @@ export interface TaskFieldRuleDto {
   pattern?: string | null;
   appliesFromStatus?: number | null;
   appliesToStatus?: number | null;
+  appliesOnClose?: boolean;
   allowedValues?: readonly string[] | null;
   isIndexed?: boolean;
 }

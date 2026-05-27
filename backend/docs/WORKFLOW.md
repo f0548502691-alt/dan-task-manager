@@ -20,6 +20,7 @@ checks inside `ChangeStatusAsync` / `CloseTaskAsync`.
 | The `nextAssignedToUserId` must reference an existing user. | `ChangeStatusAsync`, `CloseTaskAsync` |
 | `CustomDataJson` must parse to a JSON object. | `ChangeStatusAsync` (`IsValidJsonPayload`) |
 | `CloseTaskAsync` only succeeds from the task type's `FinalStatus`. | `CloseTaskAsync` |
+| `CloseTaskAsync` must also satisfy type-specific data requirements. | `CloseTaskAsync` + `ITaskWorkflowRuleProvider.ValidateClose` |
 
 Status constants live in `Domain/WorkflowConstants.cs`:
 
@@ -41,6 +42,7 @@ Each provider answers four questions per task type:
 
 - `int? GetFinalStatus(string taskType)`
 - `ValidationResult ValidateStatusChange(BaseTask task, int nextStatus, string newDataJson)`
+- `ValidationResult ValidateClose(BaseTask task, string finalNotes, string closeDataJson)`
 - `string BuildCloseData(BaseTask task, string finalNotes)`
 - `IReadOnlyCollection<string> GetKnownTaskTypes()` &nbsp;_(used by the startup conflict validator)_
 

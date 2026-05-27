@@ -15,5 +15,6 @@ public record UpsertTaskTypeFieldRequest(
     string? Pattern = null,
     int? AppliesFromStatus = null,
     int? AppliesToStatus = null,
+    bool AppliesOnClose = false,
     List<string>? AllowedValues = null,
     bool IsIndexed = false);

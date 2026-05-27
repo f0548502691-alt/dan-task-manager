@@ -135,6 +135,7 @@ public class TaskTypesController : ControllerBase
             Pattern = request.Pattern,
             AppliesFromStatus = request.AppliesFromStatus,
             AppliesToStatus = request.AppliesToStatus,
+            AppliesOnClose = request.AppliesOnClose,
             AllowedValues = request.AllowedValues,
             IsIndexed = request.IsIndexed
         });

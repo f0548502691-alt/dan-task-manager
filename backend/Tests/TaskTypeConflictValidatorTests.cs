@@ -100,6 +100,7 @@ public class TaskTypeConflictValidatorTests
         public bool CanHandle(string taskType) => _taskTypes.Contains(taskType, StringComparer.OrdinalIgnoreCase);
         public int? GetFinalStatus(string taskType) => 3;
         public ValidationResult ValidateStatusChange(BaseTask task, int nextStatus, string newDataJson) => ValidationResult.Success();
+        public ValidationResult ValidateClose(BaseTask task, string finalNotes, string closeDataJson) => ValidationResult.Success();
         public string BuildCloseData(BaseTask task, string finalNotes) => task.CustomDataJson;
         public IReadOnlyCollection<string> GetKnownTaskTypes() => _taskTypes;
     }

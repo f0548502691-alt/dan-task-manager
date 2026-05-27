@@ -140,6 +140,39 @@ public class TaskTypeMetadataServiceTests : IDisposable
         Assert.Contains("cannot be greater than FinalStatus", result.Message);
     }
 
+    [Fact]
+    public void ValidateCloseData_WithAppliesOnCloseRule_OnlyAppliesDuringClose()
+    {
+        var definitionResult = _service.UpsertFieldDefinition("Development", new UpsertFieldDefinitionCommand
+        {
+            Field = "postMortem",
+            Type = "string",
+            Required = true,
+            AppliesOnClose = true
+        });
+
+        Assert.True(definitionResult.Success);
+
+        var finalStatusPayload = JsonSerializer.Serialize(new
+        {
+            versionNumber = "1.0.0"
+        });
+        var closePayload = JsonSerializer.Serialize(new
+        {
+            versionNumber = "1.0.0",
+            postMortem = "Documented incidents and outcomes"
+        });
+
+        var regularStatusResult = _service.ValidateStatusData("Development", 4, finalStatusPayload);
+        var closeMissingResult = _service.ValidateCloseData("Development", 4, finalStatusPayload);
+        var closeValidResult = _service.ValidateCloseData("Development", 4, closePayload);
+
+        Assert.True(regularStatusResult.IsValid);
+        Assert.False(closeMissingResult.IsValid);
+        Assert.Contains("postMortem", closeMissingResult.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(closeValidResult.IsValid);
+    }
+
     public void Dispose()
     {
         _cache.Dispose();

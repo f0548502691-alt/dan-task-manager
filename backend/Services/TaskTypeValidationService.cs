@@ -16,6 +16,7 @@ public interface ITaskTypeValidationService
     bool HasTaskType(string taskType);
     int? GetFinalStatus(string taskType);
     ValidationResult ValidateStatusData(string taskType, int status, string payloadJson);
+    ValidationResult ValidateCloseData(string taskType, int finalStatus, string payloadJson);
 }
 
 public interface ITaskTypeMetadataService
@@ -48,6 +49,7 @@ public class UpsertFieldDefinitionCommand
     public string? Pattern { get; init; }
     public int? AppliesFromStatus { get; init; }
     public int? AppliesToStatus { get; init; }
+    public bool AppliesOnClose { get; init; }
     public List<string>? AllowedValues { get; init; }
     public bool IsIndexed { get; init; }
 }
@@ -112,6 +114,7 @@ public class FieldRuleDefinition
     public string? Pattern { get; set; }
     public int? AppliesFromStatus { get; set; }
     public int? AppliesToStatus { get; set; }
+    public bool AppliesOnClose { get; set; }
     public List<string>? AllowedValues { get; set; }
     public bool IsIndexed { get; set; }
 }
@@ -175,6 +178,42 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
             foreach (var fieldRule in fieldRules)
             {
                 var fieldResult = ValidateField(root, status, fieldRule);
+                if (!fieldResult.IsValid)
+                {
+                    return fieldResult;
+                }
+            }
+        }
+        catch (JsonException ex)
+        {
+            return ValidationResult.Failure($"Invalid JSON payload: {ex.Message}");
+        }
+
+        return ValidationResult.Success();
+    }
+
+    public ValidationResult ValidateCloseData(string taskType, int finalStatus, string payloadJson)
+    {
+        var taskDefinition = GetTaskDefinition(taskType);
+        if (taskDefinition == null)
+        {
+            return ValidationResult.Success();
+        }
+
+        var fieldRules = ResolveCloseFieldRules(taskDefinition, finalStatus);
+        if (fieldRules.Count == 0)
+        {
+            return ValidationResult.Success();
+        }
+
+        try
+        {
+            using var jsonDoc = JsonDocument.Parse(payloadJson);
+            var root = jsonDoc.RootElement;
+
+            foreach (var fieldRule in fieldRules)
+            {
+                var fieldResult = ValidateField(root, finalStatus, fieldRule);
                 if (!fieldResult.IsValid)
                 {
                     return fieldResult;
@@ -401,6 +440,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
         fieldDefinition.RegexPattern = command.Pattern;
         fieldDefinition.AppliesFromStatus = command.AppliesFromStatus;
         fieldDefinition.AppliesToStatus = command.AppliesToStatus;
+        fieldDefinition.AppliesOnClose = command.AppliesOnClose;
         fieldDefinition.IsIndexed = command.IsIndexed;
         fieldDefinition.AllowedValuesJson = command.AllowedValues is { Count: > 0 }
             ? JsonSerializer.Serialize(command.AllowedValues)
@@ -485,6 +525,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
                 Pattern = field.RegexPattern,
                 AppliesFromStatus = field.AppliesFromStatus,
                 AppliesToStatus = field.AppliesToStatus,
+                AppliesOnClose = field.AppliesOnClose,
                 AllowedValues = ParseAllowedValues(field.AllowedValuesJson),
                 IsIndexed = field.IsIndexed
             })
@@ -525,6 +566,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
                     Pattern = field.RegexPattern,
                     AppliesFromStatus = field.AppliesFromStatus,
                     AppliesToStatus = field.AppliesToStatus,
+                    AppliesOnClose = field.AppliesOnClose,
                     AllowedValues = ParseAllowedValues(field.AllowedValuesJson),
                     IsIndexed = field.IsIndexed
                 })
@@ -560,6 +602,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
                         Pattern = field.Pattern,
                         AppliesFromStatus = field.AppliesFromStatus ?? rule.Status,
                         AppliesToStatus = field.AppliesToStatus ?? rule.Status,
+                        AppliesOnClose = field.AppliesOnClose,
                         AllowedValues = field.AllowedValues,
                         IsIndexed = field.IsIndexed
                     }))
@@ -599,6 +642,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
                     Pattern = field.Pattern,
                     AppliesFromStatus = field.AppliesFromStatus ?? rule.Status,
                     AppliesToStatus = field.AppliesToStatus ?? rule.Status,
+                    AppliesOnClose = field.AppliesOnClose,
                     AllowedValues = field.AllowedValues,
                     IsIndexed = field.IsIndexed
                 }))
@@ -609,8 +653,52 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
             .ToList();
     }
 
+    private static IReadOnlyList<FieldRuleDefinition> ResolveCloseFieldRules(
+        TaskTypeDefinition taskDefinition,
+        int finalStatus)
+    {
+        var explicitRules = ResolveFieldRules(taskDefinition, finalStatus);
+        var closeRules = taskDefinition.FieldRules.Count > 0
+            ? taskDefinition.FieldRules
+            : taskDefinition.StatusRules
+                .SelectMany(rule => rule.Fields.Select(field => new FieldRuleDefinition
+                {
+                    Field = field.Field,
+                    Type = field.Type,
+                    Required = field.Required,
+                    MinLength = field.MinLength,
+                    MaxLength = field.MaxLength,
+                    MinValue = field.MinValue,
+                    MaxValue = field.MaxValue,
+                    ArrayLength = field.ArrayLength,
+                    MinItems = field.MinItems,
+                    MaxItems = field.MaxItems,
+                    ElementType = field.ElementType,
+                    Pattern = field.Pattern,
+                    AppliesFromStatus = field.AppliesFromStatus ?? rule.Status,
+                    AppliesToStatus = field.AppliesToStatus ?? rule.Status,
+                    AppliesOnClose = field.AppliesOnClose,
+                    AllowedValues = field.AllowedValues,
+                    IsIndexed = field.IsIndexed
+                }))
+                .ToList();
+
+        return explicitRules
+            .Concat(closeRules.Where(rule => rule.AppliesOnClose))
+            .ToList();
+    }
+
     private static bool IsRuleApplicableForStatus(FieldRuleDefinition rule, int status)
     {
+        // "AppliesOnClose" without explicit status bounds is treated as a
+        // close-only rule; it should not block regular status transitions.
+        if (rule.AppliesOnClose &&
+            !rule.AppliesFromStatus.HasValue &&
+            !rule.AppliesToStatus.HasValue)
+        {
+            return false;
+        }
+
         var from = rule.AppliesFromStatus ?? int.MinValue;
         var to = rule.AppliesToStatus ?? int.MaxValue;
         return status >= from && status <= to;

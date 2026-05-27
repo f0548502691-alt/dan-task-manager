@@ -235,6 +235,7 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         // Arrange
         var task = await _context.Tasks.FindAsync(1);
         task!.CurrentStatus = 3;
+        task.CustomDataJson = JsonSerializer.Serialize(new { receipt = "REC-001" });
         _context.Tasks.Update(task);
         await _context.SaveChangesAsync();
 
@@ -255,6 +256,7 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         // Arrange
         var task = await _context.Tasks.FindAsync(1);
         task!.CurrentStatus = 3;
+        task.CustomDataJson = JsonSerializer.Serialize(new { receipt = "REC-001" });
         _context.Tasks.Update(task);
         await _context.SaveChangesAsync();
         await _service.CloseTaskAsync(1, 2, "First close");
@@ -276,6 +278,87 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         // Assert
         Assert.False(result.Success);
         Assert.Contains("only be closed from final status", result.Message);
+    }
+
+    [Fact]
+    public async Task CloseTask_WhenFinalStatusDataIsInvalid_ShouldFail()
+    {
+        // Arrange - force task to final status with missing required final-status fields.
+        var task = await _context.Tasks.FindAsync(1);
+        task!.CurrentStatus = 3;
+        task.CustomDataJson = "{}";
+        _context.Tasks.Update(task);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.CloseTaskAsync(1, 2, "Attempt close");
+
+        // Assert
+        Assert.False(result.Success);
+        Assert.Contains("receipt", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CloseTask_WithCloseOnlyRule_ShouldValidateAppliesOnCloseMetadata()
+    {
+        // Arrange
+        var closeAwareValidation = new TaskTypeValidationService(Options.Create(new TaskTypeValidationOptions
+        {
+            TaskTypes = new List<TaskTypeDefinition>
+            {
+                new()
+                {
+                    TaskType = "Procurement",
+                    FinalStatus = 3,
+                    FieldRules = new List<FieldRuleDefinition>
+                    {
+                        new()
+                        {
+                            Field = "receipt",
+                            Type = "string",
+                            Required = true,
+                            AppliesFromStatus = 3,
+                            AppliesToStatus = 3
+                        },
+                        new()
+                        {
+                            Field = "closeChecklist",
+                            Type = "string",
+                            Required = true,
+                            AppliesOnClose = true
+                        }
+                    }
+                }
+            }
+        }));
+        var closeAwareService = new TaskWorkflowService(
+            _context,
+            CreateRuleProviders(_factory, closeAwareValidation),
+            new MockLogger());
+
+        var task = await _context.Tasks.FindAsync(1);
+        task!.CurrentStatus = 3;
+        task.CustomDataJson = JsonSerializer.Serialize(new { receipt = "REC-007" });
+        _context.Tasks.Update(task);
+        await _context.SaveChangesAsync();
+
+        // Act + Assert (missing closeChecklist)
+        var missingCloseData = await closeAwareService.CloseTaskAsync(1, 2, "Closing without checklist");
+        Assert.False(missingCloseData.Success);
+        Assert.Contains("closeChecklist", missingCloseData.Message, StringComparison.OrdinalIgnoreCase);
+
+        // Arrange + Act + Assert (closeChecklist present in existing data)
+        task.CustomDataJson = JsonSerializer.Serialize(new
+        {
+            receipt = "REC-007",
+            closeChecklist = "approved"
+        });
+        _context.Tasks.Update(task);
+        await _context.SaveChangesAsync();
+
+        var validClose = await closeAwareService.CloseTaskAsync(1, 2, "Closing with checklist");
+        Assert.True(validClose.Success, validClose.Message);
+        Assert.Equal(99, validClose.NewStatus);
     }
 
     [Fact]
@@ -301,6 +384,7 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         // Arrange
         var task = await _context.Tasks.FindAsync(1);
         task!.CurrentStatus = 3;
+        task.CustomDataJson = JsonSerializer.Serialize(new { receipt = "REC-001" });
         _context.Tasks.Update(task);
         await _context.SaveChangesAsync();
 
@@ -323,6 +407,7 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         // Arrange - close seed task 1
         var task = await _context.Tasks.FindAsync(1);
         task!.CurrentStatus = 3;
+        task.CustomDataJson = JsonSerializer.Serialize(new { receipt = "REC-001" });
         _context.Tasks.Update(task);
         await _context.SaveChangesAsync();
         await _service.CloseTaskAsync(1, 1, "Closed");

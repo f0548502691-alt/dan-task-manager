@@ -190,6 +190,10 @@ public class ApplicationDbContext : DbContext
             .HasColumnType("nvarchar(max)");
 
         fieldBuilder
+            .Property(f => f.AppliesOnClose)
+            .HasDefaultValue(false);
+
+        fieldBuilder
             .Property(f => f.CreatedAt)
             .HasDefaultValueSql("GETUTCDATE()");
 

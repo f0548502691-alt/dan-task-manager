@@ -218,6 +218,13 @@ public class TaskWorkflowService : ITaskWorkflowService
         }
 
         var updatedJson = ruleProvider!.BuildCloseData(task, finalNotes);
+        var closeValidation = ruleProvider.ValidateClose(task, finalNotes, updatedJson);
+        if (!closeValidation.IsValid)
+        {
+            return WorkflowResult.FailureResult(
+                WorkflowErrorCodes.FieldValidationFailed,
+                closeValidation.Message);
+        }
 
         var oldAssignee = task.AssignedToUserId;
         task.CurrentStatus = WorkflowConstants.ClosedStatus;

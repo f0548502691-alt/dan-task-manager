@@ -20,6 +20,7 @@ public interface ITaskWorkflowRuleProvider
     bool CanHandle(string taskType);
     int? GetFinalStatus(string taskType);
     ValidationResult ValidateStatusChange(BaseTask task, int nextStatus, string newDataJson);
+    ValidationResult ValidateClose(BaseTask task, string finalNotes, string closeDataJson);
     string BuildCloseData(BaseTask task, string finalNotes);
 
     /// <summary>
@@ -76,6 +77,17 @@ public class MetadataTaskWorkflowRuleProvider : ITaskWorkflowRuleProvider
         return _validationService.ValidateStatusData(task.TaskType, nextStatus, newDataJson);
     }
 
+    public ValidationResult ValidateClose(BaseTask task, string finalNotes, string closeDataJson)
+    {
+        var finalStatus = _validationService.GetFinalStatus(task.TaskType);
+        if (!finalStatus.HasValue)
+        {
+            return ValidationResult.Failure($"Unsupported task type: {task.TaskType}");
+        }
+
+        return _validationService.ValidateCloseData(task.TaskType, finalStatus.Value, closeDataJson);
+    }
+
     public string BuildCloseData(BaseTask task, string finalNotes) => WorkflowCloseData.Merge(task, finalNotes);
 
     public IReadOnlyCollection<string> GetKnownTaskTypes()
@@ -126,6 +138,27 @@ public class HandlerTaskWorkflowRuleProvider : ITaskWorkflowRuleProvider
             task.CurrentStatus,
             nextStatus,
             newDataJson);
+    }
+
+    public ValidationResult ValidateClose(BaseTask task, string finalNotes, string closeDataJson)
+    {
+        var handler = _handlerFactory.GetHandler(task.TaskType);
+        if (handler == null)
+        {
+            return ValidationResult.Failure($"Unsupported task type: {task.TaskType}");
+        }
+
+        if (handler is ICloseValidationTaskHandler closeValidationTaskHandler)
+        {
+            return closeValidationTaskHandler.ValidateClose(task.CustomDataJson, closeDataJson, finalNotes);
+        }
+
+        // Fall back to re-validating final-status data before closing.
+        return handler.ValidateStatusChange(
+            task.CustomDataJson,
+            task.CurrentStatus,
+            handler.FinalStatus,
+            closeDataJson);
     }
 
     public string BuildCloseData(BaseTask task, string finalNotes) => WorkflowCloseData.Merge(task, finalNotes);

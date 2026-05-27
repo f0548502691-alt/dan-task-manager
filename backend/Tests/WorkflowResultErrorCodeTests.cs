@@ -126,6 +126,20 @@ public class WorkflowResultErrorCodeTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task CloseWithInvalidFinalStatusPayload_ReturnsFieldValidationFailedCode()
+    {
+        var task = await CreateProcurementTaskAsync();
+        task.CurrentStatus = 3;
+        task.CustomDataJson = "{}";
+        await _context.SaveChangesAsync();
+
+        var result = await _service.CloseTaskAsync(task.Id, 1, "invalid close payload");
+
+        Assert.False(result.Success);
+        Assert.Equal(WorkflowErrorCodes.FieldValidationFailed, result.Code);
+    }
+
+    [Fact]
     public async Task UnsupportedTaskType_ReturnsUnsupportedTaskTypeCode()
     {
         var task = new Domain.BaseTask

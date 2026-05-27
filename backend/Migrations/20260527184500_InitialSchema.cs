@@ -69,6 +69,7 @@ public partial class InitialSchema : Migration
                 AllowedValuesJson = table.Column<string>(type: "nvarchar(max)", nullable: true),
                 AppliesFromStatus = table.Column<int>(type: "int", nullable: true),
                 AppliesToStatus = table.Column<int>(type: "int", nullable: true),
+                AppliesOnClose = table.Column<bool>(type: "bit", nullable: false, defaultValue: false),
                 IsIndexed = table.Column<bool>(type: "bit", nullable: false),
                 CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false, defaultValueSql: "GETUTCDATE()"),
                 UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: false, defaultValueSql: "GETUTCDATE()")
