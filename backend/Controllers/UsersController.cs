@@ -76,3 +76,5 @@ public class UsersController : ControllerBase
         return Ok(tasks);
     }
 }
+
+public record CreateUserRequest(string Name, string Email);

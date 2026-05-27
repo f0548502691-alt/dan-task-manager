@@ -5,7 +5,7 @@ using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-var builder = WebApplicationBuilder.CreateBuilder(args);
+var builder = WebApplication.CreateBuilder(args);
 
 // ✅ הוספת DbContext עם SQL Server
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
