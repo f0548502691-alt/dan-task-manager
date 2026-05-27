@@ -3,6 +3,7 @@ using DanTaskManager.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using System.Text.Json;
+using Xunit;
 
 namespace DanTaskManager.Tests;
 

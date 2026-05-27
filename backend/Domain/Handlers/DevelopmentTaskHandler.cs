@@ -21,9 +21,9 @@ public class DevelopmentTaskHandler : StatusValidationTaskHandlerBase
     {
     }
 
-    public string TaskType => "Development";
+    public override string TaskType => "Development";
 
-    public int FinalStatus => 4;
+    public override int FinalStatus => 4;
 
     /// <summary>
     /// וולידציה לסטטוס 2: בדיקת טקסט אפיון

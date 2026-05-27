@@ -209,7 +209,7 @@ public class TaskWorkflowService : ITaskWorkflowService
                 $"A {task.TaskType} task can only be closed from final status {finalStatus.Value}");
         }
 
-        var updatedJson = ruleProvider.BuildCloseData(task, finalNotes);
+        var updatedJson = ruleProvider!.BuildCloseData(task, finalNotes);
 
         var oldAssignee = task.AssignedToUserId;
         task.CurrentStatus = WorkflowConstants.ClosedStatus;
