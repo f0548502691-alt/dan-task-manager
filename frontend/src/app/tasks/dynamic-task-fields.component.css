@@ -1,0 +1,16 @@
+.dynamic-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dynamic-fields__checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.dynamic-fields__checkbox-row input {
+  width: auto;
+}

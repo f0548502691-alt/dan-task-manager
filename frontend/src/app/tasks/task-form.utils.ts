@@ -1,20 +1,5 @@
-import { AbstractControl, ValidatorFn } from '@angular/forms';
+import { AbstractControl } from '@angular/forms';
 import { TaskCustomData } from './task.interfaces';
-
-export function syncControlState(control: AbstractControl | null, enabled: boolean, validators: ValidatorFn[]): void {
-  if (!control) {
-    return;
-  }
-
-  if (enabled) {
-    control.setValidators(validators);
-  } else {
-    resetControl(control);
-    control.clearValidators();
-  }
-
-  control.updateValueAndValidity({ emitEvent: false });
-}
 
 export function resetControl(control: AbstractControl | null, value: unknown = ''): void {
   if (!control) {

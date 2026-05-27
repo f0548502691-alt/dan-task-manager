@@ -25,6 +25,7 @@ import {
   standalone: true,
   imports: [CommonModule, ReactiveFormsModule],
   templateUrl: './dynamic-task-fields.component.html',
+  styleUrl: './dynamic-task-fields.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class DynamicTaskFieldsComponent implements OnChanges {
