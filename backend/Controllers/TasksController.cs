@@ -1,4 +1,6 @@
+using DanTaskManager.Application.Tasks.ChangeTaskStatus;
 using DanTaskManager.Application.Tasks.CreateTask;
+using DanTaskManager.Application.Tasks.GetTaskById;
 using DanTaskManager.Domain;
 using DanTaskManager.Services;
 using FluentValidation;
@@ -57,7 +59,7 @@ public class TasksController : ControllerBase
     [HttpGet("{id}")]
     public async Task<ActionResult<TaskDetailsDto>> GetTask(int id)
     {
-        var task = await _taskService.GetByIdAsync(id, HttpContext.RequestAborted);
+        var task = await _mediator.Send(new GetTaskByIdQuery(id), HttpContext.RequestAborted);
         if (task == null)
         {
             return NotFound();
@@ -162,11 +164,12 @@ public class TasksController : ControllerBase
             return BadRequest(new { error = BuildValidationErrorMessage(validation.Errors.Select(e => e.ErrorMessage)) });
         }
 
-        var result = await _taskService.ChangeStatusAsync(
-            id,
-            request.NewStatus,
-            request.NextAssignedToUserId,
-            ExtractCustomFieldsJson(request.CustomFields),
+        var result = await _mediator.Send(
+            new ChangeTaskStatusCommand(
+                id,
+                request.NewStatus,
+                request.NextAssignedToUserId,
+                ExtractCustomFieldsJson(request.CustomFields)),
             HttpContext.RequestAborted);
 
         if (!result.Success)
@@ -179,7 +182,7 @@ public class TasksController : ControllerBase
             id,
             result.NewStatus);
 
-        var updatedTask = await _taskService.GetByIdAsync(id, HttpContext.RequestAborted);
+        var updatedTask = await _mediator.Send(new GetTaskByIdQuery(id), HttpContext.RequestAborted);
 
         return Ok(new
         {
