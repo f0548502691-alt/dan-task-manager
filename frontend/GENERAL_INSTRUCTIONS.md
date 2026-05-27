@@ -40,6 +40,77 @@ Use the following checklist as the default baseline for client-side task workflo
   - View current user's tasks.
 - A hard-coded user ID is acceptable for MVP flows.
 
+## Angular Workspace Scaffold
+
+The frontend is a standalone Angular application rooted at `frontend/`.
+
+### Entrypoints and runtime wiring
+
+- `src/index.html` hosts the app through `<app-root></app-root>`.
+- `src/main.ts` bootstraps the standalone `AppComponent` with `provideHttpClient()`.
+- `src/app/app.component.ts` is intentionally thin. It renders the app shell and imports
+  `TaskWorkflowBoardComponent`.
+- Task workflow behavior remains under `src/app/tasks/`; avoid moving workflow state or
+  API calls into `AppComponent`.
+
+### Package scripts
+
+Run commands from `frontend/`:
+
+```bash
+npm install
+npm start
+npm run build
+npm test
+```
+
+- `npm start` runs `ng serve --proxy-config proxy.conf.json`.
+- `npm run build` runs the Angular production build and writes to `dist/frontend`.
+- `npm test` is a placeholder that prints that no frontend test runner is configured yet.
+  Do not treat it as executable test coverage.
+
+### Local backend proxy
+
+`proxy.conf.json` forwards browser calls from `/api` to `http://localhost:8080`.
+This keeps client code using relative URLs such as `/api/tasks` and `/api/task-types`.
+When developing locally, start the backend on port `8080` or update the proxy target
+for your environment.
+
+### Angular build configuration
+
+- `angular.json` defines a single application project named `frontend`.
+- The app uses the `@angular/build:application` builder with `src/main.ts` as the
+  browser entrypoint and `src/styles.css` as the global stylesheet.
+- The default build configuration is `production`; `ng serve` defaults to
+  `development`.
+- Production budgets are intentionally small (`500kB` warning / `1MB` error initial
+  bundle, `4kB` warning / `8kB` error component styles). Keep new dependencies and
+  component styles lean unless the budgets are deliberately revisited.
+
+### TypeScript constraints
+
+`tsconfig.json` keeps strict TypeScript and Angular template checking enabled:
+
+- `"strict": true`
+- `"noImplicitOverride": true`
+- `"noPropertyAccessFromIndexSignature": true`
+- `"noImplicitReturns": true`
+- `"noFallthroughCasesInSwitch": true`
+- `"strictTemplates": true`
+
+Use explicit types for API shapes and form payloads. Access dynamic object keys with
+bracket notation, as required by `noPropertyAccessFromIndexSignature`.
+
+### Generated and build artifacts
+
+The frontend `.gitignore` excludes Angular cache, build output, dependencies, and
+TypeScript output:
+
+- `.angular/`
+- `dist/`
+- `node_modules/`
+- `out-tsc/`
+
 ### Verification snapshot (current repository state)
 
 - [OK] Angular + DI/service/reactive patterns are implemented in `src/app/tasks/task.service.ts` and related components.
@@ -51,3 +122,4 @@ Use the following checklist as the default baseline for client-side task workflo
 - [OK] Closing a task from the UI is implemented in `task-workflow-board` via `submitCloseTask()`.
 - [OK] Hard-coded user ID wiring is implemented in `TaskWorkflowBoardComponent` (`DEFAULT_CURRENT_USER_ID = 1` + `setCurrentUserId` on init).
 - [OK] Strict mode is explicitly configured in `frontend/tsconfig.json` (`"strict": true`).
+- [OK] The Angular CLI workspace is present (`angular.json`, `package.json`, `package-lock.json`, and `proxy.conf.json`).
