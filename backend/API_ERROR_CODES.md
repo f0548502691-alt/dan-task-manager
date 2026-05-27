@@ -1,463 +1,181 @@
-# 🔔 API Response Codes & Error Messages
+# API error codes and troubleshooting
 
-## HTTP Status Codes
+The backend uses `GlobalExceptionMiddleware` to return consistent JSON errors
+for exceptions derived from `ApiException` and for unhandled failures.
 
-| Code | Meaning | Example |
-|------|---------|---------|
-| **200 OK** | ✅ Success | Status changed, task closed, task retrieved |
-| **201 Created** | ✅ Resource created | Task created successfully |
-| **400 Bad Request** | ❌ Invalid request | Validation failed, invalid movement |
-| **404 Not Found** | ❌ Resource missing | Task not found, user not found |
-| **500 Server Error** | ❌ Server issue | Database error, unhandled exception |
+## Error shape
 
----
-
-## Error Messages
-
-### Movement Validation Errors
-
-#### ❌ Forward Movement More Than +1
+```json
+{
+  "error": "Description of what failed",
+  "code": "validation_failed"
+}
 ```
-Status: 400 Bad Request
+
+Clients should display `error` and may branch on `code` for targeted handling.
+
+## Codes emitted by the API
+
+| Code | HTTP status | Source | Typical cause |
+|------|-------------|--------|---------------|
+| `validation_failed` | 400 | `ApiValidationException` default | FluentValidation request failure |
+| `workflow_validation_failed` | 400 | `WorkflowValidationException` | Invalid movement, closed task, unsupported workflow state |
+| `task_type_validation_failed` | 400 | task type metadata and create flow | Unsupported task type or invalid metadata |
+| `task_creation_failed` | 400 | create flow | User missing, invalid custom fields, post-create load failure |
+| `task_type_field_validation_failed` | 400 | task type field metadata | Invalid field rule definition |
+| `not_found` | 404 | `ApiNotFoundException` | Task, user, or task type does not exist |
+| `internal_server_error` | 500 | global fallback | Unhandled exception |
+
+Some controller branches still return `BadRequest(new { error, supportedTaskTypes })`
+directly, for example unsupported task type field updates. Those responses do
+not include a `code`.
+
+## Request validation failures
+
+### Create task
+
+```http
+POST /api/tasks
+Content-Type: application/json
+
+{
+  "taskType": "",
+  "description": "",
+  "assignedToUserId": 0,
+  "customFields": []
+}
+```
 
 Response:
+
+```json
 {
-  "error": "תנועה קדימה חייבת להיות בדיוק ב-1 סטטוס. סטטוס נוכחי: 1, מבוקש: 3"
+  "error": "TaskType is required; Description is required; AssignedToUserId must be greater than 0; CustomFields must be a valid JSON object",
+  "code": "validation_failed"
 }
 ```
 
-#### ❌ Same Status (No Change)
-```
-Status: 400 Bad Request
+`customFields` may be omitted on create, but if present it must be a JSON object.
 
-Response:
-{
-  "error": "אותו סטטוס - לא ניתן לבקש שינוי לסטטוס זהה"
-}
-```
+### Change status
 
-#### ❌ Closed Task (Status 99)
-```
-Status: 400 Bad Request
+```http
+POST /api/tasks/10/change-status
+Content-Type: application/json
 
-Response:
-{
-  "error": "משימה סגורה - לא ניתן לשנות סטטוס"
-}
-```
-
-#### ❌ Final Status Exceeded
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "משימה הגיעה לסטטוס סופי: 3. לא ניתן להעביר לסטטוס: 4"
-}
-```
-
----
-
-### Handler Validation Errors
-
-#### ❌ Procurement - Missing Prices
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "'prices' חייב להכיל בדיוק 2 מחרוזות, לא נמצא שדה"
-}
-```
-
-#### ❌ Procurement - Invalid Price Count
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "'prices' חייב להכיל בדיוק 2 מחרוזות, נמצאו 1"
-}
-```
-
-#### ❌ Procurement - Empty Price
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "כל מחיר ב-'prices' חייב להיות מחרוזת לא ריקה"
-}
-```
-
-#### ❌ Procurement - Missing Receipt
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "'receipt' חייב להיות מחרוזת לא ריקה"
-}
-```
-
-#### ❌ Development - Missing Specification
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "'specification' חייב להיות מחרוזת עם לפחות 10 תווים"
-}
-```
-
-#### ❌ Development - Short Specification
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "'specification' חייב להיות לפחות 10 תווים, נמצאו 5"
-}
-```
-
-#### ❌ Development - Invalid Branch Name
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "'branchName' אינו שם תקין של branch: 'feature//invalid' - לא יכול להכיל //"
-}
-```
-
-Or:
-```
-{
-  "error": "'branchName' אינו שם תקין של branch: 'feature/test/' - לא יכול להסתיים ב-/"
-}
-```
-
-Or:
-```
-{
-  "error": "'branchName' אינו שם תקין של branch: 'feature test' - לא יכול להכיל רווחים"
-}
-```
-
-#### ❌ Development - Invalid Version
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "'versionNumber' חייב להיות בפורמט SemVer (major.minor.patch), קיבלנו: '1.2'"
-}
-```
-
----
-
-### Resource Not Found Errors
-
-#### ❌ Task Not Found
-```
-Status: 404 Not Found
-
-Response:
-{
-  "error": "משימה עם ID 999 לא נמצאה"
-}
-```
-
-#### ❌ User Not Found
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "משתמש עם ID 999 לא קיים"
-}
-```
-
----
-
-### Validation Errors (Create/Update)
-
-#### ❌ Invalid Task Type
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "TaskType חייב להיות מחרוזת לא ריקה"
-}
-```
-
-#### ❌ Missing Description
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "Description חייב להיות מחרוזת לא ריקה"
-}
-```
-
-#### ❌ Unknown Task Type
-```
-Status: 400 Bad Request
-
-Response:
-{
-  "error": "TaskType 'Unknown' לא רשום בהנדלרים"
-}
-```
-
----
-
-## Success Responses
-
-### ✅ Status Changed Successfully
-```
-Status: 200 OK
-
-Response:
-{
-  "success": true,
-  "message": "סטטוס עודכן בהצלחה ל-2",
-  "newStatus": 2,
-  "task": {
-    "id": 1,
-    "taskType": "Procurement",
-    "description": "רכישת חומרים",
-    "currentStatus": 2,
-    "assignedToUserId": 1,
-    "customDataJson": "{\"prices\": [\"5000\", \"4800\"]}",
-    "createdAt": "2026-05-25T10:00:00Z",
-    "updatedAt": "2026-05-25T10:05:00Z"
-  }
-}
-```
-
-### ✅ Task Closed Successfully
-```
-Status: 200 OK
-
-Response:
-{
-  "success": true,
-  "message": "משימה סגורה בהצלחה",
-  "newStatus": 99,
-  "task": {
-    "id": 1,
-    "taskType": "Procurement",
-    "description": "רכישת חומרים",
-    "currentStatus": 99,
-    "customDataJson": "{\"prices\": [...], \"receipt\": \"...\", \"finalNotes\": \"משימה הושלמה בהצלחה\", \"closedAt\": \"2026-05-25T10:10:00Z\"}",
-    "createdAt": "2026-05-25T10:00:00Z",
-    "updatedAt": "2026-05-25T10:10:00Z"
-  }
-}
-```
-
-### ✅ Task Created
-```
-Status: 201 Created
-
-Response:
-{
-  "id": 1,
-  "taskType": "Procurement",
-  "description": "רכישת חומרים",
-  "currentStatus": 0,
-  "assignedToUserId": 1,
-  "customDataJson": "{}",
-  "createdAt": "2026-05-25T10:00:00Z",
-  "updatedAt": "2026-05-25T10:00:00Z"
-}
-```
-
-### ✅ Task Retrieved
-```
-Status: 200 OK
-
-Response:
-{
-  "id": 1,
-  "taskType": "Procurement",
-  "description": "רכישת חומרים",
-  "currentStatus": 2,
-  "assignedToUserId": 1,
-  "customDataJson": "{\"prices\": [\"5000\", \"4800\"]}",
-  "createdAt": "2026-05-25T10:00:00Z",
-  "updatedAt": "2026-05-25T10:05:00Z"
-}
-```
-
-### ✅ User Tasks Retrieved
-```
-Status: 200 OK
-
-Response:
-[
-  {
-    "id": 1,
-    "taskType": "Procurement",
-    "description": "רכישת חומרים",
-    "currentStatus": 2,
-    "assignedToUserId": 1,
-    "customDataJson": "{\"prices\": [\"5000\", \"4800\"]}"
-  },
-  {
-    "id": 2,
-    "taskType": "Development",
-    "description": "פיתוח API",
-    "currentStatus": 1,
-    "assignedToUserId": 1,
-    "customDataJson": "{}"
-  }
-]
-```
-
----
-
-## Common Error Scenarios
-
-### Scenario 1: Invalid Forward Jump
-
-```
-🔴 Request
-POST /api/tasks/1/change-status
-{ "newStatus": 3, "newDataJson": "{}" }
-
-Current Status: 1
-
-🔴 Response
-Status: 400 Bad Request
-{
-  "error": "תנועה קדימה חייבת להיות בדיוק ב-1 סטטוס. סטטוס נוכחי: 1, מבוקש: 3"
-}
-
-✅ Solution: Move to status 2 first
-POST /api/tasks/1/change-status
-{ "newStatus": 2, "newDataJson": "{...}" }
-```
-
-### Scenario 2: Missing Handler Data
-
-```
-🔴 Request
-POST /api/tasks/1/change-status
-{ "newStatus": 2, "newDataJson": "{}" }
-
-Current Task: Procurement, Status 1
-
-🔴 Response
-Status: 400 Bad Request
-{
-  "error": "'prices' חייב להכיל בדיוק 2 מחרוזות, לא נמצא שדה"
-}
-
-✅ Solution: Add required data
-POST /api/tasks/1/change-status
 {
   "newStatus": 2,
-  "newDataJson": "{\"prices\": [\"5000\", \"4800\"]}"
+  "nextAssignedToUserId": 0,
+  "customFields": null
 }
 ```
 
-### Scenario 3: Task Already Closed
+Response:
 
-```
-🔴 Request
-POST /api/tasks/1/change-status
-{ "newStatus": 1, "newDataJson": "{}" }
-
-Task Status: 99 (Closed)
-
-🔴 Response
-Status: 400 Bad Request
+```json
 {
-  "error": "משימה סגורה - לא ניתן לשנות סטטוס"
+  "error": "NextAssignedToUserId is required; CustomFields is required",
+  "code": "validation_failed"
 }
-
-✅ Solution: Cannot be changed. Create new task if needed.
 ```
 
-### Scenario 4: Invalid JSON Data
+`customFields` is required on status changes because task-type validators inspect
+the full next payload.
 
-```
-🔴 Request
-POST /api/tasks/1/change-status
+### Close task
+
+```json
 {
-  "newStatus": 2,
-  "newDataJson": "{not valid json}"
-}
-
-Current Task: Procurement, Status 1
-
-🔴 Response
-Status: 400 Bad Request
-{
-  "error": "JSON לא תקין ב-newDataJson"
-}
-
-✅ Solution: Use valid JSON
-POST /api/tasks/1/change-status
-{
-  "newStatus": 2,
-  "newDataJson": "{\"prices\": [\"5000\", \"4800\"]}"
+  "nextAssignedToUserId": 2,
+  "finalNotes": ""
 }
 ```
 
----
+Response:
 
-## Testing Error Handling
-
-### Unit Test Pattern
-```csharp
-[Fact]
-public async Task ChangeStatus_InvalidMovement_ShouldReturnError()
+```json
 {
-    // Arrange
-    var task = await _context.Tasks.FindAsync(1);
-    task!.CurrentStatus = 1;
-
-    // Act
-    var result = await _service.ChangeStatusAsync(1, 3, "{}");
-
-    // Assert
-    Assert.False(result.Success);
-    Assert.Contains("בדיוק ב-1 סטטוס", result.Message);
+  "error": "FinalNotes is required",
+  "code": "validation_failed"
 }
 ```
 
-### Postman Test Pattern
-```javascript
-// Test status code
-pm.test("Status code is 400", function () {
-    pm.response.to.have.status(400);
-});
+## Workflow validation failures
 
-// Test error message
-pm.test("Error message contains validation text", function () {
-    pm.expect(pm.response.text()).to.include("תנועה קדימה");
-});
+The workflow service returns these as `workflow_validation_failed` through
+`TasksController`.
+
+| Scenario | Example response |
+|----------|------------------|
+| Forward jump skips a status | `{ "error": "Forward movement must be exactly +1 status. Current status: 1, requested: 3", "code": "workflow_validation_failed" }` |
+| Same status requested | `{ "error": "New status is identical to current status", "code": "workflow_validation_failed" }` |
+| Status below created | `{ "error": "Status must be 1 or higher", "code": "workflow_validation_failed" }` |
+| Direct close through change-status | `{ "error": "Task closing is allowed only via CloseTask", "code": "workflow_validation_failed" }` |
+| Closed task changed | `{ "error": "Task is closed - status cannot be changed", "code": "workflow_validation_failed" }` |
+| Next assignee missing | `{ "error": "Next assignee does not exist", "code": "workflow_validation_failed" }` |
+| Non-object custom fields | `{ "error": "customFields must be a valid JSON object", "code": "workflow_validation_failed" }` |
+| Close before final status | `{ "error": "A Procurement task can only be closed from final status 3", "code": "workflow_validation_failed" }` |
+
+## Task-type validation failures
+
+Built-in handlers and metadata seed the same basic rules:
+
+| Task type | Status | Required payload |
+|-----------|--------|------------------|
+| Procurement | 2 | `{ "prices": ["5000", "4800"] }` |
+| Procurement | 3 | `{ "receipt": "REC-123" }` |
+| Development | 2 | `{ "specification": "At least ten characters" }` |
+| Development | 3 | `{ "branchName": "feature/task-10" }` |
+| Development | 4 | `{ "versionNumber": "1.0.0" }` |
+
+Example missing Procurement prices:
+
+```json
+{
+  "error": "Field 'prices' is required for status 2",
+  "code": "workflow_validation_failed"
+}
 ```
 
----
+When database metadata is present, exact messages come from
+`TaskTypeValidationService`. If metadata is unavailable for a supported type, the
+handler fallback messages come from `ProcurementTaskHandler` or
+`DevelopmentTaskHandler`.
 
-## Summary
+## Not found failures
 
-| Scenario | Status | Message | Action |
-|----------|--------|---------|--------|
-| ✅ Success | 200 | "סטטוס עודכן בהצלחה" | Proceed |
-| ❌ Invalid jump | 400 | "בדיוק ב-1 סטטוס" | Move +1 first |
-| ❌ Missing data | 400 | "לא נמצא שדה" | Add required data |
-| ❌ Closed task | 400 | "משימה סגורה" | Cannot change |
-| ❌ Not found | 404 | "לא נמצאה" | Create first |
-| ❌ Bad request | 400 | Various | Check input |
-| ❌ Server error | 500 | "שגיאת שרת" | Contact support |
+Examples:
 
----
+```json
+{
+  "error": "משימה לא נמצאה",
+  "code": "not_found"
+}
+```
 
-**Always check the error message for specific guidance on what went wrong and how to fix it! 🔍**
+```json
+{
+  "error": "משתמש לא קיים",
+  "code": "not_found"
+}
+```
+
+The users and tasks controllers check existence before returning user-specific
+task lists, update/delete failures, and detail responses.
+
+## Successful response reminders
+
+- Create returns `201 Created` with `TaskDetailsDto`.
+- List endpoints return `PagedResult<TaskSummaryDto>` and omit `customFields`.
+- Detail, create, change-status, and close responses include `customFields`.
+- Public request/response payloads use `customFields`; `CustomDataJson` is the
+  internal database property.
+
+## Client troubleshooting checklist
+
+1. Verify the request uses `customFields`, not `customDataJson` or `newDataJson`.
+2. Verify status numbers start at `1` and closed is `99`.
+3. Fetch `GET /api/task-types` if the UI needs the latest final status and field
+   rules.
+4. For list rows missing custom field data, fetch `GET /api/tasks/{id}` before
+   hydrating type-specific forms.
