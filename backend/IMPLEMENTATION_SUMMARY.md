@@ -64,7 +64,6 @@
 
 ### 10. **Documentation** ✅
 - [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md) - תיעוד מקיף
-- [STRATEGY_EXAMPLES.cs](STRATEGY_EXAMPLES.cs) - 6 דוגמאות קוד
 - [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) - קובץ זה
 
 ---
@@ -243,7 +242,6 @@ Tests/
 
 Documentation/
 ├── STRATEGY_PATTERN_DOCS.md
-├── STRATEGY_EXAMPLES.cs
 └── IMPLEMENTATION_SUMMARY.md
 ```
 
@@ -335,7 +333,6 @@ builder.Services.AddTransient<ITaskHandler, TestingTaskHandler>();
 ## 📚 Documentation Files
 
 1. **[STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md)** - תיעוד מלא (מומלץ!)
-2. **[STRATEGY_EXAMPLES.cs](STRATEGY_EXAMPLES.cs)** - דוגמאות קוד עובדות
 3. **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** - קובץ זה
 
 ---

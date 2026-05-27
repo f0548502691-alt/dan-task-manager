@@ -46,7 +46,6 @@
 
 ### 8. **Documentation** ✅
 - [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) - תיעוד מלא
-- [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs) - דוגמאות קוד
 
 ---
 
@@ -182,7 +181,6 @@ Total: 15+ Tests
 | File | Purpose |
 |------|---------|
 | [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md) | Comprehensive workflow documentation |
-| [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs) | Code examples and scenarios |
 | [Tests/WorkflowServiceTests.cs](Tests/WorkflowServiceTests.cs) | Unit tests |
 
 ---

@@ -1,7 +1,6 @@
 using DanTaskManager.Data;
 using DanTaskManager.Domain;
 using Microsoft.EntityFrameworkCore;
-using System.Linq.Expressions;
 
 namespace DanTaskManager.Services;
 
@@ -61,7 +60,7 @@ public class UserApplicationService : IUserApplicationService
             .OrderByDescending(t => t.CreatedAt)
             .Skip(pageRequest.Skip)
             .Take(pageSize)
-            .Select(MapToTaskSummary())
+            .Select(TaskDtoMappings.ToTaskSummary())
             .ToListAsync(cancellationToken);
 
         return PagedResult<TaskSummaryDto>.Create(tasks, totalCount, page, pageSize);
@@ -100,25 +99,4 @@ public class UserApplicationService : IUserApplicationService
         };
     }
 
-    private static Expression<Func<BaseTask, TaskSummaryDto>> MapToTaskSummary()
-    {
-        return task => new TaskSummaryDto
-        {
-            Id = task.Id,
-            TaskType = task.TaskType,
-            CurrentStatus = task.CurrentStatus,
-            AssignedToUserId = task.AssignedToUserId,
-            Description = task.Description,
-            CreatedAt = task.CreatedAt,
-            UpdatedAt = task.UpdatedAt,
-            AssignedToUser = task.AssignedToUser == null
-                ? null
-                : new UserBriefDto
-                {
-                    Id = task.AssignedToUser.Id,
-                    Name = task.AssignedToUser.Name,
-                    Email = task.AssignedToUser.Email
-                }
-        };
-    }
 }

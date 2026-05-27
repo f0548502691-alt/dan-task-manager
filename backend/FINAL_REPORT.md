@@ -59,8 +59,6 @@
 | [BEST_PRACTICES.md](BEST_PRACTICES.md) | Code standards | ✅ |
 | [EXTENSION_GUIDE.md](EXTENSION_GUIDE.md) | Adding features | ✅ |
 | [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) | Navigate all docs | ✅ |
-| [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs) | Code examples | ✅ |
-| [STRATEGY_EXAMPLES.cs](STRATEGY_EXAMPLES.cs) | Handler examples | ✅ |
 
 ---
 
@@ -174,13 +172,11 @@ dotnet run
 2. IMPLEMENTATION_COMPLETE.md  (15 min)
 3. STRATEGY_PATTERN_DOCS.md    (15 min)
 4. BEST_PRACTICES.md           (15 min)
-5. WORKFLOW_EXAMPLES.cs        (20 min)
 ```
 
 ### For Extension
 ```
 1. EXTENSION_GUIDE.md          (30 min)
-2. STRATEGY_EXAMPLES.cs        (20 min)
 3. Existing handler code       (20 min)
 4. Write & test new handler    (30-60 min)
 ```
@@ -381,7 +377,6 @@ POST /api/tasks/1/close
 - **Error Handling**: API_ERROR_CODES.md (15 min)
 - **Code Standards**: BEST_PRACTICES.md (20 min)
 - **Extensions**: EXTENSION_GUIDE.md (30 min)
-- **Examples**: WORKFLOW_EXAMPLES.cs (30 min)
 - **Navigation**: DOCUMENTATION_INDEX.md (5 min)
 
 **Total Learning Time**: 3-4 hours for complete mastery
@@ -413,7 +408,6 @@ POST /api/tasks/1/close
 | How do I use the API? | WORKFLOW_SERVICE_DOCS.md |
 | How do I debug? | API_ERROR_CODES.md |
 | How do I add features? | EXTENSION_GUIDE.md |
-| Show me examples | WORKFLOW_EXAMPLES.cs |
 | Navigate all docs | MASTER_REFERENCE.md |
 
 ---

@@ -1,8 +1,6 @@
 using DanTaskManager.Contracts.Requests.Common;
-using DanTaskManager.Contracts.Requests.Users;
 using DanTaskManager.Domain;
 using DanTaskManager.Services;
-using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DanTaskManager.Controllers;
@@ -15,17 +13,10 @@ namespace DanTaskManager.Controllers;
 public class UsersController : ControllerBase
 {
     private readonly IUserApplicationService _userService;
-    private readonly IValidator<CreateUserRequest> _createUserValidator;
-    private readonly ILogger<UsersController> _logger;
 
-    public UsersController(
-        IUserApplicationService userService,
-        IValidator<CreateUserRequest> createUserValidator,
-        ILogger<UsersController> logger)
+    public UsersController(IUserApplicationService userService)
     {
         _userService = userService;
-        _createUserValidator = createUserValidator;
-        _logger = logger;
     }
 
     /// <summary>

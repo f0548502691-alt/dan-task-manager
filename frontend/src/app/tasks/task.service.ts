@@ -1,6 +1,6 @@
-import { computed, inject, Injectable, signal } from '@angular/core';
+import { inject, Injectable, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { catchError, finalize, map, Observable, of, switchMap, tap, throwError } from 'rxjs';
+import { catchError, finalize, map, Observable, of, tap, throwError } from 'rxjs';
 import {
   BaseTaskDto,
   ChangeStatusWorkflowRequest,
@@ -11,8 +11,7 @@ import {
   PagedResultDto,
   TASK_STATUS,
   TaskCustomData,
-  CreateTaskRequest,
-  UpdateTaskRequest
+  CreateTaskRequest
 } from './task.interfaces';
 import { AppErrorService } from '../core/app-error.service';
 import { extractErrorMessage } from '../core/error-message.utils';
@@ -26,15 +25,10 @@ export class TaskService {
   private readonly _currentUserId = signal<number | null>(null);
   private readonly _tasks = signal<readonly BaseTaskDto[]>([]);
   private readonly _isLoading = signal(false);
-  private readonly _error = signal<string | null>(null);
 
   readonly currentUserId = this._currentUserId.asReadonly();
   readonly tasks = this._tasks.asReadonly();
   readonly isLoading = this._isLoading.asReadonly();
-  readonly error = this._error.asReadonly();
-
-  readonly taskCount = computed(() => this._tasks().length);
-  readonly hasTasks = computed(() => this.taskCount() > 0);
 
   setCurrentUserId(userId: number | null): void {
     this._currentUserId.set(userId);
@@ -47,7 +41,7 @@ export class TaskService {
 
     void this.refreshCurrentUserTasks().subscribe({
       error: () => {
-        // Error details are already stored in the `error` signal.
+        // Error details are shown through the global error service.
       }
     });
   }
@@ -72,7 +66,7 @@ export class TaskService {
   }
 
   getTask(taskId: number): Observable<BaseTaskDto> {
-    this._error.set(null);
+    this.clearErrorsState();
     return this.http.get<BaseTaskDto>(`${this.apiUrl}/${taskId}`).pipe(
       catchError((error) => this.handleHttpError(error))
     );
@@ -126,31 +120,6 @@ export class TaskService {
     );
   }
 
-  updateTask(taskId: number, request: UpdateTaskRequest): Observable<void> {
-    this.clearErrorsState();
-
-    return this.http.put<void>(`${this.apiUrl}/${taskId}`, request).pipe(
-      switchMap(() => {
-        const currentUserId = this._currentUserId();
-        if (currentUserId === null) {
-          return of(void 0);
-        }
-
-        return this.refreshCurrentUserTasks().pipe(map(() => void 0));
-      }),
-      catchError((error) => this.handleHttpError(error))
-    );
-  }
-
-  deleteTask(taskId: number): Observable<void> {
-    this.clearErrorsState();
-
-    return this.http.delete<void>(`${this.apiUrl}/${taskId}`).pipe(
-      tap(() => this.removeTaskFromState(taskId)),
-      catchError((error) => this.handleHttpError(error))
-    );
-  }
-
   clearError(): void {
     this.clearErrorsState();
   }
@@ -196,14 +165,10 @@ export class TaskService {
 
   private normalizeChangeStatusResponse(payload: unknown): ChangeStatusWorkflowResponse {
     const response = this.asRecord(payload);
-    const task = this.normalizeTask(response['task']);
-    const newStatus = this.toNumber(response['newStatus'], task.currentStatus);
 
     return {
-      success: this.toBoolean(response['success']),
       message: this.toStringValue(response['message'], ''),
-      newStatus,
-      task
+      task: this.normalizeTask(response['task'])
     };
   }
 
@@ -211,7 +176,6 @@ export class TaskService {
     const response = this.asRecord(payload);
 
     return {
-      success: this.toBoolean(response['success']),
       message: this.toStringValue(response['message'], ''),
       task: this.normalizeTask(response['task'])
     };
@@ -219,22 +183,12 @@ export class TaskService {
 
   private normalizeTask(payload: unknown): BaseTaskDto {
     const task = this.asRecord(payload);
-    const assignedToUserPayload = task['assignedToUser'];
-    const assignedToUser =
-      assignedToUserPayload && typeof assignedToUserPayload === 'object' && !Array.isArray(assignedToUserPayload)
-        ? {
-            id: this.toNumber((assignedToUserPayload as Record<string, unknown>)['id']),
-            name: this.toStringValue((assignedToUserPayload as Record<string, unknown>)['name'], ''),
-            email: this.toStringValue((assignedToUserPayload as Record<string, unknown>)['email'], '')
-          }
-        : null;
 
     return {
       id: this.toNumber(task['id']),
       taskType: this.toStringValue(task['taskType'], ''),
       currentStatus: this.toNumber(task['currentStatus'], TASK_STATUS.CREATED),
       assignedToUserId: this.toNumber(task['assignedToUserId']),
-      assignedToUser,
       description: this.toStringValue(task['description'], ''),
       customFields: this.extractCustomFields(task),
       createdAt: this.toStringValue(task['createdAt'], new Date(0).toISOString()),
@@ -283,19 +237,12 @@ export class TaskService {
     return typeof value === 'string' ? value : fallback;
   }
 
-  private toBoolean(value: unknown): boolean {
-    return value === true;
-  }
-
   private handleHttpError(error: unknown): Observable<never> {
     const message = extractErrorMessage(error);
-    this._error.set(message);
-    this.appErrorService.setError(message);
     return throwError(() => new Error(message));
   }
 
   private clearErrorsState(): void {
-    this._error.set(null);
     this.appErrorService.clearError();
   }
 }

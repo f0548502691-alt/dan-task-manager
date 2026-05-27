@@ -47,9 +47,6 @@
 
 | Document | Level | Shows |
 |----------|-------|-------|
-| [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs) | Beginner | Service usage, workflows |
-| [STRATEGY_EXAMPLES.cs](STRATEGY_EXAMPLES.cs) | Intermediate | Handler implementation |
-| [EXAMPLES.cs](EXAMPLES.cs) | Beginner | General patterns |
 
 ### 🔧 Advanced Documentation (Go Deeper)
 
@@ -103,12 +100,10 @@
 - Start: [GETTING_STARTED.md](GETTING_STARTED.md)
 - Learn: [IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md)
 - Study: [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md)
-- Code: [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs)
 
 #### **QA/Tester**
 - Learn: [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md)
 - Reference: [API_ERROR_CODES.md](API_ERROR_CODES.md)
-- Scenarios: [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs)
 
 #### **DevOps/Infrastructure**
 - Setup: [QUICKSTART_5MIN.md](QUICKSTART_5MIN.md)
@@ -135,7 +130,6 @@
 → [API_ERROR_CODES.md](API_ERROR_CODES.md)
 
 #### "I need to write code"
-→ [BEST_PRACTICES.md](BEST_PRACTICES.md) + [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs)
 
 #### "I need to add a feature"
 → [EXTENSION_GUIDE.md](EXTENSION_GUIDE.md)
@@ -196,7 +190,6 @@ Final:    Handler-specific max
 - [x] Error Reference → [API_ERROR_CODES.md](API_ERROR_CODES.md)
 - [x] Code Standards → [BEST_PRACTICES.md](BEST_PRACTICES.md)
 - [x] Handler Pattern → [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md)
-- [x] Code Examples → [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs)
 - [x] Extension Guide → [EXTENSION_GUIDE.md](EXTENSION_GUIDE.md)
 - [x] Master Navigation → [MASTER_REFERENCE.md](MASTER_REFERENCE.md)
 - [x] Completion Report → [FINAL_REPORT.md](FINAL_REPORT.md)

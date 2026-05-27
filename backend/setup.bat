@@ -42,6 +42,5 @@ echo.
 echo 📚 Documentation:
 echo    - STRATEGY_PATTERN_DOCS.md   (Comprehensive guide)
 echo    - QUICK_GUIDE.md             (Quick reference)
-echo    - STRATEGY_EXAMPLES.cs       (Code examples)
 echo.
 pause

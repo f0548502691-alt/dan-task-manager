@@ -605,7 +605,6 @@ public async Task FullWorkflow_WithNewFeature_ShouldPass()
 - Architecture: [STRATEGY_PATTERN_DOCS.md](STRATEGY_PATTERN_DOCS.md)
 - Workflows: [WORKFLOW_SERVICE_DOCS.md](WORKFLOW_SERVICE_DOCS.md)
 - Best Practices: [BEST_PRACTICES.md](BEST_PRACTICES.md)
-- Examples: [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs)
 
 ---
 

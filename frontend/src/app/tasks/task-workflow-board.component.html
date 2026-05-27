@@ -81,7 +81,6 @@
         </ng-container>
       </ng-container>
 
-      <p class="feedback feedback--error" *ngIf="taskService.error()">{{ taskService.error() }}</p>
       <p class="feedback feedback--success" *ngIf="successMessage()">{{ successMessage() }}</p>
 
       <button type="submit" [disabled]="submitInFlight() || statusForm.invalid || task.currentStatus === TASK_STATUS.CLOSED">
