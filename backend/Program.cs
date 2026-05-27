@@ -30,9 +30,7 @@ builder.Services.AddScoped<ITaskTypeCatalog, TaskTypeCatalogService>();
 
 builder.Services.AddMemoryCache();
 
-builder.Services.AddScoped<TaskTypeValidationService>();
-builder.Services.AddScoped<ITaskTypeValidationService>(sp => sp.GetRequiredService<TaskTypeValidationService>());
-builder.Services.AddScoped<ITaskTypeMetadataService>(sp => sp.GetRequiredService<TaskTypeValidationService>());
+builder.Services.AddTaskTypeValidationServices();
 
 builder.Services.AddScoped<ITaskWorkflowRuleProvider, MetadataTaskWorkflowRuleProvider>();
 builder.Services.AddScoped<ITaskWorkflowRuleProvider, HandlerTaskWorkflowRuleProvider>();

@@ -15,9 +15,7 @@ public class TaskTypeValidationServiceDependencyInjectionTests
             options.UseInMemoryDatabase($"TaskTypeValidationServiceDI-{Guid.NewGuid()}"));
         services.AddMemoryCache();
         services.Configure<TaskTypeValidationOptions>(_ => { });
-        services.AddScoped<TaskTypeValidationService>();
-        services.AddScoped<ITaskTypeValidationService>(sp => sp.GetRequiredService<TaskTypeValidationService>());
-        services.AddScoped<ITaskTypeMetadataService>(sp => sp.GetRequiredService<TaskTypeValidationService>());
+        services.AddTaskTypeValidationServices();
 
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
