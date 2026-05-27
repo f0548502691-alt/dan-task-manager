@@ -59,7 +59,7 @@ public class HandlerTaskWorkflowRuleProvider : ITaskWorkflowRuleProvider
         var handler = _handlerFactory.GetHandler(task.TaskType);
         if (handler == null)
         {
-            return ValidationResult.Failure($"סוג משימה לא נתמך: {task.TaskType}");
+            return ValidationResult.Failure($"Unsupported task type: {task.TaskType}");
         }
 
         return handler.ValidateStatusChange(

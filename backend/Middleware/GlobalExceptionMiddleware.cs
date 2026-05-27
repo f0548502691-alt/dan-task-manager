@@ -40,7 +40,7 @@ public class GlobalExceptionMiddleware
             await WriteErrorResponseAsync(
                 context,
                 StatusCodes.Status500InternalServerError,
-                "אירעה שגיאה בלתי צפויה בשרת",
+                "An unexpected server error occurred",
                 "internal_server_error");
         }
     }

@@ -65,7 +65,7 @@ public class UsersController : ControllerBase
         var userExists = await _userService.ExistsAsync(id, HttpContext.RequestAborted);
         if (!userExists)
         {
-            return NotFound("משתמש לא קיים");
+            return NotFound("User does not exist");
         }
 
         var tasks = await _userService.GetUserTasksAsync(

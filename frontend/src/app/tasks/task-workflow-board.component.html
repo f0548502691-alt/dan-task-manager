@@ -1,7 +1,7 @@
 <section class="workflow-layout">
   <section class="create-panel">
     <h2>Create task</h2>
-    <p class="panel-note">Current user is hard-coded to #{{ currentUserId }}.</p>
+    <p class="panel-note">Use seeded users (for example IDs 1-6).</p>
 
     <form [formGroup]="createForm" (ngSubmit)="submitCreateTask()">
       <label for="createTaskType">Task type</label>
@@ -12,6 +12,9 @@
       <label for="createTaskDescription">Description</label>
       <textarea id="createTaskDescription" rows="3" formControlName="createTaskDescription"></textarea>
       <small *ngIf="isCreateDescriptionInvalid()">Description is required (minimum 5 characters).</small>
+
+      <label for="createAssignedToUserId">Assigned user ID</label>
+      <input id="createAssignedToUserId" type="number" min="1" formControlName="createAssignedToUserId" />
 
       <button type="submit" [disabled]="createInFlight() || createForm.invalid">
         {{ createInFlight() ? 'Creating...' : 'Create task' }}
@@ -33,7 +36,7 @@
       (click)="selectTask(task)"
     >
       <span class="task-list-item__title">#{{ task.id }} - {{ task.description }}</span>
-      <span class="task-list-item__meta">{{ task.taskType }} | {{ taskStatusLabel(task.currentStatus) }}</span>
+      <span class="task-list-item__meta">{{ task.taskType }} | {{ taskStatusLabel(task.currentStatus, task.taskType) }}</span>
     </button>
   </aside>
 
@@ -41,7 +44,7 @@
     <h3>Update task #{{ task.id }}</h3>
     <p class="editor-panel__subtitle">
       Type: <strong>{{ task.taskType }}</strong> | Current status:
-      <strong>{{ taskStatusLabel(task.currentStatus) }}</strong>
+      <strong>{{ taskStatusLabel(task.currentStatus, task.taskType) }}</strong>
     </p>
 
     <form [formGroup]="statusForm" (ngSubmit)="submitStatusUpdate()">
@@ -52,6 +55,9 @@
           {{ option.label }}
         </option>
       </select>
+
+      <label for="nextAssignedToUserId">Next assigned user ID</label>
+      <input id="nextAssignedToUserId" type="number" min="1" formControlName="nextAssignedToUserId" />
 
       <ng-container [ngSwitch]="task.taskType">
         <app-procurement-fields

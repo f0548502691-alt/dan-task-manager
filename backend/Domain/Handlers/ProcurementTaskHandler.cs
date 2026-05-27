@@ -37,13 +37,13 @@ public class ProcurementTaskHandler : StatusValidationTaskHandlerBase
             if (!root.TryGetProperty("prices", out var pricesElement))
             {
                 return ValidationResult.Failure(
-                    "בסטטוס 2, נדרש שדה 'prices' המכיל מערך של 2 מחרוזות (מחירים)");
+                    "Status 2 requires a 'prices' field containing an array of two quote strings");
             }
 
             // בדיקה שזהו מערך
             if (pricesElement.ValueKind != JsonValueKind.Array)
             {
-                return ValidationResult.Failure("'prices' חייב להיות מערך");
+                return ValidationResult.Failure("'prices' must be an array");
             }
 
             // בדיקה של בדיוק 2 מחרוזות
@@ -51,20 +51,20 @@ public class ProcurementTaskHandler : StatusValidationTaskHandlerBase
             if (prices.Count != 2)
             {
                 return ValidationResult.Failure(
-                    $"'prices' חייב להכיל בדיוק 2 מחרוזות, נמצאו {prices.Count}");
+                    $"'prices' must contain exactly 2 strings, found {prices.Count}");
             }
 
             foreach (var price in prices)
             {
                 if (price.ValueKind != JsonValueKind.String)
                 {
-                    return ValidationResult.Failure("כל המחירים חייבים להיות מחרוזות");
+                    return ValidationResult.Failure("All prices must be strings");
                 }
 
                 var priceString = price.GetString();
                 if (string.IsNullOrWhiteSpace(priceString))
                 {
-                    return ValidationResult.Failure("המחירים לא יכולים להיות ריקים");
+                    return ValidationResult.Failure("Price values cannot be empty");
                 }
             }
 
@@ -72,7 +72,7 @@ public class ProcurementTaskHandler : StatusValidationTaskHandlerBase
         }
         catch (JsonException ex)
         {
-            return ValidationResult.Failure($"שגיאה בפענוח JSON: {ex.Message}");
+            return ValidationResult.Failure($"Invalid JSON payload: {ex.Message}");
         }
     }
 
@@ -90,26 +90,26 @@ public class ProcurementTaskHandler : StatusValidationTaskHandlerBase
             if (!root.TryGetProperty("receipt", out var receiptElement))
             {
                 return ValidationResult.Failure(
-                    "בסטטוס 3, נדרש שדה 'receipt' המכיל מחרוזת של קבלה");
+                    "Status 3 requires a 'receipt' field containing a receipt string");
             }
 
             // בדיקה שזהו מחרוזת
             if (receiptElement.ValueKind != JsonValueKind.String)
             {
-                return ValidationResult.Failure("'receipt' חייב להיות מחרוזת");
+                return ValidationResult.Failure("'receipt' must be a string");
             }
 
             var receipt = receiptElement.GetString();
             if (string.IsNullOrWhiteSpace(receipt))
             {
-                return ValidationResult.Failure("'receipt' לא יכול להיות ריק");
+                return ValidationResult.Failure("'receipt' cannot be empty");
             }
 
             return ValidationResult.Success();
         }
         catch (JsonException ex)
         {
-            return ValidationResult.Failure($"שגיאה בפענוח JSON: {ex.Message}");
+            return ValidationResult.Failure($"Invalid JSON payload: {ex.Message}");
         }
     }
 }

@@ -10,19 +10,19 @@ public class CreateTaskRequestValidator : AbstractValidator<CreateTaskRequest>
     {
         RuleFor(x => x.TaskType)
             .NotEmpty()
-            .WithMessage("TaskType נדרש");
+            .WithMessage("TaskType is required");
 
         RuleFor(x => x.Description)
             .NotEmpty()
-            .WithMessage("Description נדרש");
+            .WithMessage("Description is required");
 
         RuleFor(x => x.AssignedToUserId)
             .GreaterThan(0)
-            .WithMessage("AssignedToUserId חייב להיות גדול מ-0");
+            .WithMessage("AssignedToUserId must be greater than 0");
 
         RuleFor(x => x.CustomFields)
             .Must(BeValidCustomFields)
-            .WithMessage("CustomFields חייב להיות אובייקט JSON");
+            .WithMessage("CustomFields must be a valid JSON object");
     }
 
     private static bool BeValidCustomFields(JsonElement? value)
@@ -42,17 +42,17 @@ public class ChangeStatusWorkflowRequestValidator : AbstractValidator<ChangeStat
     {
         RuleFor(x => x.NewStatus)
             .GreaterThan(0)
-            .WithMessage("NewStatus חייב להיות גדול מ-0");
+            .WithMessage("NewStatus must be greater than 0");
 
         RuleFor(x => x.NextAssignedToUserId)
             .GreaterThan(0)
-            .WithMessage("NextAssignedToUserId נדרש");
+            .WithMessage("NextAssignedToUserId is required");
 
         RuleFor(x => x.CustomFields)
             .NotNull()
-            .WithMessage("CustomFields נדרש")
+            .WithMessage("CustomFields is required")
             .Must(BeValidCustomFields)
-            .WithMessage("CustomFields חייב להיות אובייקט JSON");
+            .WithMessage("CustomFields must be a valid JSON object");
     }
 
     private static bool BeValidCustomFields(JsonElement? value)
@@ -76,6 +76,6 @@ public class CloseTaskRequestValidator : AbstractValidator<CloseTaskRequest>
 
         RuleFor(x => x.FinalNotes)
             .NotEmpty()
-            .WithMessage("FinalNotes נדרש");
+            .WithMessage("FinalNotes is required");
     }
 }

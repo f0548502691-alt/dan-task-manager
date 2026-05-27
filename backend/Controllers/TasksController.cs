@@ -98,7 +98,7 @@ public class TasksController : ControllerBase
         var userExists = await _mediator.Send(new UserExistsQuery(userId), HttpContext.RequestAborted);
         if (!userExists)
         {
-            return NotFound("משתמש לא קיים");
+            return NotFound("User does not exist");
         }
 
         var tasks = await _mediator.Send(
@@ -144,7 +144,7 @@ public class TasksController : ControllerBase
         var task = result.CreatedTask!;
 
         _logger.LogInformation(
-            "משימה חדשה יצרה: {TaskId}, סוג: {TaskType}, משתמש: {UserId}",
+            "Created task: {TaskId}, type: {TaskType}, user: {UserId}",
             task.Id,
             task.TaskType,
             task.AssignedToUserId);
@@ -180,7 +180,7 @@ public class TasksController : ControllerBase
         }
 
         _logger.LogInformation(
-            "סטטוס משימה {TaskId} שונה ל-{NewStatus}",
+            "Task {TaskId} status changed to {NewStatus}",
             id,
             result.NewStatus);
 
@@ -218,7 +218,7 @@ public class TasksController : ControllerBase
         }
 
         _logger.LogInformation(
-            "משימה {TaskId} סגורה עם הערות: {Notes}",
+            "Task {TaskId} closed with notes: {Notes}",
             id,
             request.FinalNotes);
 
@@ -249,7 +249,7 @@ public class TasksController : ControllerBase
                 return NotFound();
             }
 
-            throw new WorkflowValidationException("משימה סגורה היא immutable ולא ניתן לעדכן אותה");
+            throw new WorkflowValidationException("Closed tasks are immutable and cannot be updated");
         }
 
         return NoContent();
@@ -270,10 +270,10 @@ public class TasksController : ControllerBase
                 return NotFound();
             }
 
-            throw new WorkflowValidationException("משימה סגורה היא immutable ולא ניתן למחוק אותה");
+            throw new WorkflowValidationException("Closed tasks are immutable and cannot be deleted");
         }
 
-        _logger.LogInformation("משימה {TaskId} נמחקה", id);
+        _logger.LogInformation("Task {TaskId} deleted", id);
 
         return NoContent();
     }
