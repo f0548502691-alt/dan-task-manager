@@ -250,6 +250,23 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
             return MetadataOperationResult.FailureResult("TaskType is required");
         }
 
+        if (!command.FinalStatus.HasValue)
+        {
+            return MetadataOperationResult.FailureResult("FinalStatus is required");
+        }
+
+        if (command.FinalStatus.Value < WorkflowConstants.CreatedStatus)
+        {
+            return MetadataOperationResult.FailureResult(
+                $"FinalStatus must be greater than or equal to {WorkflowConstants.CreatedStatus}");
+        }
+
+        if (command.FinalStatus.Value >= WorkflowConstants.ClosedStatus)
+        {
+            return MetadataOperationResult.FailureResult(
+                $"FinalStatus must be less than {WorkflowConstants.ClosedStatus}");
+        }
+
         var entity = _context.TaskTypes
             .Include(taskType => taskType.FieldDefinitions)
             .FirstOrDefault(taskType => taskType.Code.ToLower() == codeLower);
@@ -260,7 +277,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
             {
                 Code = code,
                 DisplayName = string.IsNullOrWhiteSpace(command.DisplayName) ? code : command.DisplayName.Trim(),
-                FinalStatus = command.FinalStatus,
+                FinalStatus = command.FinalStatus.Value,
                 IsActive = command.IsActive,
                 Version = 1,
                 CreatedAt = DateTime.UtcNow,
@@ -271,7 +288,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
         else
         {
             entity.DisplayName = string.IsNullOrWhiteSpace(command.DisplayName) ? entity.DisplayName : command.DisplayName.Trim();
-            entity.FinalStatus = command.FinalStatus;
+            entity.FinalStatus = command.FinalStatus.Value;
             entity.IsActive = command.IsActive;
             entity.Version += 1;
             entity.UpdatedAt = DateTime.UtcNow;
@@ -317,6 +334,18 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
             return MetadataOperationResult.FailureResult("AppliesFromStatus must be less than or equal to AppliesToStatus");
         }
 
+        if (command.AppliesFromStatus.HasValue && command.AppliesFromStatus.Value < WorkflowConstants.CreatedStatus)
+        {
+            return MetadataOperationResult.FailureResult(
+                $"AppliesFromStatus must be greater than or equal to {WorkflowConstants.CreatedStatus}");
+        }
+
+        if (command.AppliesToStatus.HasValue && command.AppliesToStatus.Value < WorkflowConstants.CreatedStatus)
+        {
+            return MetadataOperationResult.FailureResult(
+                $"AppliesToStatus must be greater than or equal to {WorkflowConstants.CreatedStatus}");
+        }
+
         var taskTypeEntity = _context.TaskTypes
             .Include(item => item.FieldDefinitions)
             .FirstOrDefault(item => item.Code.ToLower() == normalizedTaskTypeLower);
@@ -324,6 +353,22 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
         if (taskTypeEntity == null)
         {
             return MetadataOperationResult.FailureResult($"Task type '{taskType}' not found");
+        }
+
+        if (taskTypeEntity.FinalStatus.HasValue &&
+            command.AppliesFromStatus.HasValue &&
+            command.AppliesFromStatus.Value > taskTypeEntity.FinalStatus.Value)
+        {
+            return MetadataOperationResult.FailureResult(
+                $"AppliesFromStatus cannot be greater than FinalStatus ({taskTypeEntity.FinalStatus.Value})");
+        }
+
+        if (taskTypeEntity.FinalStatus.HasValue &&
+            command.AppliesToStatus.HasValue &&
+            command.AppliesToStatus.Value > taskTypeEntity.FinalStatus.Value)
+        {
+            return MetadataOperationResult.FailureResult(
+                $"AppliesToStatus cannot be greater than FinalStatus ({taskTypeEntity.FinalStatus.Value})");
         }
 
         var fieldKey = command.Field.Trim();

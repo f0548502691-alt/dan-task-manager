@@ -6,9 +6,10 @@ import { finalize } from 'rxjs';
 import {
   BaseTaskDto,
   ChangeStatusWorkflowRequest,
+  DEFAULT_TASK_FINAL_STATUS_BY_TYPE,
   DEFAULT_STATUS_LABELS,
   TASK_STATUS,
-  TASK_FINAL_STATUS_BY_TYPE,
+  TaskTypeSchemaDto,
   TaskCustomData
 } from './task.interfaces';
 import { TaskService } from './task.service';
@@ -23,7 +24,7 @@ interface StatusOption {
 }
 
 const DEFAULT_CURRENT_USER_ID = 1;
-const TASK_TYPE_OPTIONS = ['Procurement', 'Development'] as const;
+const FALLBACK_TASK_TYPE_OPTIONS = ['Procurement', 'Development'] as const;
 
 @Component({
   selector: 'app-task-workflow-board',
@@ -40,15 +41,19 @@ export class TaskWorkflowBoardComponent implements OnInit {
   readonly TASK_STATUS = TASK_STATUS;
   readonly taskService = inject(TaskService);
   readonly currentUserId = DEFAULT_CURRENT_USER_ID;
-  readonly taskTypeOptions = [...TASK_TYPE_OPTIONS];
+  readonly taskTypeOptions = signal<readonly string[]>([]);
   readonly selectedTask = signal<BaseTaskDto | null>(null);
   readonly createInFlight = signal(false);
   readonly submitInFlight = signal(false);
   readonly closeInFlight = signal(false);
+  readonly taskTypeMetadataInFlight = signal(false);
   readonly successMessage = signal<string | null>(null);
+  private readonly taskTypeFinalStatusMap = signal<Readonly<Record<string, number>>>(
+    DEFAULT_TASK_FINAL_STATUS_BY_TYPE
+  );
 
   readonly createForm = this.fb.group({
-    createTaskType: this.fb.nonNullable.control<string>(TASK_TYPE_OPTIONS[0], [Validators.required]),
+    createTaskType: this.fb.nonNullable.control<string>('', [Validators.required]),
     createTaskDescription: this.fb.nonNullable.control('', [Validators.required, Validators.minLength(5)])
   });
 
@@ -76,11 +81,12 @@ export class TaskWorkflowBoardComponent implements OnInit {
       return [{ value: TASK_STATUS.CLOSED, label: this.getStatusLabel(TASK_STATUS.CLOSED) }];
     }
 
-    const finalStatus = TASK_FINAL_STATUS_BY_TYPE[task.taskType] ?? task.currentStatus;
+    const finalStatus = this.getFinalStatus(task.taskType, task.currentStatus);
     const maxStatus = Math.max(finalStatus, task.currentStatus);
     const options: StatusOption[] = [];
+    const minStatus = TASK_STATUS.IN_PROGRESS;
 
-    for (let status = 0; status <= maxStatus; status += 1) {
+    for (let status = TASK_STATUS.IN_PROGRESS; status <= maxStatus; status += 1) {
       options.push({ value: status, label: this.getStatusLabel(status) });
     }
 
@@ -93,6 +99,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
 
   ngOnInit(): void {
     this.taskService.setCurrentUserId(this.currentUserId);
+    this.loadTaskTypeMetadata();
   }
 
   submitCreateTask(): void {
@@ -167,7 +174,8 @@ export class TaskWorkflowBoardComponent implements OnInit {
 
     const request: ChangeStatusWorkflowRequest = {
       newStatus: this.selectedNextStatus,
-      newDataJson: JSON.stringify(payload)
+      nextAssignedToUserId: task.assignedToUserId,
+      customFields: payload
     };
 
     this.submitInFlight.set(true);
@@ -217,7 +225,10 @@ export class TaskWorkflowBoardComponent implements OnInit {
     this.taskService.clearError();
 
     this.taskService
-      .closeTask(task.id, { finalNotes })
+      .closeTask(task.id, {
+        nextAssignedToUserId: task.assignedToUserId,
+        finalNotes
+      })
       .pipe(
         takeUntilDestroyed(this.destroyRef),
         finalize(() => this.closeInFlight.set(false))
@@ -257,16 +268,69 @@ export class TaskWorkflowBoardComponent implements OnInit {
   }
 
   private getSuggestedStatus(task: BaseTaskDto): number {
-    const finalStatus = TASK_FINAL_STATUS_BY_TYPE[task.taskType];
-    if (typeof finalStatus !== 'number') {
-      return task.currentStatus;
-    }
-
+    const finalStatus = this.getFinalStatus(task.taskType, task.currentStatus);
     return Math.min(task.currentStatus + 1, finalStatus);
   }
 
   private getStatusLabel(status: number): string {
     return DEFAULT_STATUS_LABELS[status] ?? `Status ${status}`;
+  }
+
+  private getFinalStatus(taskType: string, fallbackStatus: number): number {
+    return this.taskTypeFinalStatusMap()[taskType] ?? fallbackStatus;
+  }
+
+  private loadTaskTypeMetadata(): void {
+    this.taskTypeMetadataInFlight.set(true);
+
+    this.taskService
+      .getTaskTypes()
+      .pipe(
+        takeUntilDestroyed(this.destroyRef),
+        finalize(() => this.taskTypeMetadataInFlight.set(false))
+      )
+      .subscribe({
+        next: (taskTypes) => this.setTaskTypeMetadata(taskTypes),
+        error: () => this.setFallbackTaskTypeMetadata()
+      });
+  }
+
+  private setTaskTypeMetadata(taskTypes: readonly TaskTypeSchemaDto[]): void {
+    if (taskTypes.length === 0) {
+      this.setFallbackTaskTypeMetadata();
+      return;
+    }
+
+    const taskTypesMap: Record<string, number> = { ...DEFAULT_TASK_FINAL_STATUS_BY_TYPE };
+    for (const taskType of taskTypes) {
+      if (typeof taskType.finalStatus === 'number') {
+        taskTypesMap[taskType.taskType] = taskType.finalStatus;
+      }
+    }
+
+    this.taskTypeFinalStatusMap.set(taskTypesMap);
+    this.taskTypeOptions.set(taskTypes.map((taskType) => taskType.taskType));
+    this.ensureCreateTaskTypeIsSelected();
+  }
+
+  private setFallbackTaskTypeMetadata(): void {
+    this.taskTypeOptions.set(FALLBACK_TASK_TYPE_OPTIONS);
+    this.taskTypeFinalStatusMap.set(DEFAULT_TASK_FINAL_STATUS_BY_TYPE);
+    this.ensureCreateTaskTypeIsSelected();
+  }
+
+  private ensureCreateTaskTypeIsSelected(): void {
+    const typeControl = this.createForm.controls['createTaskType'];
+    const selectedType = typeControl.value;
+    const options = this.taskTypeOptions();
+    if (options.length === 0) {
+      typeControl.setValue('');
+      return;
+    }
+
+    if (!selectedType || !options.includes(selectedType)) {
+      typeControl.setValue(options[0]);
+    }
   }
 
   private resetStatusSpecificFields(): void {

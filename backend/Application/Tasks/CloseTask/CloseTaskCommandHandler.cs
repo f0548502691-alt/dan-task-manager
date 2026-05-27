@@ -14,6 +14,10 @@ public class CloseTaskCommandHandler : IRequestHandler<CloseTaskCommand, Workflo
 
     public Task<WorkflowResult> Handle(CloseTaskCommand request, CancellationToken cancellationToken)
     {
-        return _taskApplicationService.CloseAsync(request.TaskId, request.FinalNotes, cancellationToken);
+        return _taskApplicationService.CloseAsync(
+            request.TaskId,
+            request.NextAssignedToUserId,
+            request.FinalNotes,
+            cancellationToken);
     }
 }

@@ -209,7 +209,7 @@ public class TasksController : ControllerBase
         }
 
         var result = await _mediator.Send(
-            new CloseTaskCommand(id, request.FinalNotes),
+            new CloseTaskCommand(id, request.NextAssignedToUserId, request.FinalNotes),
             HttpContext.RequestAborted);
 
         if (!result.Success)
@@ -359,6 +359,11 @@ public class ChangeStatusWorkflowRequest
 /// </summary>
 public class CloseTaskRequest
 {
+    /// <summary>
+    /// המשתמש שאליו המשימה תוקצה בעת הסגירה
+    /// </summary>
+    public int NextAssignedToUserId { get; set; }
+
     /// <summary>
     /// הערות סופיות על המשימה
     /// </summary>

@@ -1,7 +1,6 @@
 export const CLOSED_TASK_STATUS = 99;
 
 export const TASK_STATUS = {
-  BACKLOG: 0,
   IN_PROGRESS: 1,
   READY_FOR_REVIEW: 2,
   DONE: 3,
@@ -10,7 +9,6 @@ export const TASK_STATUS = {
 } as const;
 
 export const DEFAULT_STATUS_LABELS: Readonly<Record<number, string>> = {
-  [TASK_STATUS.BACKLOG]: 'Backlog',
   [TASK_STATUS.IN_PROGRESS]: 'In Progress',
   [TASK_STATUS.READY_FOR_REVIEW]: 'Ready for Review',
   [TASK_STATUS.DONE]: 'Done',
@@ -18,12 +16,48 @@ export const DEFAULT_STATUS_LABELS: Readonly<Record<number, string>> = {
   [TASK_STATUS.CLOSED]: 'Closed'
 };
 
-export const TASK_FINAL_STATUS_BY_TYPE: Readonly<Record<string, number>> = {
+export const DEFAULT_TASK_FINAL_STATUS_BY_TYPE: Readonly<Record<string, number>> = {
   Procurement: TASK_STATUS.DONE,
   Development: TASK_STATUS.RELEASED
 };
 
 export type TaskCustomData = Record<string, unknown>;
+
+export interface TaskFieldSchemaDto {
+  field: string;
+  type: string;
+  required: boolean;
+  minLength?: number | null;
+  maxLength?: number | null;
+  minValue?: number | null;
+  maxValue?: number | null;
+  arrayLength?: number | null;
+  minItems?: number | null;
+  maxItems?: number | null;
+  elementType?: string | null;
+  pattern?: string | null;
+  appliesFromStatus?: number | null;
+  appliesToStatus?: number | null;
+  allowedValues?: string[] | null;
+  isIndexed: boolean;
+}
+
+export interface TaskTypeSchemaDto {
+  taskType: string;
+  displayName: string;
+  finalStatus?: number | null;
+  isActive: boolean;
+  version: number;
+  fields: TaskFieldSchemaDto[];
+}
+
+export interface PagedResultDto<T> {
+  items: T[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+}
 
 export interface AppUserDto {
   id: number;
@@ -66,10 +100,12 @@ export interface UpdateTaskRequest {
 
 export interface ChangeStatusWorkflowRequest {
   newStatus: number;
-  newDataJson: string;
+  nextAssignedToUserId: number;
+  customFields: TaskCustomData;
 }
 
 export interface CloseTaskRequest {
+  nextAssignedToUserId: number;
   finalNotes: string;
 }
 

@@ -110,6 +110,7 @@ public class CloseTaskCommandHandlerTests
     {
         var serviceMock = new Mock<ITaskApplicationService>();
         const int taskId = 11;
+        const int nextAssignedToUserId = 4;
         const string notes = "Completed successfully";
         var expectedResult = WorkflowResult.SuccessResult(
             newStatus: 99,
@@ -117,15 +118,19 @@ public class CloseTaskCommandHandlerTests
             message: "Closed");
 
         serviceMock
-            .Setup(service => service.CloseAsync(taskId, notes, It.IsAny<CancellationToken>()))
+            .Setup(service => service.CloseAsync(taskId, nextAssignedToUserId, notes, It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedResult);
 
         var handler = new CloseTaskCommandHandler(serviceMock.Object);
 
-        var result = await handler.Handle(new CloseTaskCommand(taskId, notes), CancellationToken.None);
+        var result = await handler.Handle(
+            new CloseTaskCommand(taskId, nextAssignedToUserId, notes),
+            CancellationToken.None);
 
         Assert.Same(expectedResult, result);
-        serviceMock.Verify(service => service.CloseAsync(taskId, notes, It.IsAny<CancellationToken>()), Times.Once);
+        serviceMock.Verify(
+            service => service.CloseAsync(taskId, nextAssignedToUserId, notes, It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 }
 

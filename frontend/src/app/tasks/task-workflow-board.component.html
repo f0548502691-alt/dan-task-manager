@@ -6,7 +6,7 @@
     <form [formGroup]="createForm" (ngSubmit)="submitCreateTask()">
       <label for="createTaskType">Task type</label>
       <select id="createTaskType" formControlName="createTaskType">
-        <option *ngFor="let type of taskTypeOptions" [ngValue]="type">{{ type }}</option>
+        <option *ngFor="let type of taskTypeOptions()" [ngValue]="type">{{ type }}</option>
       </select>
 
       <label for="createTaskDescription">Description</label>
