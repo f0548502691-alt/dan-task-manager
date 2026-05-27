@@ -1,8 +1,7 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { catchError, finalize, map, Observable, of, switchMap, tap, throwError } from 'rxjs';
 import {
-  ApiErrorResponse,
   BaseTaskDto,
   ChangeStatusWorkflowRequest,
   ChangeStatusWorkflowResponse,
@@ -15,10 +14,13 @@ import {
   CreateTaskRequest,
   UpdateTaskRequest
 } from './task.interfaces';
+import { AppErrorService } from '../core/app-error.service';
+import { extractErrorMessage } from '../core/error-message.utils';
 
 @Injectable({ providedIn: 'root' })
 export class TaskService {
   private readonly http = inject(HttpClient);
+  private readonly appErrorService = inject(AppErrorService);
   private readonly apiUrl = '/api/tasks';
 
   private readonly _currentUserId = signal<number | null>(null);
@@ -36,7 +38,7 @@ export class TaskService {
 
   setCurrentUserId(userId: number | null): void {
     this._currentUserId.set(userId);
-    this._error.set(null);
+    this.clearErrorsState();
 
     if (userId === null) {
       this._tasks.set([]);
@@ -58,7 +60,7 @@ export class TaskService {
     }
 
     this._isLoading.set(true);
-    this._error.set(null);
+    this.clearErrorsState();
 
     return this.http.get<PagedResultDto<unknown> | unknown[]>(`${this.apiUrl}/user/${userId}`).pipe(
       map((response) => this.normalizeTaskCollection(response)),
@@ -70,7 +72,7 @@ export class TaskService {
   }
 
   createTask(request: CreateTaskRequest): Observable<BaseTaskDto> {
-    this._error.set(null);
+    this.clearErrorsState();
 
     return this.http.post<unknown>(this.apiUrl, request).pipe(
       map((response) => this.normalizeTask(response)),
@@ -80,7 +82,7 @@ export class TaskService {
   }
 
   changeTaskStatus(taskId: number, request: ChangeStatusWorkflowRequest): Observable<ChangeStatusWorkflowResponse> {
-    this._error.set(null);
+    this.clearErrorsState();
 
     return this.http.post<unknown>(`${this.apiUrl}/${taskId}/change-status`, request).pipe(
       map((response) => this.normalizeChangeStatusResponse(response)),
@@ -90,7 +92,7 @@ export class TaskService {
   }
 
   closeTask(taskId: number, request: CloseTaskRequest): Observable<CloseTaskResponse> {
-    this._error.set(null);
+    this.clearErrorsState();
 
     return this.http.post<unknown>(`${this.apiUrl}/${taskId}/close`, request).pipe(
       map((response) => this.normalizeCloseResponse(response)),
@@ -100,7 +102,7 @@ export class TaskService {
   }
 
   getTaskTypes(): Observable<readonly TaskTypeSchemaDto[]> {
-    this._error.set(null);
+    this.clearErrorsState();
 
     return this.http.get<TaskTypeSchemaDto[]>('/api/task-types').pipe(
       map((taskTypes) =>
@@ -118,7 +120,7 @@ export class TaskService {
   }
 
   updateTask(taskId: number, request: UpdateTaskRequest): Observable<void> {
-    this._error.set(null);
+    this.clearErrorsState();
 
     return this.http.put<void>(`${this.apiUrl}/${taskId}`, request).pipe(
       switchMap(() => {
@@ -134,7 +136,7 @@ export class TaskService {
   }
 
   deleteTask(taskId: number): Observable<void> {
-    this._error.set(null);
+    this.clearErrorsState();
 
     return this.http.delete<void>(`${this.apiUrl}/${taskId}`).pipe(
       tap(() => this.removeTaskFromState(taskId)),
@@ -143,7 +145,7 @@ export class TaskService {
   }
 
   clearError(): void {
-    this._error.set(null);
+    this.clearErrorsState();
   }
 
   private syncTaskWithState(task: BaseTaskDto): void {
@@ -281,38 +283,14 @@ export class TaskService {
   }
 
   private handleHttpError(error: unknown): Observable<never> {
-    const message = this.extractErrorMessage(error);
+    const message = extractErrorMessage(error);
     this._error.set(message);
+    this.appErrorService.setError(message);
     return throwError(() => new Error(message));
   }
 
-  private extractErrorMessage(error: unknown): string {
-    if (!(error instanceof HttpErrorResponse)) {
-      return 'Unexpected error while communicating with the server.';
-    }
-
-    const payload = error.error;
-    if (this.isApiErrorResponse(payload)) {
-      return payload.error;
-    }
-
-    if (typeof payload === 'string' && payload.trim().length > 0) {
-      return payload;
-    }
-
-    if (typeof error.message === 'string' && error.message.trim().length > 0) {
-      return error.message;
-    }
-
-    return 'Unexpected server error.';
-  }
-
-  private isApiErrorResponse(payload: unknown): payload is ApiErrorResponse {
-    return (
-      payload !== null &&
-      typeof payload === 'object' &&
-      'error' in payload &&
-      typeof (payload as { error: unknown }).error === 'string'
-    );
+  private clearErrorsState(): void {
+    this._error.set(null);
+    this.appErrorService.clearError();
   }
 }

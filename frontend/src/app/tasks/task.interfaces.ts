@@ -124,4 +124,5 @@ export interface CloseTaskResponse {
 
 export interface ApiErrorResponse {
   error: string;
+  code?: string;
 }

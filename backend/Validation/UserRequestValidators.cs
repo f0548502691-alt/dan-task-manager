@@ -1,4 +1,4 @@
-using DanTaskManager.Controllers;
+using DanTaskManager.Contracts.Requests.Users;
 using FluentValidation;
 
 namespace DanTaskManager.Validation;

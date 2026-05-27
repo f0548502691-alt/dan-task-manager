@@ -25,14 +25,14 @@ public class GlobalExceptionMiddleware
         {
             await _next(context);
         }
-        catch (WorkflowValidationException ex)
+        catch (ApiException ex)
         {
-            _logger.LogWarning(ex, "Workflow validation failed for path: {Path}", context.Request.Path);
+            _logger.LogWarning(ex, "API exception for path: {Path}", context.Request.Path);
             await WriteErrorResponseAsync(
                 context,
-                StatusCodes.Status400BadRequest,
+                ex.StatusCode,
                 ex.Message,
-                "workflow_validation_failed");
+                ex.Code);
         }
         catch (Exception ex)
         {

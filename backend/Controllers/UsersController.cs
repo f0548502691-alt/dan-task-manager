@@ -1,3 +1,6 @@
+using DanTaskManager.Contracts.Requests.Common;
+using DanTaskManager.Contracts.Requests.Users;
+using DanTaskManager.Domain;
 using DanTaskManager.Services;
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
@@ -48,7 +51,7 @@ public class UsersController : ControllerBase
 
         if (user == null)
         {
-            return NotFound();
+            throw new ApiNotFoundException("משתמש לא נמצא");
         }
 
         return Ok(user);
@@ -65,7 +68,7 @@ public class UsersController : ControllerBase
         var userExists = await _userService.ExistsAsync(id, HttpContext.RequestAborted);
         if (!userExists)
         {
-            return NotFound("משתמש לא קיים");
+            throw new ApiNotFoundException("משתמש לא קיים");
         }
 
         var tasks = await _userService.GetUserTasksAsync(

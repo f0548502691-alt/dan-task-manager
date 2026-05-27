@@ -1,6 +1,6 @@
 using DanTaskManager.Services;
 
-namespace DanTaskManager.Controllers;
+namespace DanTaskManager.Contracts.Requests.Common;
 
 public class PaginationQuery
 {
