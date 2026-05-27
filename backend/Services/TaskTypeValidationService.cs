@@ -1,7 +1,5 @@
-using DanTaskManager.Data;
 using DanTaskManager.Domain;
-using DanTaskManager.Domain.Handlers;
-using Microsoft.EntityFrameworkCore;
+using DanTaskManager.Persistence;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using System.Globalization;
@@ -119,15 +117,15 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
 {
     private const string CachePrefix = "task-type-validation::";
 
-    private readonly ApplicationDbContext? _context;
+    private readonly ITaskTypeMetadataRepository? _metadataRepository;
     private readonly IMemoryCache? _cache;
     private readonly IReadOnlyDictionary<string, TaskTypeDefinition>? _inMemoryTaskTypeMap;
 
     public TaskTypeValidationService(
-        ApplicationDbContext context,
+        ITaskTypeMetadataRepository metadataRepository,
         IMemoryCache cache)
     {
-        _context = context;
+        _metadataRepository = metadataRepository;
         _cache = cache;
     }
 
@@ -189,7 +187,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
 
     public IReadOnlyCollection<TaskTypeSchemaDto> GetTaskTypes()
     {
-        if (_context == null)
+        if (_metadataRepository == null)
         {
             return (_inMemoryTaskTypeMap ?? new Dictionary<string, TaskTypeDefinition>(StringComparer.OrdinalIgnoreCase))
                 .Values
@@ -198,11 +196,8 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
                 .ToList();
         }
 
-        return _context.TaskTypes
-            .AsNoTracking()
-            .Include(taskType => taskType.FieldDefinitions)
-            .OrderBy(taskType => taskType.Code)
-            .ToList()
+        return _metadataRepository
+            .GetAll()
             .Select(MapToSchemaDto)
             .ToList();
     }
@@ -217,7 +212,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
         var normalizedTaskType = taskType.Trim();
         var normalizedTaskTypeLower = normalizedTaskType.ToLowerInvariant();
 
-        if (_context == null)
+        if (_metadataRepository == null)
         {
             if (_inMemoryTaskTypeMap == null ||
                 !_inMemoryTaskTypeMap.TryGetValue(normalizedTaskType, out var definition))
@@ -228,17 +223,16 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
             return MapToSchemaDto(definition);
         }
 
-        var taskTypeEntity = _context.TaskTypes
-            .AsNoTracking()
-            .Include(item => item.FieldDefinitions)
-            .FirstOrDefault(item => item.Code.ToLower() == normalizedTaskTypeLower);
+        var taskTypeEntity = _metadataRepository.GetByCode(
+            normalizedTaskTypeLower,
+            asNoTracking: true);
 
         return taskTypeEntity == null ? null : MapToSchemaDto(taskTypeEntity);
     }
 
     public MetadataOperationResult UpsertTaskType(UpsertTaskTypeCommand command)
     {
-        if (_context == null)
+        if (_metadataRepository == null)
         {
             return MetadataOperationResult.FailureResult("Database-backed metadata updates are not available");
         }
@@ -267,9 +261,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
                 $"FinalStatus must be less than {WorkflowConstants.ClosedStatus}");
         }
 
-        var entity = _context.TaskTypes
-            .Include(taskType => taskType.FieldDefinitions)
-            .FirstOrDefault(taskType => taskType.Code.ToLower() == codeLower);
+        var entity = _metadataRepository.GetByCode(codeLower);
 
         if (entity == null)
         {
@@ -283,7 +275,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
-            _context.TaskTypes.Add(entity);
+            _metadataRepository.Add(entity);
         }
         else
         {
@@ -294,13 +286,11 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
             entity.UpdatedAt = DateTime.UtcNow;
         }
 
-        _context.SaveChanges();
+        _metadataRepository.SaveChanges();
         RemoveCacheEntry(code);
 
-        var reloaded = _context.TaskTypes
-            .AsNoTracking()
-            .Include(taskType => taskType.FieldDefinitions)
-            .First(taskType => taskType.Code.ToLower() == codeLower);
+        var reloaded = _metadataRepository.GetByCode(codeLower, asNoTracking: true)
+            ?? entity;
 
         return MetadataOperationResult.SuccessResult(
             MapToSchemaDto(reloaded),
@@ -309,7 +299,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
 
     public MetadataOperationResult UpsertFieldDefinition(string taskType, UpsertFieldDefinitionCommand command)
     {
-        if (_context == null)
+        if (_metadataRepository == null)
         {
             return MetadataOperationResult.FailureResult("Database-backed metadata updates are not available");
         }
@@ -346,9 +336,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
                 $"AppliesToStatus must be greater than or equal to {WorkflowConstants.CreatedStatus}");
         }
 
-        var taskTypeEntity = _context.TaskTypes
-            .Include(item => item.FieldDefinitions)
-            .FirstOrDefault(item => item.Code.ToLower() == normalizedTaskTypeLower);
+        var taskTypeEntity = _metadataRepository.GetByCode(normalizedTaskTypeLower);
 
         if (taskTypeEntity == null)
         {
@@ -408,13 +396,11 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
         taskTypeEntity.Version += 1;
         taskTypeEntity.UpdatedAt = DateTime.UtcNow;
 
-        _context.SaveChanges();
+        _metadataRepository.SaveChanges();
         RemoveCacheEntry(taskTypeEntity.Code);
 
-        var reloaded = _context.TaskTypes
-            .AsNoTracking()
-            .Include(item => item.FieldDefinitions)
-            .First(item => item.Id == taskTypeEntity.Id);
+        var reloaded = _metadataRepository.GetById(taskTypeEntity.Id, asNoTracking: true)
+            ?? taskTypeEntity;
 
         return MetadataOperationResult.SuccessResult(
             MapToSchemaDto(reloaded),
@@ -434,7 +420,7 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
             return inMemoryDefinition;
         }
 
-        if (_context == null || _cache == null)
+        if (_metadataRepository == null || _cache == null)
         {
             return null;
         }
@@ -448,10 +434,10 @@ public class TaskTypeValidationService : ITaskTypeValidationService, ITaskTypeMe
         var normalizedTaskType = taskType.Trim();
         var normalizedTaskTypeLower = normalizedTaskType.ToLowerInvariant();
 
-        var entity = _context.TaskTypes
-            .AsNoTracking()
-            .Include(item => item.FieldDefinitions)
-            .FirstOrDefault(item => item.Code.ToLower() == normalizedTaskTypeLower && item.IsActive);
+        var entity = _metadataRepository.GetByCode(
+            normalizedTaskTypeLower,
+            activeOnly: true,
+            asNoTracking: true);
 
         if (entity == null)
         {

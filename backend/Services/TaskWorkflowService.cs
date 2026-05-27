@@ -1,6 +1,5 @@
-using DanTaskManager.Data;
 using DanTaskManager.Domain;
-using Microsoft.EntityFrameworkCore;
+using DanTaskManager.Persistence;
 
 namespace DanTaskManager.Services;
 
@@ -71,16 +70,19 @@ public class WorkflowResult
 /// </summary>
 public class TaskWorkflowService : ITaskWorkflowService
 {
-    private readonly ApplicationDbContext _context;
+    private readonly ITaskRepository _taskRepository;
+    private readonly IUserRepository _userRepository;
     private readonly IReadOnlyList<ITaskWorkflowRuleProvider> _ruleProviders;
     private readonly ILogger<TaskWorkflowService> _logger;
 
     public TaskWorkflowService(
-        ApplicationDbContext context,
+        ITaskRepository taskRepository,
+        IUserRepository userRepository,
         IEnumerable<ITaskWorkflowRuleProvider> ruleProviders,
         ILogger<TaskWorkflowService> logger)
     {
-        _context = context;
+        _taskRepository = taskRepository;
+        _userRepository = userRepository;
         _ruleProviders = ruleProviders
             .OrderBy(provider => provider.Priority)
             .ToArray();
@@ -95,7 +97,7 @@ public class TaskWorkflowService : ITaskWorkflowService
         CancellationToken cancellationToken = default)
     {
         // 1. קבלת המשימה
-        var task = await _context.Tasks.FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
+        var task = await _taskRepository.GetByIdAsync(taskId, cancellationToken);
         if (task == null)
         {
             return WorkflowResult.FailureResult("Task does not exist");
@@ -107,9 +109,7 @@ public class TaskWorkflowService : ITaskWorkflowService
             return WorkflowResult.FailureResult("Task is closed - status cannot be changed");
         }
 
-        var nextAssigneeExists = await _context.Users
-            .AsNoTracking()
-            .AnyAsync(u => u.Id == nextAssignedToUserId, cancellationToken);
+        var nextAssigneeExists = await _userRepository.ExistsAsync(nextAssignedToUserId, cancellationToken);
         if (!nextAssigneeExists)
         {
             return WorkflowResult.FailureResult("Next assignee does not exist");
@@ -155,7 +155,7 @@ public class TaskWorkflowService : ITaskWorkflowService
         task.CustomDataJson = newDataJson;
         task.UpdatedAt = DateTime.UtcNow;
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await _taskRepository.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
             "Task {TaskId} updated from status {OldStatus} to {NewStatus}, assignee {OldAssignee}->{NewAssignee}",
@@ -177,7 +177,7 @@ public class TaskWorkflowService : ITaskWorkflowService
         string finalNotes,
         CancellationToken cancellationToken = default)
     {
-        var task = await _context.Tasks.FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
+        var task = await _taskRepository.GetByIdAsync(taskId, cancellationToken);
         if (task == null)
         {
             return WorkflowResult.FailureResult("Task does not exist");
@@ -188,9 +188,7 @@ public class TaskWorkflowService : ITaskWorkflowService
             return WorkflowResult.FailureResult("Task is already closed");
         }
 
-        var nextAssigneeExists = await _context.Users
-            .AsNoTracking()
-            .AnyAsync(u => u.Id == nextAssignedToUserId, cancellationToken);
+        var nextAssigneeExists = await _userRepository.ExistsAsync(nextAssignedToUserId, cancellationToken);
         if (!nextAssigneeExists)
         {
             return WorkflowResult.FailureResult("Next assignee does not exist");
@@ -233,7 +231,7 @@ public class TaskWorkflowService : ITaskWorkflowService
         task.CustomDataJson = updatedJson;
         task.UpdatedAt = DateTime.UtcNow;
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await _taskRepository.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
             "Task {TaskId} closed with notes: {Notes}, assignee {OldAssignee}->{NewAssignee}",
@@ -252,9 +250,7 @@ public class TaskWorkflowService : ITaskWorkflowService
         int taskId,
         CancellationToken cancellationToken = default)
     {
-        var task = await _context.Tasks
-            .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
+        var task = await _taskRepository.GetByIdReadOnlyAsync(taskId, cancellationToken);
         if (task == null)
         {
             return WorkflowResult.FailureResult("Task does not exist");
@@ -272,20 +268,12 @@ public class TaskWorkflowService : ITaskWorkflowService
         int userId,
         CancellationToken cancellationToken = default)
     {
-        return await _context.Tasks
-            .AsNoTracking()
-            .Where(t => t.AssignedToUserId == userId)
-            .Include(t => t.AssignedToUser)
-            .OrderByDescending(t => t.CreatedAt)
-            .ToListAsync(cancellationToken);
+        return await _taskRepository.GetByUserAsync(userId, cancellationToken);
     }
 
     public async Task<BaseTask?> GetTaskAsync(int taskId, CancellationToken cancellationToken = default)
     {
-        return await _context.Tasks
-            .AsNoTracking()
-            .Include(t => t.AssignedToUser)
-            .FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
+        return await _taskRepository.GetByIdReadOnlyAsync(taskId, cancellationToken);
     }
 
     /// <summary>

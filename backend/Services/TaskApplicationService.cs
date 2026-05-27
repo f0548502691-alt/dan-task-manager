@@ -1,80 +1,69 @@
-using DanTaskManager.Data;
 using DanTaskManager.Domain;
-using Microsoft.EntityFrameworkCore;
+using DanTaskManager.Persistence;
 using System.Text.Json;
 
 namespace DanTaskManager.Services;
 
 public class TaskApplicationService : ITaskApplicationService
 {
-    private readonly ApplicationDbContext _context;
+    private readonly ITaskRepository _taskRepository;
+    private readonly IUserRepository _userRepository;
     private readonly ITaskWorkflowService _workflowService;
     private readonly ILogger<TaskApplicationService> _logger;
 
     public TaskApplicationService(
-        ApplicationDbContext context,
+        ITaskRepository taskRepository,
+        IUserRepository userRepository,
         ITaskWorkflowService workflowService,
         ILogger<TaskApplicationService> logger)
     {
-        _context = context;
+        _taskRepository = taskRepository;
+        _userRepository = userRepository;
         _workflowService = workflowService;
         _logger = logger;
     }
 
-    public Task<PagedResult<TaskSummaryDto>> GetAllAsync(
+    public async Task<PagedResult<TaskSummaryDto>> GetAllAsync(
         PageRequest pageRequest,
         CancellationToken cancellationToken = default)
     {
-        return QueryTaskSummariesAsync(
-            _context.Tasks.AsNoTracking(),
-            pageRequest,
-            cancellationToken);
+        var page = await _taskRepository.GetPageAsync(pageRequest, cancellationToken: cancellationToken);
+        return MapTaskSummaryPage(page);
     }
 
-    public Task<PagedResult<TaskSummaryDto>> GetByTypeAsync(
+    public async Task<PagedResult<TaskSummaryDto>> GetByTypeAsync(
         string taskType,
         PageRequest pageRequest,
         CancellationToken cancellationToken = default)
     {
-        var query = _context.Tasks
-            .AsNoTracking()
-            .Where(t => t.TaskType == taskType);
-
-        return QueryTaskSummariesAsync(query, pageRequest, cancellationToken);
+        var page = await _taskRepository.GetPageAsync(
+            pageRequest,
+            taskType: taskType,
+            cancellationToken: cancellationToken);
+        return MapTaskSummaryPage(page);
     }
 
-    public Task<PagedResult<TaskSummaryDto>> GetByUserAsync(
+    public async Task<PagedResult<TaskSummaryDto>> GetByUserAsync(
         int userId,
         PageRequest pageRequest,
         CancellationToken cancellationToken = default)
     {
-        var query = _context.Tasks
-            .AsNoTracking()
-            .Where(t => t.AssignedToUserId == userId);
-
-        return QueryTaskSummariesAsync(query, pageRequest, cancellationToken);
+        var page = await _taskRepository.GetPageAsync(
+            pageRequest,
+            assignedToUserId: userId,
+            cancellationToken: cancellationToken);
+        return MapTaskSummaryPage(page);
     }
 
     public async Task<TaskDetailsDto?> GetByIdAsync(int taskId, CancellationToken cancellationToken = default)
     {
-        var task = await _context.Tasks
-            .AsNoTracking()
-            .Include(t => t.AssignedToUser)
-            .FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
-
-        if (task == null)
-        {
-            return null;
-        }
-
-        return MapToTaskDetails(task, task.AssignedToUser);
+        var task = await _taskRepository.GetByIdReadOnlyAsync(taskId, cancellationToken);
+        return task == null ? null : TaskDtoMappings.ToTaskDetailsDto(task);
     }
 
     public Task<bool> UserExistsAsync(int userId, CancellationToken cancellationToken = default)
     {
-        return _context.Users
-            .AsNoTracking()
-            .AnyAsync(u => u.Id == userId, cancellationToken);
+        return _userRepository.ExistsAsync(userId, cancellationToken);
     }
 
     public async Task<TaskCreationResult> CreateAsync(
@@ -110,8 +99,8 @@ public class TaskApplicationService : ITaskApplicationService
             UpdatedAt = DateTime.UtcNow
         };
 
-        _context.Tasks.Add(task);
-        await _context.SaveChangesAsync(cancellationToken);
+        _taskRepository.Add(task);
+        await _taskRepository.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
             "Created task {TaskId} ({TaskType}) assigned to user {UserId}",
@@ -139,7 +128,7 @@ public class TaskApplicationService : ITaskApplicationService
             return false;
         }
 
-        var task = await _context.Tasks.FindAsync(new object[] { taskId }, cancellationToken);
+        var task = await _taskRepository.GetByIdAsync(taskId, cancellationToken);
         if (task == null)
         {
             return false;
@@ -151,7 +140,7 @@ public class TaskApplicationService : ITaskApplicationService
         }
 
         task.UpdatedAt = DateTime.UtcNow;
-        await _context.SaveChangesAsync(cancellationToken);
+        await _taskRepository.SaveChangesAsync(cancellationToken);
         return true;
     }
 
@@ -163,14 +152,14 @@ public class TaskApplicationService : ITaskApplicationService
             return false;
         }
 
-        var task = await _context.Tasks.FindAsync(new object[] { taskId }, cancellationToken);
+        var task = await _taskRepository.GetByIdAsync(taskId, cancellationToken);
         if (task == null)
         {
             return false;
         }
 
-        _context.Tasks.Remove(task);
-        await _context.SaveChangesAsync(cancellationToken);
+        _taskRepository.Remove(task);
+        await _taskRepository.SaveChangesAsync(cancellationToken);
         return true;
     }
 
@@ -193,47 +182,13 @@ public class TaskApplicationService : ITaskApplicationService
         return _workflowService.CloseTaskAsync(taskId, nextAssignedToUserId, finalNotes, cancellationToken);
     }
 
-    private async Task<PagedResult<TaskSummaryDto>> QueryTaskSummariesAsync(
-        IQueryable<BaseTask> query,
-        PageRequest pageRequest,
-        CancellationToken cancellationToken)
+    private static PagedResult<TaskSummaryDto> MapTaskSummaryPage(PagedResult<BaseTask> page)
     {
-        var page = pageRequest.NormalizedPage;
-        var pageSize = pageRequest.NormalizedPageSize;
+        var items = page.Items
+            .Select(TaskDtoMappings.ToTaskSummaryDto)
+            .ToList();
 
-        var orderedQuery = query.OrderByDescending(t => t.CreatedAt);
-        var totalCount = await orderedQuery.CountAsync(cancellationToken);
-
-        var items = await orderedQuery
-            .Skip(pageRequest.Skip)
-            .Take(pageSize)
-            .Select(TaskDtoMappings.ToTaskSummary())
-            .ToListAsync(cancellationToken);
-
-        return PagedResult<TaskSummaryDto>.Create(items, totalCount, page, pageSize);
-    }
-
-    private static TaskDetailsDto MapToTaskDetails(BaseTask task, AppUser? assignedToUser)
-    {
-        return new TaskDetailsDto
-        {
-            Id = task.Id,
-            TaskType = task.TaskType,
-            CurrentStatus = task.CurrentStatus,
-            AssignedToUserId = task.AssignedToUserId,
-            Description = task.Description,
-            CreatedAt = task.CreatedAt,
-            UpdatedAt = task.UpdatedAt,
-            CustomFields = ParseCustomFields(task.CustomDataJson),
-            AssignedToUser = assignedToUser == null
-                ? null
-                : new UserBriefDto
-                {
-                    Id = assignedToUser.Id,
-                    Name = assignedToUser.Name,
-                    Email = assignedToUser.Email
-                }
-        };
+        return PagedResult<TaskSummaryDto>.Create(items, page.TotalCount, page.Page, page.PageSize);
     }
 
     private static bool TryNormalizeJson(
@@ -262,19 +217,6 @@ public class TaskApplicationService : ITaskApplicationService
             normalizedJson = "{}";
             errorMessage = $"Invalid JSON payload: {ex.Message}";
             return false;
-        }
-    }
-
-    private static JsonElement ParseCustomFields(string json)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
-            return doc.RootElement.Clone();
-        }
-        catch (JsonException)
-        {
-            return JsonSerializer.SerializeToElement(new Dictionary<string, object?>());
         }
     }
 

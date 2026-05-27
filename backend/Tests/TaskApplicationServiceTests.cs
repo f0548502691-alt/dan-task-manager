@@ -1,9 +1,8 @@
 using DanTaskManager.Data;
 using DanTaskManager.Domain;
-using DanTaskManager.Domain.Handlers;
+using DanTaskManager.Persistence;
 using DanTaskManager.Services;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 
 namespace DanTaskManager.Tests;
 
@@ -28,21 +27,10 @@ public class TaskApplicationServiceTests
         });
         await context.SaveChangesAsync();
 
-        var handlers = new ITaskHandler[]
-        {
-            new AnalysisTaskHandler(),
-            new DevelopmentTaskHandler(),
-            new ProcurementTaskHandler(),
-            new TestingTaskHandler()
-        };
-        var metadataService = new TaskTypeValidationService(Options.Create(new TaskTypeValidationOptions()));
-
         var service = new TaskApplicationService(
-            context,
+            new EfTaskRepository(context),
+            new EfUserRepository(context),
             new NoOpWorkflowService(),
-            new TaskHandlerFactory(handlers),
-            metadataService,
-            metadataService,
             new MockLogger());
 
         var result = await service.CreateAsync(

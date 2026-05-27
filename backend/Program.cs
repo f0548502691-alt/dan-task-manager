@@ -1,6 +1,7 @@
 using DanTaskManager.Data;
 using DanTaskManager.Domain.Handlers;
 using DanTaskManager.Middleware;
+using DanTaskManager.Persistence;
 using DanTaskManager.Services;
 using FluentValidation;
 using MediatR;
@@ -22,6 +23,11 @@ builder.Services.AddScoped<TaskHandlerFactory>();
 
 // ✅ cache לחוקיות מסוגי משימות
 builder.Services.AddMemoryCache();
+
+// ✅ שכבת persistence - כל גישת EF מרוכזת כאן
+builder.Services.AddScoped<ITaskRepository, EfTaskRepository>();
+builder.Services.AddScoped<IUserRepository, EfUserRepository>();
+builder.Services.AddScoped<ITaskTypeMetadataRepository, EfTaskTypeMetadataRepository>();
 
 // ✅ הרשמת שירות metadata + ולידציה מבוססי DB
 builder.Services.AddScoped<TaskTypeValidationService>();

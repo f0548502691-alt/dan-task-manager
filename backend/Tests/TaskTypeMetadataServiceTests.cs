@@ -1,4 +1,5 @@
 using DanTaskManager.Data;
+using DanTaskManager.Persistence;
 using DanTaskManager.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -22,7 +23,7 @@ public class TaskTypeMetadataServiceTests : IDisposable
         _context.Database.EnsureCreated();
 
         _cache = new MemoryCache(new MemoryCacheOptions());
-        _service = new TaskTypeValidationService(_context, _cache);
+        _service = new TaskTypeValidationService(new EfTaskTypeMetadataRepository(_context), _cache);
     }
 
     [Fact]

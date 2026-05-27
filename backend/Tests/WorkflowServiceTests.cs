@@ -1,6 +1,7 @@
 using DanTaskManager.Data;
 using DanTaskManager.Domain;
 using DanTaskManager.Domain.Handlers;
+using DanTaskManager.Persistence;
 using DanTaskManager.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -39,7 +40,8 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         _factory = new TaskHandlerFactory(handlers);
         var validationService = CreateValidationService();
         _service = new TaskWorkflowService(
-            _context,
+            new EfTaskRepository(_context),
+            new EfUserRepository(_context),
             CreateRuleProviders(_factory, validationService),
             new MockLogger());
 
@@ -184,7 +186,8 @@ public class TaskWorkflowServiceTests : IAsyncLifetime
         }));
 
         var relaxedService = new TaskWorkflowService(
-            _context,
+            new EfTaskRepository(_context),
+            new EfUserRepository(_context),
             CreateRuleProviders(_factory, relaxedValidationService),
             new MockLogger());
 
@@ -563,7 +566,8 @@ public class TaskWorkflowIntegrationTests : IAsyncLifetime
             new DevelopmentTaskHandler()
         };
         _service = new TaskWorkflowService(
-            _context,
+            new EfTaskRepository(_context),
+            new EfUserRepository(_context),
             CreateRuleProviders(
                 new TaskHandlerFactory(handlers),
                 CreateValidationService()),
