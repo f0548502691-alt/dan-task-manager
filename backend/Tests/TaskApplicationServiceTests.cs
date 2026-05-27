@@ -1,9 +1,7 @@
 using DanTaskManager.Data;
 using DanTaskManager.Domain;
-using DanTaskManager.Domain.Handlers;
 using DanTaskManager.Services;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 
 namespace DanTaskManager.Tests;
 
@@ -18,38 +16,25 @@ public class TaskApplicationServiceTests
             .Options;
 
         await using var context = new ApplicationDbContext(options);
-        await context.Database.EnsureCreatedAsync();
 
         context.Users.Add(new AppUser
         {
-            Id = 1,
+            Id = 101,
             Name = "Test User",
             Email = "test@example.com"
         });
         await context.SaveChangesAsync();
 
-        var handlers = new ITaskHandler[]
-        {
-            new AnalysisTaskHandler(),
-            new DevelopmentTaskHandler(),
-            new ProcurementTaskHandler(),
-            new TestingTaskHandler()
-        };
-        var metadataService = new TaskTypeValidationService(Options.Create(new TaskTypeValidationOptions()));
-
         var service = new TaskApplicationService(
             context,
             new NoOpWorkflowService(),
-            new TaskHandlerFactory(handlers),
-            metadataService,
-            metadataService,
             new MockLogger());
 
         var result = await service.CreateAsync(
             new TaskCreateCommand(
                 "UnknownType",
                 "Unsupported task type",
-                1,
+                101,
                 "{}"));
 
         Assert.False(result.Success);
