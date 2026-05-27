@@ -17,7 +17,7 @@ public class InitialSchemaMigrationTests
         var migrations = context.GetService<IMigrationsAssembly>();
 
         Assert.Contains(InitialSchemaMigrationId, migrations.Migrations.Keys);
-        Assert.IsType<InitialSchema>(migrations.Migrations[InitialSchemaMigrationId].CreateInstance());
+        Assert.Equal(typeof(InitialSchema), migrations.Migrations[InitialSchemaMigrationId].AsType());
         Assert.IsType<ApplicationDbContextModelSnapshot>(migrations.ModelSnapshot);
     }
 
