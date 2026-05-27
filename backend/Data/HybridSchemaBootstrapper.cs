@@ -67,24 +67,6 @@ public static class HybridSchemaBootstrapper
                 ON [TaskFieldDefinitions]([TaskTypeMetadataId], [FieldKey]);
             END;
 
-            IF COL_LENGTH('Tasks', 'PriorityIndex') IS NULL
-            BEGIN
-                ALTER TABLE [Tasks]
-                ADD [PriorityIndex] AS JSON_VALUE([CustomDataJson], '$.priority') PERSISTED;
-            END;
-
-            IF COL_LENGTH('Tasks', 'BranchNameIndex') IS NULL
-            BEGIN
-                ALTER TABLE [Tasks]
-                ADD [BranchNameIndex] AS JSON_VALUE([CustomDataJson], '$.branchName') PERSISTED;
-            END;
-
-            IF COL_LENGTH('Tasks', 'DeadlineUtcIndex') IS NULL
-            BEGIN
-                ALTER TABLE [Tasks]
-                ADD [DeadlineUtcIndex] AS TRY_CONVERT(datetime2, JSON_VALUE([CustomDataJson], '$.deadline'), 127) PERSISTED;
-            END;
-
             IF NOT EXISTS (
                 SELECT 1 FROM sys.check_constraints
                 WHERE name = N'CK_Tasks_CustomDataJson_IsJson'
@@ -94,36 +76,6 @@ public static class HybridSchemaBootstrapper
                 ALTER TABLE [Tasks] WITH NOCHECK
                 ADD CONSTRAINT [CK_Tasks_CustomDataJson_IsJson]
                 CHECK (ISJSON([CustomDataJson]) = 1);
-            END;
-
-            IF NOT EXISTS (
-                SELECT 1 FROM sys.indexes
-                WHERE name = N'IX_Tasks_TaskType_Priority' AND object_id = OBJECT_ID(N'[Tasks]')
-            )
-            BEGIN
-                CREATE INDEX [IX_Tasks_TaskType_Priority]
-                ON [Tasks]([TaskType], [PriorityIndex])
-                WHERE [PriorityIndex] IS NOT NULL;
-            END;
-
-            IF NOT EXISTS (
-                SELECT 1 FROM sys.indexes
-                WHERE name = N'IX_Tasks_TaskType_BranchName' AND object_id = OBJECT_ID(N'[Tasks]')
-            )
-            BEGIN
-                CREATE INDEX [IX_Tasks_TaskType_BranchName]
-                ON [Tasks]([TaskType], [BranchNameIndex])
-                WHERE [BranchNameIndex] IS NOT NULL;
-            END;
-
-            IF NOT EXISTS (
-                SELECT 1 FROM sys.indexes
-                WHERE name = N'IX_Tasks_TaskType_DeadlineUtc' AND object_id = OBJECT_ID(N'[Tasks]')
-            )
-            BEGIN
-                CREATE INDEX [IX_Tasks_TaskType_DeadlineUtc]
-                ON [Tasks]([TaskType], [DeadlineUtcIndex])
-                WHERE [DeadlineUtcIndex] IS NOT NULL;
             END;
 
             IF NOT EXISTS (SELECT 1 FROM [TaskTypes] WHERE [Code] = N'Procurement')

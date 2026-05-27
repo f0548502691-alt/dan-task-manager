@@ -60,7 +60,7 @@ public class UserApplicationService : IUserApplicationService
             .OrderByDescending(t => t.CreatedAt)
             .Skip(pageRequest.Skip)
             .Take(pageSize)
-            .Select(TaskDtoMappings.ToTaskSummary())
+            .Select(TaskProjectionExpressions.ToSummary())
             .ToListAsync(cancellationToken);
 
         return PagedResult<TaskSummaryDto>.Create(tasks, totalCount, page, pageSize);
@@ -98,5 +98,4 @@ public class UserApplicationService : IUserApplicationService
             OpenTasksCount = user.Tasks.Count(t => t.CurrentStatus != WorkflowConstants.ClosedStatus)
         };
     }
-
 }

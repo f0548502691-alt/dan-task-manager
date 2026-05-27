@@ -123,7 +123,9 @@ export class TaskService {
               typeof taskType.taskType === 'string' &&
               taskType.taskType.trim().length > 0
           )
-          .sort((left, right) => left.taskType.localeCompare(right.taskType))
+          .sort((left, right) =>
+            (left.displayName || left.taskType).localeCompare(right.displayName || right.taskType)
+          )
       ),
       tap((taskTypes) => this.cacheSchemas(taskTypes)),
       catchError((error) => this.handleHttpError(error))

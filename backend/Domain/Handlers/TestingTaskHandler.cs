@@ -8,7 +8,7 @@ namespace DanTaskManager.Domain.Handlers;
 /// סטטוס 2: דורש testCases גדול מ-0
 /// סטטוס 3: דורש coverage באחוזים ו-summary
 /// </summary>
-public class TestingTaskHandler : ITaskHandler
+public class TestingTaskHandler : IRegisterableTaskHandler
 {
     public string TaskType => "Testing";
 

@@ -13,6 +13,30 @@ public interface ITaskWorkflowRuleProvider
     bool CanHandle(string taskType);
     int? GetFinalStatus(string taskType);
     ValidationResult ValidateStatusChange(BaseTask task, int nextStatus, string newDataJson);
+    string BuildCloseData(BaseTask task, string finalNotes);
+}
+
+internal static class WorkflowCloseData
+{
+    public static string Merge(BaseTask task, string finalNotes)
+    {
+        var updatedJson = task.CustomDataJson;
+        try
+        {
+            var data = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object?>>(updatedJson) ?? new();
+            data["finalNotes"] = finalNotes;
+            data["closedAt"] = DateTime.UtcNow.ToString("o");
+            return System.Text.Json.JsonSerializer.Serialize(data);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return System.Text.Json.JsonSerializer.Serialize(new
+            {
+                finalNotes,
+                closedAt = DateTime.UtcNow.ToString("o")
+            });
+        }
+    }
 }
 
 public class MetadataTaskWorkflowRuleProvider : ITaskWorkflowRuleProvider
@@ -34,6 +58,8 @@ public class MetadataTaskWorkflowRuleProvider : ITaskWorkflowRuleProvider
     {
         return _validationService.ValidateStatusData(task.TaskType, nextStatus, newDataJson);
     }
+
+    public string BuildCloseData(BaseTask task, string finalNotes) => WorkflowCloseData.Merge(task, finalNotes);
 }
 
 public class HandlerTaskWorkflowRuleProvider : ITaskWorkflowRuleProvider
@@ -68,4 +94,6 @@ public class HandlerTaskWorkflowRuleProvider : ITaskWorkflowRuleProvider
             nextStatus,
             newDataJson);
     }
+
+    public string BuildCloseData(BaseTask task, string finalNotes) => WorkflowCloseData.Merge(task, finalNotes);
 }

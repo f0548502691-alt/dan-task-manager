@@ -32,6 +32,14 @@ public interface ITaskHandler
 }
 
 /// <summary>
+/// Marker for code-backed task types that should be discovered by DI.
+/// Metadata-backed task types do not need handlers registered as a second source of validation.
+/// </summary>
+public interface IRegisterableTaskHandler : ITaskHandler
+{
+}
+
+/// <summary>
 /// תוצאה של וולידציה
 /// </summary>
 public class ValidationResult

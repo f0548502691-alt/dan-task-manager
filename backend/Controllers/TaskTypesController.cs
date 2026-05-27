@@ -10,10 +10,14 @@ namespace DanTaskManager.Controllers;
 public class TaskTypesController : ControllerBase
 {
     private readonly ITaskTypeMetadataService _metadataService;
+    private readonly ITaskTypeCatalog _taskTypeCatalog;
 
-    public TaskTypesController(ITaskTypeMetadataService metadataService)
+    public TaskTypesController(
+        ITaskTypeMetadataService metadataService,
+        ITaskTypeCatalog taskTypeCatalog)
     {
         _metadataService = metadataService;
+        _taskTypeCatalog = taskTypeCatalog;
     }
 
     /// <summary>
@@ -22,7 +26,7 @@ public class TaskTypesController : ControllerBase
     [HttpGet]
     public ActionResult<IReadOnlyCollection<TaskTypeSchemaDto>> GetTaskTypes()
     {
-        return Ok(_metadataService.GetTaskTypes());
+        return Ok(GetMergedTaskTypeSchemas());
     }
 
     /// <summary>
@@ -34,7 +38,13 @@ public class TaskTypesController : ControllerBase
         var schema = _metadataService.GetTaskType(taskType);
         if (schema == null)
         {
-            throw new ApiNotFoundException("סוג משימה לא נמצא");
+            var descriptor = _taskTypeCatalog.Find(taskType);
+            if (descriptor == null)
+            {
+                return NotFound();
+            }
+
+            schema = CreateHandlerBackedSchema(descriptor);
         }
 
         return Ok(schema);
@@ -54,7 +64,7 @@ public class TaskTypesController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(request.TaskType))
         {
-            throw new ApiValidationException("TaskType נדרש");
+            return BadRequest(new { error = "TaskType is required" });
         }
 
         var result = _metadataService.UpsertTaskType(
@@ -72,6 +82,38 @@ public class TaskTypesController : ControllerBase
         return Ok(result.TaskType);
     }
 
+    private IReadOnlyCollection<TaskTypeSchemaDto> GetMergedTaskTypeSchemas()
+    {
+        var schemas = _metadataService.GetTaskTypes()
+            .Where(schema => schema.IsActive)
+            .ToDictionary(schema => schema.TaskType, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var descriptor in _taskTypeCatalog.GetTaskTypes())
+        {
+            if (!schemas.ContainsKey(descriptor.TaskType))
+            {
+                schemas[descriptor.TaskType] = CreateHandlerBackedSchema(descriptor);
+            }
+        }
+
+        return schemas.Values
+            .OrderBy(schema => schema.TaskType, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static TaskTypeSchemaDto CreateHandlerBackedSchema(TaskTypeDescriptor descriptor)
+    {
+        return new TaskTypeSchemaDto
+        {
+            TaskType = descriptor.TaskType,
+            DisplayName = descriptor.DisplayName,
+            FinalStatus = descriptor.FinalStatus,
+            IsActive = true,
+            Version = 1,
+            Fields = []
+        };
+    }
+
     /// <summary>
     /// יצירה/עדכון חוקיות של שדה מותאם אישית לסוג משימה.
     /// </summary>
@@ -80,15 +122,6 @@ public class TaskTypesController : ControllerBase
         string taskType,
         UpsertTaskTypeFieldRequest request)
     {
-        if (!DanTaskManager.Domain.WorkflowConstants.IsSupportedTaskType(taskType))
-        {
-            return BadRequest(new
-            {
-                error = $"Unsupported task type: {taskType}",
-                supportedTaskTypes = DanTaskManager.Domain.WorkflowConstants.SupportedTaskTypes
-            });
-        }
-
         if (string.IsNullOrWhiteSpace(request.Field))
         {
             throw new ApiValidationException("Field נדרש");

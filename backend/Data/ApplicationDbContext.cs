@@ -123,21 +123,6 @@ public class ApplicationDbContext : DbContext
         });
 
         taskBuilder
-            .Property(t => t.PriorityIndex)
-            .HasMaxLength(100)
-            .HasComputedColumnSql("JSON_VALUE([CustomDataJson], '$.priority')", stored: true);
-
-        taskBuilder
-            .Property(t => t.BranchNameIndex)
-            .HasMaxLength(255)
-            .HasComputedColumnSql("JSON_VALUE([CustomDataJson], '$.branchName')", stored: true);
-
-        taskBuilder
-            .Property(t => t.DeadlineUtcIndex)
-            .HasColumnType("datetime2")
-            .HasComputedColumnSql("TRY_CONVERT(datetime2, JSON_VALUE([CustomDataJson], '$.deadline'), 127)", stored: true);
-
-        taskBuilder
             .Property(t => t.CreatedAt)
             .HasDefaultValueSql("GETUTCDATE()");
 
@@ -155,20 +140,6 @@ public class ApplicationDbContext : DbContext
         taskBuilder
             .HasIndex(t => t.TaskType);
 
-        taskBuilder
-            .HasIndex(t => new { t.TaskType, t.PriorityIndex })
-            .HasDatabaseName("IX_Tasks_TaskType_Priority")
-            .HasFilter("[PriorityIndex] IS NOT NULL");
-
-        taskBuilder
-            .HasIndex(t => new { t.TaskType, t.BranchNameIndex })
-            .HasDatabaseName("IX_Tasks_TaskType_BranchName")
-            .HasFilter("[BranchNameIndex] IS NOT NULL");
-
-        taskBuilder
-            .HasIndex(t => new { t.TaskType, t.DeadlineUtcIndex })
-            .HasDatabaseName("IX_Tasks_TaskType_DeadlineUtc")
-            .HasFilter("[DeadlineUtcIndex] IS NOT NULL");
     }
 
     /// <summary>
