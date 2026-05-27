@@ -113,6 +113,7 @@ public partial class InitialSchema : Migration
         migrationBuilder.InsertData(
             table: "TaskTypes",
             columns: new[] { "Id", "Code", "CreatedAt", "DisplayName", "FinalStatus", "IsActive", "UpdatedAt", "Version" },
+            columnTypes: new[] { "int", "nvarchar(100)", "datetime2", "nvarchar(255)", "int", "bit", "datetime2", "int" },
             values: new object[,]
             {
                 { 1, "Procurement", new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), "Procurement", 3, true, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), 1 },
@@ -123,6 +124,7 @@ public partial class InitialSchema : Migration
         migrationBuilder.InsertData(
             table: "Users",
             columns: new[] { "Id", "CreatedAt", "Email", "Name" },
+            columnTypes: new[] { "int", "datetime2", "nvarchar(255)", "nvarchar(255)" },
             values: new object[,]
             {
                 { 1, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), "dan@example.com", "Dan Cohen" },
@@ -142,6 +144,13 @@ public partial class InitialSchema : Migration
                 "MaxItems", "MaxLength", "MaxValue", "MinItems", "MinLength", "MinValue",
                 "RegexPattern", "TaskTypeMetadataId", "UpdatedAt"
             },
+            columnTypes: new[]
+            {
+                "int", "nvarchar(max)", "int", "int", "int",
+                "datetime2", "nvarchar(50)", "nvarchar(50)", "nvarchar(100)", "bit", "bit",
+                "int", "int", "decimal(18,2)", "int", "int", "decimal(18,2)",
+                "nvarchar(500)", "int", "datetime2"
+            },
             values: new object[,]
             {
                 { 1, null, 2, 2, 2, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), "array", "string", "prices", false, true, null, null, null, null, null, null, null, 1, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc) },
@@ -157,6 +166,7 @@ public partial class InitialSchema : Migration
         migrationBuilder.InsertData(
             table: "Tasks",
             columns: new[] { "Id", "AssignedToUserId", "CreatedAt", "CurrentStatus", "CustomDataJson", "Description", "TaskType", "UpdatedAt" },
+            columnTypes: new[] { "int", "int", "datetime2", "int", "nvarchar(max)", "nvarchar(1000)", "nvarchar(100)", "datetime2" },
             values: new object[,]
             {
                 { 1, 1, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), 1, "{}", "Collect supplier quotes for new equipment", "Procurement", new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc) },
