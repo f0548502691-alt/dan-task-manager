@@ -7,6 +7,7 @@ using DanTaskManager.Application.Tasks.UpdateTaskDescription;
 using DanTaskManager.Application.Tasks.UserExists;
 using DanTaskManager.Services;
 using Moq;
+using Xunit;
 
 namespace DanTaskManager.Tests;
 

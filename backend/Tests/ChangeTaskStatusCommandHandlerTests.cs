@@ -1,6 +1,7 @@
 using DanTaskManager.Application.Tasks.ChangeTaskStatus;
 using DanTaskManager.Services;
 using Moq;
+using Xunit;
 
 namespace DanTaskManager.Tests;
 
