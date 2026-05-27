@@ -9,20 +9,26 @@
 
 ### Setup
 ```bash
-# 1. Restore dependencies
+# 1. Configure connection string (choose one option)
+# Option A: environment variable
+export ConnectionStrings__DefaultConnection="Server=.;Database=DanTaskManager;Trusted_Connection=true;Encrypt=false;TrustServerCertificate=true;"
+# Option B: create appsettings.Development.json (see .env.example for reference)
+# Option C: Docker - cp .env.example .env && docker compose up -d
+
+# 2. Restore dependencies
 dotnet restore
 
-# 2. Build project
+# 3. Build project
 dotnet build
 
-# 3. Create database
+# 4. Create database
 dotnet ef migrations add InitialCreate
 dotnet ef database update
 
-# 4. Run application
+# 5. Run application
 dotnet run
 
-# 5. Open Swagger
+# 6. Open Swagger
 http://localhost:5000/swagger
 ```
 
