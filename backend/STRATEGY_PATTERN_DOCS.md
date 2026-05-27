@@ -309,7 +309,6 @@ Controllers/
 
 ## 📖 דוגמאות שימוש
 
-ראה [STRATEGY_EXAMPLES.cs](STRATEGY_EXAMPLES.cs) לדוגמאות קוד מלאות של:
 1. שימוש ישיר ב-Handlers
 2. Procurement flow
 3. Development flow

@@ -48,12 +48,10 @@
    - Testing patterns
 
 ### 💻 Code Examples (20-45 minutes)
-8. **[WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs)** - Service usage
    - Complete workflows
    - REST API examples
    - Scenario coverage
 
-9. **[STRATEGY_EXAMPLES.cs](STRATEGY_EXAMPLES.cs)** - Handler examples
    - Implementation patterns
    - Validation logic
    - Extension examples
@@ -80,13 +78,11 @@
 ```
 1. Read: IMPLEMENTATION_COMPLETE.md (overview)
 2. Study: STRATEGY_PATTERN_DOCS.md (design)
-3. Review: WORKFLOW_EXAMPLES.cs (code)
 ```
 
 ### "I want to add features"
 ```
 1. Read: EXTENSION_GUIDE.md (how-to)
-2. Study: STRATEGY_EXAMPLES.cs (examples)
 3. Reference: BEST_PRACTICES.md (standards)
 ```
 
@@ -254,9 +250,6 @@ Project Root
 │   └── PROJECT_COMPLETION.md
 │
 ├── Code Examples (3 files)
-│   ├── WORKFLOW_EXAMPLES.cs
-│   ├── STRATEGY_EXAMPLES.cs
-│   └── EXAMPLES.cs
 │
 ├── Implementation
 │   ├── Domain/
@@ -347,11 +340,8 @@ Project Root
 |---------|------------|----------|
 | Setup | GETTING_STARTED.md | README.md |
 | Architecture | IMPLEMENTATION_COMPLETE.md | STRATEGY_PATTERN_DOCS.md |
-| Handlers | STRATEGY_PATTERN_DOCS.md | STRATEGY_EXAMPLES.cs |
-| Workflows | WORKFLOW_SERVICE_DOCS.md | WORKFLOW_EXAMPLES.cs |
 | API | WORKFLOW_SERVICE_DOCS.md | API_ERROR_CODES.md |
 | Errors | API_ERROR_CODES.md | WORKFLOW_SERVICE_DOCS.md |
-| Patterns | BEST_PRACTICES.md | STRATEGY_EXAMPLES.cs |
 | Extensions | EXTENSION_GUIDE.md | BEST_PRACTICES.md |
 | Testing | BEST_PRACTICES.md | Tests/ folder |
 
@@ -396,7 +386,6 @@ http://localhost:5000/swagger
 ## 💡 Pro Tips
 
 1. **Use Swagger** - Available at `/swagger` for interactive testing
-2. **Read Examples** - Check `WORKFLOW_EXAMPLES.cs` for code patterns
 3. **Check Errors** - See `API_ERROR_CODES.md` when something goes wrong
 4. **Study Tests** - Unit tests show expected behavior
 5. **Follow Patterns** - Use existing code as template for extensions
@@ -413,7 +402,6 @@ http://localhost:5000/swagger
 | How do I add a handler? | EXTENSION_GUIDE.md |
 | What does this error mean? | API_ERROR_CODES.md |
 | What are the patterns? | BEST_PRACTICES.md |
-| Show me code examples | WORKFLOW_EXAMPLES.cs |
 
 ---
 

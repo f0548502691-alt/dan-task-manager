@@ -44,9 +44,6 @@ http://localhost:5000/swagger
 
 | Document | Purpose | Type |
 |----------|---------|------|
-| [WORKFLOW_EXAMPLES.cs](WORKFLOW_EXAMPLES.cs) | Usage examples & scenarios | C# Code |
-| [STRATEGY_EXAMPLES.cs](STRATEGY_EXAMPLES.cs) | Handler implementation examples | C# Code |
-| [EXAMPLES.cs](EXAMPLES.cs) | General examples | C# Code |
 
 ### ✅ Running Tests
 
@@ -400,8 +397,6 @@ dotnet publish -c Release
 | **STRATEGY_PATTERN_DOCS.md** | Handler architecture |
 | **API_ERROR_CODES.md** | HTTP codes & error messages |
 | **BEST_PRACTICES.md** | Code conventions & patterns |
-| **WORKFLOW_EXAMPLES.cs** | Usage examples |
-| **STRATEGY_EXAMPLES.cs** | Handler examples |
 
 ---
 

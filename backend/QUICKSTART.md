@@ -24,7 +24,6 @@
 
 ### 📚 דוקומנטציה
 - [README.md](README.md) - תיעוד מלא בעברית
-- [EXAMPLES.cs](EXAMPLES.cs) - דוגמאות קוד שימושיות
 
 ---
 
@@ -77,7 +76,6 @@ dan-task-manager/
 ├── DanTaskManager.csproj    # .NET 8 project file
 ├── Program.cs               # DI Configuration
 ├── appsettings.json         # Connection strings
-├── EXAMPLES.cs              # דוגמאות שימוש
 └── README.md                # תיעוד מלא
 ```
 
