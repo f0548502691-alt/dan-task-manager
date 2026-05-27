@@ -70,11 +70,22 @@ dotnet restore
 ```
 
 ### 2. הגדרת Connection String
-בקובץ `appsettings.json`:
+
+העתק את קובץ `.env.example` לקובץ `.env` בתיקיית הפרויקט הראשית ועדכן את הערכים:
+```bash
+cp .env.example .env
+```
+
+לפיתוח מקומי (ללא Docker), הגדר משתנה סביבה:
+```bash
+export ConnectionStrings__DefaultConnection="Server=.;Database=DanTaskManager;Trusted_Connection=true;Encrypt=false;TrustServerCertificate=true;"
+```
+
+או צור קובץ `appsettings.Development.json` (לא נשמר ב-Git):
 ```json
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Server=.;Database=DanTaskManager;Trusted_Connection=true;Encrypt=false;"
+    "DefaultConnection": "Server=.;Database=DanTaskManager;Trusted_Connection=true;Encrypt=false;TrustServerCertificate=true;"
   }
 }
 ```
