@@ -4,9 +4,10 @@
 
 1. [Adding New Handler Type](#adding-new-handler-type)
 2. [Adding New Endpoint](#adding-new-endpoint)
-3. [Adding Validation Rule](#adding-validation-rule)
-4. [Common Extension Scenarios](#common-extension-scenarios)
-5. [Testing Extensions](#testing-extensions)
+3. [MediatR Command Endpoints](#mediatr-command-endpoints)
+4. [Adding Validation Rule](#adding-validation-rule)
+5. [Common Extension Scenarios](#common-extension-scenarios)
+6. [Testing Extensions](#testing-extensions)
 
 ---
 
@@ -341,6 +342,129 @@ curl http://localhost:5000/api/tasks/user/1/statistics
   }
 }
 ```
+
+---
+
+## 🧭 MediatR Command Endpoints
+
+The backend is migrating to MediatR gradually. At the moment,
+`POST /api/tasks` is the example command endpoint; the rest of
+`TasksController` still calls `ITaskApplicationService` directly.
+
+Use this pattern for new write endpoints or when migrating an existing write
+endpoint whose HTTP contract should stay stable.
+
+### Current create-task flow
+
+```
+TasksController.CreateTask
+    └─ validates CreateTaskRequest with FluentValidation
+    └─ maps public customFields to a JSON object string
+    └─ _mediator.Send(CreateTaskCommand, HttpContext.RequestAborted)
+        └─ CreateTaskCommandHandler
+            └─ ITaskApplicationService.CreateAsync(TaskCreateCommand)
+```
+
+### Step 1: Add a command type
+
+Place commands under `Application/<Area>/<Action>/` so they are easy to find.
+The command represents application intent, not the raw HTTP request.
+
+```csharp
+// Application/Tasks/CreateTask/CreateTaskCommand.cs
+using DanTaskManager.Services;
+using MediatR;
+
+namespace DanTaskManager.Application.Tasks.CreateTask;
+
+public record CreateTaskCommand(
+    string TaskType,
+    string Description,
+    int AssignedToUserId,
+    string CustomDataJson) : IRequest<TaskCreationResult>;
+```
+
+### Step 2: Add a thin handler
+
+Keep existing invariants in the application service unless the migration is
+explicitly moving that responsibility. For create-task, the service still owns
+user existence checks, task-type support, JSON normalization, initial status
+`WorkflowConstants.CreatedStatus` (`1`), persistence, and reload of the created
+details DTO.
+
+```csharp
+// Application/Tasks/CreateTask/CreateTaskCommandHandler.cs
+using DanTaskManager.Services;
+using MediatR;
+using ServiceTaskCreateCommand = DanTaskManager.Services.TaskCreateCommand;
+
+namespace DanTaskManager.Application.Tasks.CreateTask;
+
+public class CreateTaskCommandHandler
+    : IRequestHandler<CreateTaskCommand, TaskCreationResult>
+{
+    private readonly ITaskApplicationService _taskApplicationService;
+
+    public CreateTaskCommandHandler(ITaskApplicationService taskApplicationService)
+    {
+        _taskApplicationService = taskApplicationService;
+    }
+
+    public Task<TaskCreationResult> Handle(
+        CreateTaskCommand request,
+        CancellationToken cancellationToken)
+    {
+        return _taskApplicationService.CreateAsync(
+            new ServiceTaskCreateCommand(
+                request.TaskType,
+                request.Description,
+                request.AssignedToUserId,
+                request.CustomDataJson),
+            cancellationToken);
+    }
+}
+```
+
+### Step 3: Dispatch from the controller
+
+Controllers should preserve the public API contract while delegating the use
+case. For create-task, clients send `customFields`, but the command carries
+`CustomDataJson` because the service persists it to `BaseTask.CustomDataJson`.
+
+```csharp
+var result = await _mediator.Send(
+    new CreateTaskCommand(
+        request.TaskType,
+        request.Description,
+        request.AssignedToUserId,
+        ExtractCustomFieldsJson(request.CustomFields)),
+    HttpContext.RequestAborted);
+```
+
+Preserve existing error shapes when migrating an endpoint. For unsupported
+task types, create-task returns both `error` and `supportedTaskTypes`.
+
+### Step 4: Register and test
+
+MediatR is registered once in `Program.cs`:
+
+```csharp
+builder.Services.AddMediatR(
+    cfg => cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));
+```
+
+Add handler-level tests for delegation and cancellation-token usage. Add
+controller or application-service tests when a migration changes validation,
+response shape, or error handling.
+
+### Pitfalls
+
+- Do not bypass `ITaskApplicationService.CreateAsync` for create-task. That
+  service is still the verified source of create behavior.
+- Do not expose `customDataJson` in new public API examples; external payloads
+  use `customFields`.
+- Do not assume all endpoints use MediatR yet. Migrate one use case at a time
+  and keep mixed controller dependencies explicit during the transition.
 
 ---
 

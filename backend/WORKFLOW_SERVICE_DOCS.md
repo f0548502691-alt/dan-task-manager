@@ -10,14 +10,44 @@
 
 ```
 REST API (TasksController)
-    ↓
-ITaskWorkflowService
-    ↓
-TaskWorkflowService
-    ├─ DbContext (EF Core)
-    ├─ TaskHandlerFactory (Handlers)
-    └─ Validation Rules
+    ├─ POST /api/tasks
+    │   └─ IMediator.Send(CreateTaskCommand)
+    │       └─ CreateTaskCommandHandler
+    │           └─ ITaskApplicationService.CreateAsync(...)
+    │               ├─ DbContext (EF Core)
+    │               ├─ TaskHandlerFactory (handler-backed task types)
+    │               └─ ITaskTypeValidationService (metadata-backed task types)
+    │
+    └─ reads, status changes, close, update, delete
+        └─ ITaskApplicationService
+            └─ ITaskWorkflowService / TaskWorkflowService
+                ├─ DbContext (EF Core)
+                ├─ ITaskWorkflowRuleProvider implementations
+                └─ Validation Rules
 ```
+
+### Create-task command path
+
+`POST /api/tasks` is the first endpoint in the gradual MediatR migration.
+The controller still owns HTTP request validation and response shaping, but it
+now sends a `CreateTaskCommand` through `IMediator`.
+
+Important constraints:
+
+- `CreateTaskCommandHandler` is intentionally thin: it adapts the MediatR
+  command to `Services.TaskCreateCommand` and delegates to
+  `ITaskApplicationService.CreateAsync`.
+- `TaskApplicationService.CreateAsync` remains the source of create-task
+  invariants: assigned user must exist, `customFields` must normalize to a JSON
+  object, the task type must be supported by a handler or metadata definition,
+  and new tasks start at `WorkflowConstants.CreatedStatus` (`1`).
+- Public API payloads use `customFields`; the persistence model stores the same
+  object as `BaseTask.CustomDataJson`.
+- Other endpoints have not moved to MediatR yet. Do not assume status changes,
+  reads, close, update, or delete requests go through commands/queries until
+  their controllers are migrated.
+- MediatR handlers are registered from the backend assembly in `Program.cs`:
+  `builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));`
 
 ---
 
@@ -43,7 +73,6 @@ if (task.CurrentStatus == 99)  // ClosedStatus
 ```
 3 → 2 ✅ (rollback)
 3 → 1 ✅ (rollback)
-3 → 0 ✅ (rollback)
 ```
 
 #### ללא תנועה: ❌
@@ -82,9 +111,7 @@ task.UpdatedAt = DateTime.UtcNow;
 ### Procurement Task
 
 ```
-Status 0: התחלה
-   ↓ +1 (forward)
-Status 1: בתהליך
+Status 1: נוצרה
    ↓ +1 (forward)
 Status 2: בחירת ספקים ⭐
    Requires: {"prices": ["5000", "4800"]}
@@ -96,15 +123,12 @@ Status 99: Closed (סגור לנצח)
 
 ** אפשר להחזור:**
 Status 2 → Status 1 ← (rollback)
-Status 1 → Status 0 ← (rollback)
 ```
 
 ### Development Task
 
 ```
-Status 0: התחלה
-   ↓ +1
-Status 1: בתהליך
+Status 1: נוצרה
    ↓ +1
 Status 2: אפיון ⭐
    Requires: {"specification": "..."}
@@ -120,7 +144,6 @@ Status 99: Closed (סגור לנצח)
 ** אפשר להחזור:**
 Status 3 → Status 2 ← (rollback)
 Status 2 → Status 1 ← (rollback)
-Status 2 → Status 0 ← (rollback)
 ```
 
 ---
@@ -133,16 +156,33 @@ Status 2 → Status 0 ← (rollback)
 public interface ITaskWorkflowService
 {
     // שינוי סטטוס עם כללי workflow
-    Task<WorkflowResult> ChangeStatusAsync(int taskId, int newStatus, string newDataJson);
+    Task<WorkflowResult> ChangeStatusAsync(
+        int taskId,
+        int newStatus,
+        int nextAssignedToUserId,
+        string newDataJson,
+        CancellationToken cancellationToken = default);
     
     // סגירת משימה
-    Task<WorkflowResult> CloseTaskAsync(int taskId, string finalNotes);
+    Task<WorkflowResult> CloseTaskAsync(
+        int taskId,
+        string finalNotes,
+        CancellationToken cancellationToken = default);
     
-    // קבלת משימות של משתמש (לא סגורות)
-    Task<IEnumerable<BaseTask>> GetUserTasksAsync(int userId);
+    // בדיקה האם מותר לבצע שינוי במשימה שאינה שינוי סטטוס
+    Task<WorkflowResult> EnsureTaskMutableAsync(
+        int taskId,
+        CancellationToken cancellationToken = default);
+
+    // קבלת משימות של משתמש מסוים
+    Task<IEnumerable<BaseTask>> GetUserTasksAsync(
+        int userId,
+        CancellationToken cancellationToken = default);
     
     // קבלת משימה עם פרטים
-    Task<BaseTask?> GetTaskAsync(int taskId);
+    Task<BaseTask?> GetTaskAsync(
+        int taskId,
+        CancellationToken cancellationToken = default);
 }
 ```
 
@@ -172,9 +212,19 @@ Content-Type: application/json
   "taskType": "Procurement",
   "description": "רכישת רכיבים לשרת",
   "assignedToUserId": 1,
-  "customDataJson": "{}"
+  "customFields": {
+    "priority": "high"
+  }
 }
 ```
+
+Request notes:
+
+- `customFields` is optional; when it is missing, the service stores `{}`.
+- If provided, `customFields` must be a JSON object. Arrays, strings, and other
+  scalar values are rejected.
+- The controller serializes `customFields` into the command's
+  `CustomDataJson` value before dispatching `CreateTaskCommand`.
 
 **Response (201):**
 ```json
@@ -182,10 +232,31 @@ Content-Type: application/json
   "id": 1,
   "taskType": "Procurement",
   "description": "רכישת רכיבים לשרת",
-  "currentStatus": 0,
+  "currentStatus": 1,
   "assignedToUserId": 1,
-  "customDataJson": "{}",
-  "createdAt": "2026-05-25T10:00:00Z"
+  "createdAt": "2026-05-25T10:00:00Z",
+  "updatedAt": "2026-05-25T10:00:00Z",
+  "assignedToUser": {
+    "id": 1,
+    "name": "דן כהן",
+    "email": "dan@example.com"
+  },
+  "customFields": {
+    "priority": "high"
+  }
+}
+```
+
+**Response (400) - Unsupported task type:**
+```json
+{
+  "error": "סוג משימה לא נתמך: Unknown",
+  "supportedTaskTypes": [
+    "Analysis",
+    "Development",
+    "Procurement",
+    "Testing"
+  ]
 }
 ```
 
@@ -198,8 +269,11 @@ POST /api/tasks/1/change-status
 Content-Type: application/json
 
 {
-  "newStatus": 1,
-  "newDataJson": "{}"
+  "newStatus": 2,
+  "nextAssignedToUserId": 2,
+  "customFields": {
+    "prices": ["5000", "4800"]
+  }
 }
 ```
 
@@ -207,8 +281,8 @@ Content-Type: application/json
 ```json
 {
   "success": true,
-  "message": "סטטוס עודכן בהצלחה ל-1",
-  "newStatus": 1,
+  "message": "סטטוס עודכן בהצלחה ל-2",
+  "newStatus": 2,
   "task": { ... }
 }
 ```
@@ -248,7 +322,12 @@ Content-Type: application/json
   "task": {
     "id": 1,
     "currentStatus": 99,
-    "customDataJson": "{\"finalNotes\": \"משימה הושלמה בהצלחה\", \"closedAt\": \"2026-05-25T...\"}"
+    "customFields": {
+      "prices": ["5000", "4800"],
+      "receipt": "REC-001",
+      "finalNotes": "משימה הושלמה בהצלחה",
+      "closedAt": "2026-05-25T..."
+    }
   }
 }
 ```
@@ -270,24 +349,28 @@ GET /api/tasks/user/1
 
 **Response (200):**
 ```json
-[
-  {
-    "id": 1,
-    "taskType": "Procurement",
-    "description": "רכישת רכיבים",
-    "currentStatus": 2,
-    "assignedToUserId": 1,
-    "customDataJson": "{\"prices\": [\"5000\", \"4800\"]}"
-  },
-  {
-    "id": 2,
-    "taskType": "Development",
-    "description": "פיתוח API",
-    "currentStatus": 1,
-    "assignedToUserId": 1,
-    "customDataJson": "{}"
-  }
-]
+{
+  "items": [
+    {
+      "id": 1,
+      "taskType": "Procurement",
+      "description": "רכישת רכיבים",
+      "currentStatus": 2,
+      "assignedToUserId": 1,
+      "createdAt": "2026-05-25T10:00:00Z",
+      "updatedAt": "2026-05-25T10:30:00Z",
+      "assignedToUser": {
+        "id": 1,
+        "name": "דן כהן",
+        "email": "dan@example.com"
+      }
+    }
+  ],
+  "page": 1,
+  "pageSize": 20,
+  "totalCount": 1,
+  "totalPages": 1
+}
 ```
 
 ---
@@ -306,7 +389,16 @@ GET /api/tasks/1
   "description": "רכישת רכיבים",
   "currentStatus": 2,
   "assignedToUserId": 1,
-  "customDataJson": "{\"prices\": [\"5000\", \"4800\"]}"
+  "createdAt": "2026-05-25T10:00:00Z",
+  "updatedAt": "2026-05-25T10:30:00Z",
+  "assignedToUser": {
+    "id": 1,
+    "name": "דן כהן",
+    "email": "dan@example.com"
+  },
+  "customFields": {
+    "prices": ["5000", "4800"]
+  }
 }
 ```
 
@@ -359,7 +451,10 @@ POST /api/tasks/1/change-status
 
 {
   "newStatus": 2,
-  "newDataJson": "{\"prices\": [\"5000 ₪\", \"4800 ₪\"]}"
+  "nextAssignedToUserId": 2,
+  "customFields": {
+    "prices": ["5000 ₪", "4800 ₪"]
+  }
 }
 
 Response:
@@ -377,7 +472,8 @@ POST /api/tasks/1/change-status
 
 {
   "newStatus": 1,
-  "newDataJson": "{}"
+  "nextAssignedToUserId": 1,
+  "customFields": {}
 }
 
 Response:
@@ -395,7 +491,8 @@ POST /api/tasks/1/change-status
 
 {
   "newStatus": 3,
-  "newDataJson": "{}"
+  "nextAssignedToUserId": 2,
+  "customFields": {}
 }
 
 Response (400):
@@ -420,7 +517,10 @@ Response:
   "task": {
     "id": 1,
     "currentStatus": 99,
-    "customDataJson": "{\"finalNotes\": \"משימה הושלמה בהצלחה\", \"closedAt\": \"...\"}"
+    "customFields": {
+      "finalNotes": "משימה הושלמה בהצלחה",
+      "closedAt": "..."
+    }
   }
 }
 ```
@@ -432,62 +532,80 @@ Response:
 ### Scenario 1: Procurement Workflow
 
 ```bash
-# 1. Create task (Status 0)
+# 1. Create task (Status 1)
 POST /api/tasks
 {
   "taskType": "Procurement",
   "description": "רכישת חומרים",
-  "assignedToUserId": 1
+  "assignedToUserId": 1,
+  "customFields": {}
 }
-→ ID: 1, Status: 0 ✅
+→ ID: 1, Status: 1 ✅
 
-# 2. Move to Status 1
-POST /api/tasks/1/change-status
-{"newStatus": 1, "newDataJson": "{}"}
-→ Status: 1 ✅
-
-# 3. Move to Status 2 with prices
+# 2. Move to Status 2 with prices
 POST /api/tasks/1/change-status
 {
   "newStatus": 2,
-  "newDataJson": "{\"prices\": [\"5000\", \"4800\"]}"
+  "nextAssignedToUserId": 2,
+  "customFields": {
+    "prices": ["5000", "4800"]
+  }
 }
 → Status: 2 ✅
 
-# 4. Rollback to Status 1
+# 3. Rollback to Status 1
 POST /api/tasks/1/change-status
-{"newStatus": 1, "newDataJson": "{}"}
+{
+  "newStatus": 1,
+  "nextAssignedToUserId": 1,
+  "customFields": {}
+}
 → Status: 1 ✅
 
-# 5. Move forward again
+# 4. Move forward again
 POST /api/tasks/1/change-status
 {
   "newStatus": 2,
-  "newDataJson": "{\"prices\": [\"5500\", \"5200\"]}"
+  "nextAssignedToUserId": 2,
+  "customFields": {
+    "prices": ["5500", "5200"]
+  }
 }
 → Status: 2 ✅
 
-# 6. Move to Status 3 (Final)
+# 5. Move to Status 3 (Final)
 POST /api/tasks/1/change-status
 {
   "newStatus": 3,
-  "newDataJson": "{\"prices\": [...], \"receipt\": \"REC-001\"}"
+  "nextAssignedToUserId": 2,
+  "customFields": {
+    "prices": ["5500", "5200"],
+    "receipt": "REC-001"
+  }
 }
 → Status: 3 ✅ (FinalStatus)
 
-# 7. Try to move beyond (should fail)
+# 6. Try to move beyond (should fail)
 POST /api/tasks/1/change-status
-{"newStatus": 4, "newDataJson": "{}"}
+{
+  "newStatus": 4,
+  "nextAssignedToUserId": 2,
+  "customFields": {}
+}
 → Error: "משימה הגיעה לסטטוס סופי" ❌
 
-# 8. Close task
+# 7. Close task
 POST /api/tasks/1/close
 {"finalNotes": "הושלם בהצלחה"}
 → Status: 99 ✅
 
-# 9. Try to change closed task (should fail)
+# 8. Try to change closed task (should fail)
 POST /api/tasks/1/change-status
-{"newStatus": 2, "newDataJson": "{}"}
+{
+  "newStatus": 2,
+  "nextAssignedToUserId": 2,
+  "customFields": {}
+}
 → Error: "משימה סגורה" ❌
 ```
 
