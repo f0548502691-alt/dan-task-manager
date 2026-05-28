@@ -110,58 +110,52 @@ public partial class InitialSchema : Migration
                     onDelete: ReferentialAction.Restrict);
             });
 
-        migrationBuilder.InsertData(
-            table: "TaskTypes",
-            columns: new[] { "Id", "Code", "CreatedAt", "DisplayName", "FinalStatus", "IsActive", "UpdatedAt", "Version" },
-            values: new object[,]
-            {
-                { 1, "Procurement", new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), "Procurement", 3, true, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), 1 },
-                { 2, "Development", new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), "Development", 4, true, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), 1 },
-                { 3, "Marketing", new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), "Marketing", 3, true, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), 1 }
-            });
+        migrationBuilder.Sql("""
+            DECLARE @SeedTimestamp datetime2 = '2026-05-25T00:00:00';
 
-        migrationBuilder.InsertData(
-            table: "Users",
-            columns: new[] { "Id", "CreatedAt", "Email", "Name" },
-            values: new object[,]
-            {
-                { 1, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), "dan@example.com", "Dan Cohen" },
-                { 2, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), "ruth@example.com", "Ruth Levi" },
-                { 3, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), "moshe@example.com", "Moshe Avraham" },
-                { 4, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), "noa@example.com", "Noa Israeli" },
-                { 5, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), "eitan@example.com", "Eitan Barak" },
-                { 6, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), "michal@example.com", "Michal Gal" }
-            });
+            SET IDENTITY_INSERT [TaskTypes] ON;
+            INSERT INTO [TaskTypes] ([Id], [Code], [CreatedAt], [DisplayName], [FinalStatus], [IsActive], [UpdatedAt], [Version])
+            VALUES
+                (1, N'Procurement', @SeedTimestamp, N'Procurement', 3, CAST(1 AS bit), @SeedTimestamp, 1),
+                (2, N'Development', @SeedTimestamp, N'Development', 4, CAST(1 AS bit), @SeedTimestamp, 1),
+                (3, N'Marketing', @SeedTimestamp, N'Marketing', 3, CAST(1 AS bit), @SeedTimestamp, 1);
+            SET IDENTITY_INSERT [TaskTypes] OFF;
 
-        migrationBuilder.InsertData(
-            table: "TaskFieldDefinitions",
-            columns: new[]
-            {
-                "Id", "AllowedValuesJson", "AppliesFromStatus", "AppliesToStatus", "ArrayLength",
-                "CreatedAt", "DataType", "ElementType", "FieldKey", "IsIndexed", "IsRequired",
-                "MaxItems", "MaxLength", "MaxValue", "MinItems", "MinLength", "MinValue",
-                "RegexPattern", "TaskTypeMetadataId", "UpdatedAt"
-            },
-            values: new object[,]
-            {
-                { 1, null, 2, 2, 2, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), "array", "string", "prices", false, true, null, null, null, null, null, null, null, 1, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc) },
-                { 2, null, 3, 3, null, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), "string", null, "receipt", false, true, null, null, null, null, null, null, null, 1, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc) },
-                { 3, null, 2, 2, null, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), "string", null, "specification", false, true, null, null, null, null, 10, null, null, 2, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc) },
-                { 4, null, 3, 3, null, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), "string", null, "branchName", true, true, null, null, null, null, null, null, "valid_git_branch", 2, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc) },
-                { 5, null, 4, 4, null, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), "stringOrNumber", null, "versionNumber", false, true, null, null, null, null, null, null, "semantic_version", 2, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc) },
-                { 6, null, 2, 2, null, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), "string", null, "campaignName", false, true, null, null, null, null, 3, null, null, 3, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc) },
-                { 7, "[\"B2B\",\"B2C\",\"Internal\"]", 2, 2, null, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), "string", null, "targetAudience", true, true, null, null, null, null, null, null, null, 3, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc) },
-                { 8, null, 3, 3, null, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), "string", null, "launchDate", false, true, null, null, null, null, null, null, "^\\d{4}-\\d{2}-\\d{2}$", 3, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc) }
-            });
+            SET IDENTITY_INSERT [Users] ON;
+            INSERT INTO [Users] ([Id], [CreatedAt], [Email], [Name])
+            VALUES
+                (1, @SeedTimestamp, N'dan@example.com', N'Dan Cohen'),
+                (2, @SeedTimestamp, N'ruth@example.com', N'Ruth Levi'),
+                (3, @SeedTimestamp, N'moshe@example.com', N'Moshe Avraham'),
+                (4, @SeedTimestamp, N'noa@example.com', N'Noa Israeli'),
+                (5, @SeedTimestamp, N'eitan@example.com', N'Eitan Barak'),
+                (6, @SeedTimestamp, N'michal@example.com', N'Michal Gal');
+            SET IDENTITY_INSERT [Users] OFF;
 
-        migrationBuilder.InsertData(
-            table: "Tasks",
-            columns: new[] { "Id", "AssignedToUserId", "CreatedAt", "CurrentStatus", "CustomDataJson", "Description", "TaskType", "UpdatedAt" },
-            values: new object[,]
-            {
-                { 1, 1, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), 1, "{}", "Collect supplier quotes for new equipment", "Procurement", new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc) },
-                { 2, 2, new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc), 1, "{}", "Develop the user management module", "Development", new DateTime(2026, 5, 25, 0, 0, 0, DateTimeKind.Utc) }
-            });
+            SET IDENTITY_INSERT [TaskFieldDefinitions] ON;
+            INSERT INTO [TaskFieldDefinitions]
+                ([Id], [AllowedValuesJson], [AppliesFromStatus], [AppliesToStatus], [ArrayLength],
+                 [CreatedAt], [DataType], [ElementType], [FieldKey], [IsIndexed], [IsRequired],
+                 [MaxItems], [MaxLength], [MaxValue], [MinItems], [MinLength], [MinValue],
+                 [RegexPattern], [TaskTypeMetadataId], [UpdatedAt])
+            VALUES
+                (1, NULL, 2, 2, 2, @SeedTimestamp, N'array', N'string', N'prices', CAST(0 AS bit), CAST(1 AS bit), NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1, @SeedTimestamp),
+                (2, NULL, 3, 3, NULL, @SeedTimestamp, N'string', NULL, N'receipt', CAST(0 AS bit), CAST(1 AS bit), NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1, @SeedTimestamp),
+                (3, NULL, 2, 2, NULL, @SeedTimestamp, N'string', NULL, N'specification', CAST(0 AS bit), CAST(1 AS bit), NULL, NULL, NULL, NULL, 10, NULL, NULL, 2, @SeedTimestamp),
+                (4, NULL, 3, 3, NULL, @SeedTimestamp, N'string', NULL, N'branchName', CAST(1 AS bit), CAST(1 AS bit), NULL, NULL, NULL, NULL, NULL, NULL, N'valid_git_branch', 2, @SeedTimestamp),
+                (5, NULL, 4, 4, NULL, @SeedTimestamp, N'stringOrNumber', NULL, N'versionNumber', CAST(0 AS bit), CAST(1 AS bit), NULL, NULL, NULL, NULL, NULL, NULL, N'semantic_version', 2, @SeedTimestamp),
+                (6, NULL, 2, 2, NULL, @SeedTimestamp, N'string', NULL, N'campaignName', CAST(0 AS bit), CAST(1 AS bit), NULL, NULL, NULL, NULL, 3, NULL, NULL, 3, @SeedTimestamp),
+                (7, N'["B2B","B2C","Internal"]', 2, 2, NULL, @SeedTimestamp, N'string', NULL, N'targetAudience', CAST(1 AS bit), CAST(1 AS bit), NULL, NULL, NULL, NULL, NULL, NULL, NULL, 3, @SeedTimestamp),
+                (8, NULL, 3, 3, NULL, @SeedTimestamp, N'string', NULL, N'launchDate', CAST(0 AS bit), CAST(1 AS bit), NULL, NULL, NULL, NULL, NULL, NULL, N'^\d{4}-\d{2}-\d{2}$', 3, @SeedTimestamp);
+            SET IDENTITY_INSERT [TaskFieldDefinitions] OFF;
+
+            SET IDENTITY_INSERT [Tasks] ON;
+            INSERT INTO [Tasks] ([Id], [AssignedToUserId], [CreatedAt], [CurrentStatus], [CustomDataJson], [Description], [TaskType], [UpdatedAt])
+            VALUES
+                (1, 1, @SeedTimestamp, 1, N'{}', N'Collect supplier quotes for new equipment', N'Procurement', @SeedTimestamp),
+                (2, 2, @SeedTimestamp, 1, N'{}', N'Develop the user management module', N'Development', @SeedTimestamp);
+            SET IDENTITY_INSERT [Tasks] OFF;
+            """);
 
         migrationBuilder.CreateIndex(
             name: "IX_TaskFieldDefinitions_TaskTypeMetadataId_FieldKey",
