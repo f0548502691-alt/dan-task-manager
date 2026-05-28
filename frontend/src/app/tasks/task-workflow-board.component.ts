@@ -6,9 +6,7 @@ import { finalize } from 'rxjs';
 import {
   BaseTaskDto,
   ChangeStatusWorkflowRequest,
-  DEFAULT_STATUS_LABELS,
   TASK_STATUS,
-  TASK_TYPE_STATUS_LABELS,
   TaskCustomData,
   TaskTypeSchemaDto
 } from './task.interfaces';
@@ -20,6 +18,11 @@ import {
   buildPayloadFromGroup,
   getApplicableFields
 } from './task-schema.utils';
+import {
+  getDropdownStatusLabel,
+  getFinalStatus,
+  getTaskStatusLabel
+} from './task-status-labels';
 
 interface StatusOption {
   value: number;
@@ -317,64 +320,15 @@ export class TaskWorkflowBoardComponent implements OnInit {
   }
 
   private getStatusLabel(status: number, taskType?: string): string {
-    return (
-      DEFAULT_STATUS_LABELS[status] ??
-      this.getTaskTypeStatusLabel(taskType, status) ??
-      this.getSchemaStatusLabel(taskType, status) ??
-      `Status ${status}`
-    );
+    return getTaskStatusLabel(status, taskType, this.taskService.getSchema(taskType));
   }
 
   private getDropdownStatusLabel(status: number, taskType: string, finalStatus: number): string {
-    const label = this.getStatusLabel(status, taskType);
-    if (label !== `Status ${status}`) {
-      return label;
-    }
-
-    return status === finalStatus ? 'Ready to close' : label;
+    return getDropdownStatusLabel(status, taskType, finalStatus, this.taskService.getSchema(taskType));
   }
 
   private getFinalStatus(taskType: string, fallbackStatus: number): number {
-    const schema = this.taskService.getSchema(taskType);
-    if (schema && typeof schema.finalStatus === 'number') {
-      return schema.finalStatus;
-    }
-    return fallbackStatus;
-  }
-
-  private getTaskTypeStatusLabel(taskType: string | null | undefined, status: number): string | null {
-    if (!taskType) {
-      return null;
-    }
-
-    const normalizedTaskType = taskType.trim().toLowerCase();
-    const labels = Object.entries(TASK_TYPE_STATUS_LABELS).find(
-      ([knownTaskType]) => knownTaskType.toLowerCase() === normalizedTaskType
-    )?.[1];
-
-    return labels?.[status] ?? null;
-  }
-
-  private getSchemaStatusLabel(taskType: string | null | undefined, status: number): string | null {
-    if (!taskType) {
-      return null;
-    }
-
-    const fields = getApplicableFields(this.taskService.getSchema(taskType), status);
-    if (fields.length === 0) {
-      return null;
-    }
-
-    const fieldLabels = fields
-      .map((field) => this.formatFieldLabel(field.field))
-      .filter((label) => label.length > 0);
-
-    return fieldLabels.length > 0 ? fieldLabels.join(' + ') : null;
-  }
-
-  private formatFieldLabel(field: string): string {
-    const spaced = field.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ');
-    return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+    return getFinalStatus(this.taskService.getSchema(taskType), fallbackStatus);
   }
 
   private buildPayload(status: number): TaskCustomData | null {
