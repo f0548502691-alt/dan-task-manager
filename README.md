@@ -74,3 +74,4 @@ This lets new task types be introduced without editing existing task-type handle
 ## More details
 
 - Extension deep dive: `backend/docs/EXTENSION_GUIDE.md`
+- Frontend workflow guide: `frontend/README.md`
