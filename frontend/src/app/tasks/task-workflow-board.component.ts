@@ -6,7 +6,6 @@ import { finalize } from 'rxjs';
 import {
   BaseTaskDto,
   ChangeStatusWorkflowRequest,
-  DEFAULT_STATUS_LABELS,
   TASK_STATUS,
   TaskCustomData,
   TaskTypeSchemaDto
@@ -14,19 +13,14 @@ import {
 import { TaskService } from './task.service';
 import { DynamicTaskFieldsComponent } from './dynamic-task-fields.component';
 import { parseTaskCustomDataJson, resetControl } from './task-form.utils';
+import { StatusOption, buildStatusOptions, getStatusLabel } from './task-status-options.utils';
 import {
   ResolvedFieldRule,
   buildPayloadFromGroup,
   getApplicableFields
 } from './task-schema.utils';
 
-interface StatusOption {
-  value: number;
-  label: string;
-}
-
 const DEFAULT_CURRENT_USER_ID = 1;
-const TWO_STATE_CLOSED_STATUS = 2;
 
 @Component({
   selector: 'app-task-workflow-board',
@@ -76,19 +70,9 @@ export class TaskWorkflowBoardComponent implements OnInit {
     if (!task) {
       return [];
     }
-    if (task.currentStatus === TASK_STATUS.CLOSED) {
-      return [{ value: TASK_STATUS.CLOSED, label: this.getStatusLabel(TASK_STATUS.CLOSED) }];
-    }
 
     const finalStatus = this.getFinalStatus(task.taskType, task.currentStatus);
-    const maxStatus = Math.max(finalStatus, task.currentStatus);
-    const options: StatusOption[] = [];
-
-    for (let status = TASK_STATUS.CREATED; status <= maxStatus; status += 1) {
-      options.push({ value: status, label: this.getDropdownStatusLabel(status, finalStatus) });
-    }
-
-    return options;
+    return buildStatusOptions(task.currentStatus, finalStatus);
   });
 
   get customFieldsGroup(): FormGroup {
@@ -287,7 +271,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
   }
 
   taskStatusLabel(status: number): string {
-    return this.getStatusLabel(status);
+    return getStatusLabel(status);
   }
 
   trackByTaskId(_: number, task: BaseTaskDto): number {
@@ -315,18 +299,6 @@ export class TaskWorkflowBoardComponent implements OnInit {
   private getSuggestedStatus(task: BaseTaskDto): number {
     const finalStatus = this.getFinalStatus(task.taskType, task.currentStatus);
     return Math.min(task.currentStatus + 1, finalStatus);
-  }
-
-  private getStatusLabel(status: number): string {
-    return DEFAULT_STATUS_LABELS[status] ?? `Status ${status}`;
-  }
-
-  private getDropdownStatusLabel(status: number, finalStatus: number): string {
-    if (finalStatus === TWO_STATE_CLOSED_STATUS && status === TWO_STATE_CLOSED_STATUS) {
-      return DEFAULT_STATUS_LABELS[TASK_STATUS.CLOSED];
-    }
-
-    return this.getStatusLabel(status);
   }
 
   private getFinalStatus(taskType: string, fallbackStatus: number): number {

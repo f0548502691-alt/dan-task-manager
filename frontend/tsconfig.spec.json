@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./out-tsc/spec",
+    "rootDir": "./src",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "types": []
+  },
+  "files": [
+    "src/app/tasks/task.interfaces.ts",
+    "src/app/tasks/task-status-options.utils.ts"
+  ],
+  "include": [],
+  "exclude": []
+}
