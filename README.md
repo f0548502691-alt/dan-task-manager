@@ -11,9 +11,7 @@ Full-stack task-management sample with:
 - .NET 8 SDK (for local backend development)
 - Node.js 20+ and npm
 
-## Quick start (run both server and client)
-
-### 1) Start SQL Server + backend API
+## Quick start (Docker Compose)
 
 From the repository root:
 
@@ -21,14 +19,35 @@ From the repository root:
 cp .env.example .env
 # Optionally edit DANTASKMANAGER_DB_PASSWORD in .env before first run.
 # SQL Server requires 8+ chars with mixed character types.
-docker compose up -d
+docker compose up --build
 ```
 
-The backend listens on `http://localhost:8080` (Swagger at `/swagger` in Development).
+Compose starts SQL Server, the ASP.NET Core API, and the Angular dev server:
 
-### 2) Start the frontend
+- Frontend: `http://localhost:4200`
+- Backend API: `http://localhost:8080`
+- Swagger UI: `http://localhost:8080/swagger` when `ASPNETCORE_ENVIRONMENT=Development`
+- SQL Server: `localhost:${DB_PORT:-1433}` from the host, persisted in the `sqlserver-data` Docker volume
 
-In a second terminal:
+### Docker startup contract
+
+- `docker-compose.yml` injects `ConnectionStrings__DefaultConnection` into the backend as `Server=db,...`; inside Compose, the database host is the `db` service name, not `localhost`.
+- `DANTASKMANAGER_DB_PASSWORD` is shared by the SQL Server container and the backend connection string. If you change it after the `sqlserver-data` volume already exists, recreate the volume or keep using the old password.
+- `DB_PORT` is used both for the host port mapping and the backend container connection string. Keep the default `1433` unless the Compose SQL Server listener is changed at the same time.
+- `ASPNETCORE_URLS` defaults to `http://+:8080` so Kestrel listens on the container interface exposed by Compose. If you override it, keep it compatible with the `8080:8080` port mapping and the frontend proxy.
+- The frontend container runs `npm run start:docker`, which uses `frontend/proxy.docker.conf.json` to proxy `/api` to `http://backend:8080`.
+
+## Local developer workflow
+
+To run the backend locally against the Compose database:
+
+```bash
+docker compose up -d db
+export ConnectionStrings__DefaultConnection="Server=localhost,1433;Database=DanTaskManager;User Id=sa;Password=Your_strong_Password123;Encrypt=False;TrustServerCertificate=True;"
+dotnet run --project backend
+```
+
+To run the frontend locally:
 
 ```bash
 cd frontend
@@ -36,11 +55,13 @@ npm install
 npm start
 ```
 
-The Angular dev server runs on `http://localhost:4200` and proxies `/api` requests to `http://localhost:8080` using `frontend/proxy.conf.json`.
+The local Angular dev server also runs on `http://localhost:4200`, but it uses `frontend/proxy.conf.json` to proxy `/api` requests to `http://localhost:8080`.
 
-## Backend migrations and seeded demo users
+## Backend startup and seeded demo data
 
-The backend uses EF Core migrations. The initial migration creates schema + seed data for demo users, task types, field definitions, and sample tasks.
+`backend/Program.cs` requires a non-empty `ConnectionStrings__DefaultConnection` at startup. The Docker path provides it automatically; local `dotnet run` must use an environment variable or `backend/appsettings.Development.json`.
+
+On startup, the backend applies EF Core migrations when migration files exist; otherwise it falls back to `EnsureCreated()`. The initial migration creates schema and seed data for demo users, task types, field definitions, and sample tasks.
 
 Seeded demo users:
 
