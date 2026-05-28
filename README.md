@@ -5,15 +5,11 @@ Full-stack task-management sample with:
 - **Backend:** ASP.NET Core 8 + EF Core + SQL Server (`/backend`)
 - **Frontend:** Angular (`/frontend`)
 
-## Prerequisites
+## Quick start prerequisites
 
 - Docker + Docker Compose
-- .NET 8 SDK (for local backend development)
-- Node.js 20+ and npm
 
-## Quick start (run both server and client)
-
-### 1) Start SQL Server + backend API
+## Quick start with Docker (run the full app)
 
 From the repository root:
 
@@ -24,11 +20,19 @@ cp .env.example .env
 docker compose up -d
 ```
 
+Docker Compose starts SQL Server, the backend API, and the frontend. No separate frontend command or local Node.js installation is required for this path.
+
 The backend listens on `http://localhost:8080` (Swagger at `/swagger` in Development).
+The frontend runs on `http://localhost:4200` and proxies `/api` requests to the backend service using `frontend/proxy.docker.conf.json`.
 
-### 2) Start the frontend
+## Local development outside Docker
 
-In a second terminal:
+- .NET 8 SDK for running the backend locally
+- Node.js 20+ and npm for running the frontend locally
+
+## Local frontend development outside Docker
+
+If you want to run the Angular dev server directly on your machine, install Node.js 20+ and npm, then run:
 
 ```bash
 cd frontend
@@ -36,7 +40,7 @@ npm install
 npm start
 ```
 
-The Angular dev server runs on `http://localhost:4200` and proxies `/api` requests to `http://localhost:8080` using `frontend/proxy.conf.json`.
+This uses `frontend/proxy.conf.json` to proxy `/api` requests to `http://localhost:8080`.
 
 ## Backend migrations and seeded demo users
 
