@@ -8,6 +8,7 @@ import {
   ChangeStatusWorkflowRequest,
   DEFAULT_STATUS_LABELS,
   TASK_STATUS,
+  TASK_TYPE_STATUS_LABELS,
   TaskCustomData,
   TaskTypeSchemaDto
 } from './task.interfaces';
@@ -26,8 +27,6 @@ interface StatusOption {
 }
 
 const DEFAULT_CURRENT_USER_ID = 1;
-const TWO_STATE_CLOSED_STATUS = 2;
-
 @Component({
   selector: 'app-task-workflow-board',
   standalone: true,
@@ -77,7 +76,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
       return [];
     }
     if (task.currentStatus === TASK_STATUS.CLOSED) {
-      return [{ value: TASK_STATUS.CLOSED, label: this.getStatusLabel(TASK_STATUS.CLOSED) }];
+      return [{ value: TASK_STATUS.CLOSED, label: this.getStatusLabel(TASK_STATUS.CLOSED, task.taskType) }];
     }
 
     const finalStatus = this.getFinalStatus(task.taskType, task.currentStatus);
@@ -85,7 +84,7 @@ export class TaskWorkflowBoardComponent implements OnInit {
     const options: StatusOption[] = [];
 
     for (let status = TASK_STATUS.CREATED; status <= maxStatus; status += 1) {
-      options.push({ value: status, label: this.getDropdownStatusLabel(status, finalStatus) });
+      options.push({ value: status, label: this.getDropdownStatusLabel(status, task.taskType, finalStatus) });
     }
 
     return options;
@@ -286,8 +285,8 @@ export class TaskWorkflowBoardComponent implements OnInit {
     return typeof finalStatus === 'number' && task.currentStatus === finalStatus;
   }
 
-  taskStatusLabel(status: number): string {
-    return this.getStatusLabel(status);
+  taskStatusLabel(task: BaseTaskDto): string {
+    return this.getStatusLabel(task.currentStatus, task.taskType);
   }
 
   trackByTaskId(_: number, task: BaseTaskDto): number {
@@ -317,16 +316,22 @@ export class TaskWorkflowBoardComponent implements OnInit {
     return Math.min(task.currentStatus + 1, finalStatus);
   }
 
-  private getStatusLabel(status: number): string {
-    return DEFAULT_STATUS_LABELS[status] ?? `Status ${status}`;
+  private getStatusLabel(status: number, taskType?: string): string {
+    return (
+      DEFAULT_STATUS_LABELS[status] ??
+      this.getTaskTypeStatusLabel(taskType, status) ??
+      this.getSchemaStatusLabel(taskType, status) ??
+      `Status ${status}`
+    );
   }
 
-  private getDropdownStatusLabel(status: number, finalStatus: number): string {
-    if (finalStatus === TWO_STATE_CLOSED_STATUS && status === TWO_STATE_CLOSED_STATUS) {
-      return DEFAULT_STATUS_LABELS[TASK_STATUS.CLOSED];
+  private getDropdownStatusLabel(status: number, taskType: string, finalStatus: number): string {
+    const label = this.getStatusLabel(status, taskType);
+    if (label !== `Status ${status}`) {
+      return label;
     }
 
-    return this.getStatusLabel(status);
+    return status === finalStatus ? 'Ready to close' : label;
   }
 
   private getFinalStatus(taskType: string, fallbackStatus: number): number {
@@ -335,6 +340,41 @@ export class TaskWorkflowBoardComponent implements OnInit {
       return schema.finalStatus;
     }
     return fallbackStatus;
+  }
+
+  private getTaskTypeStatusLabel(taskType: string | null | undefined, status: number): string | null {
+    if (!taskType) {
+      return null;
+    }
+
+    const normalizedTaskType = taskType.trim().toLowerCase();
+    const labels = Object.entries(TASK_TYPE_STATUS_LABELS).find(
+      ([knownTaskType]) => knownTaskType.toLowerCase() === normalizedTaskType
+    )?.[1];
+
+    return labels?.[status] ?? null;
+  }
+
+  private getSchemaStatusLabel(taskType: string | null | undefined, status: number): string | null {
+    if (!taskType) {
+      return null;
+    }
+
+    const fields = getApplicableFields(this.taskService.getSchema(taskType), status);
+    if (fields.length === 0) {
+      return null;
+    }
+
+    const fieldLabels = fields
+      .map((field) => this.formatFieldLabel(field.field))
+      .filter((label) => label.length > 0);
+
+    return fieldLabels.length > 0 ? fieldLabels.join(' + ') : null;
+  }
+
+  private formatFieldLabel(field: string): string {
+    const spaced = field.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ');
+    return spaced.charAt(0).toUpperCase() + spaced.slice(1);
   }
 
   private buildPayload(status: number): TaskCustomData | null {
