@@ -70,43 +70,7 @@ var app = builder.Build();
 // In development we materialize it via EnsureCreated; in production deployments
 // migrations should be applied out-of-band before the app starts. If migrations
 // are added to the project later, they take precedence here.
-InitializeDatabase(app);
-
-static void InitializeDatabase(WebApplication app)
-{
-    const int maxAttempts = 30;
-    var retryDelay = TimeSpan.FromSeconds(2);
-
-    for (var attempt = 1; ; attempt++)
-    {
-        try
-        {
-            using var scope = app.Services.CreateScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            if (dbContext.Database.GetMigrations().Any())
-            {
-                dbContext.Database.Migrate();
-            }
-            else
-            {
-                dbContext.Database.EnsureCreated();
-            }
-
-            return;
-        }
-        catch (Exception ex) when (attempt < maxAttempts)
-        {
-            app.Logger.LogWarning(
-                ex,
-                "Database initialization failed on attempt {Attempt}/{MaxAttempts}; retrying in {DelaySeconds} seconds.",
-                attempt,
-                maxAttempts,
-                retryDelay.TotalSeconds);
-
-            Thread.Sleep(retryDelay);
-        }
-    }
-}
+DatabaseInitializer.Initialize(app);
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
