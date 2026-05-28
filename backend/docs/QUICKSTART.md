@@ -39,7 +39,8 @@ dotnet restore
 **אפשרות א' - Docker (מומלץ):**
 ```bash
 cp .env.example .env
-# ערוך את .env עם הסיסמה שלך
+# אופציונלי: ערוך את DANTASKMANAGER_DB_PASSWORD ב-.env
+# SQL Server דורש לפחות 8 תווים ושילוב סוגי תווים
 docker compose up -d
 ```
 

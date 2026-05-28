@@ -19,7 +19,8 @@ From the repository root:
 
 ```bash
 cp .env.example .env
-# Edit DB_PASSWORD in .env before first run
+# Optionally edit DANTASKMANAGER_DB_PASSWORD in .env before first run.
+# SQL Server requires 8+ chars with mixed character types.
 docker compose up -d
 ```
 
