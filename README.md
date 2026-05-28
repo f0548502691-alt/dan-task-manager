@@ -73,4 +73,5 @@ This lets new task types be introduced without editing existing task-type handle
 
 ## More details
 
+- Detailed setup and troubleshooting runbook: `backend/docs/QUICKSTART.md`
 - Extension deep dive: `backend/docs/EXTENSION_GUIDE.md`
