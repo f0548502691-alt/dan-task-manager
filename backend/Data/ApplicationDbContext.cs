@@ -190,6 +190,14 @@ public class ApplicationDbContext : DbContext
             .HasColumnType("nvarchar(max)");
 
         fieldBuilder
+            .Property(f => f.MinValue)
+            .HasColumnType("decimal(18,2)");
+
+        fieldBuilder
+            .Property(f => f.MaxValue)
+            .HasColumnType("decimal(18,2)");
+
+        fieldBuilder
             .Property(f => f.CreatedAt)
             .HasDefaultValueSql("GETUTCDATE()");
 
