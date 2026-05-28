@@ -76,7 +76,8 @@ runtime and the handler would never execute.
 - Status `3` requires `receipt`: non-empty string.
 
 Defined as metadata in `Data/ApplicationDbContext.SeedData` (rows 1-2 of
-`TaskFieldDefinition`).
+`TaskFieldDefinition`). Fresh databases receive these rows from the initial EF
+migration; see `docs/QUICKSTART.md` for the seed SQL constraints.
 
 ## Development task (example)
 
@@ -86,7 +87,8 @@ Defined as metadata in `Data/ApplicationDbContext.SeedData` (rows 1-2 of
 - Status `4` requires `versionNumber`: string-or-number matching `semantic_version`.
 
 Defined as metadata in `Data/ApplicationDbContext.SeedData` (rows 3-5 of
-`TaskFieldDefinition`).
+`TaskFieldDefinition`). Fresh databases receive these rows from the initial EF
+migration; see `docs/QUICKSTART.md` for the seed SQL constraints.
 
 ## Marketing task (example of a "third type", metadata-only)
 
@@ -97,7 +99,9 @@ Defined as metadata in `Data/ApplicationDbContext.SeedData` (rows 3-5 of
 
 Added without touching any C# file: rows 6-8 of `TaskFieldDefinition` and row 3 of
 `TaskTypeMetadata` in the seed. This is the canonical demonstration that the
-architecture supports new task types without structural changes.
+architecture supports new task types without structural changes. Fresh databases
+receive these rows from the initial EF migration; keep the migration SQL aligned
+with `ApplicationDbContext.SeedData` when changing baseline metadata.
 
 ## Adding a new task type
 

@@ -11,9 +11,9 @@ Full-stack task-management sample with:
 - .NET 8 SDK (for local backend development)
 - Node.js 20+ and npm
 
-## Quick start (run both server and client)
+## Quick start (Docker stack)
 
-### 1) Start SQL Server + backend API
+### 1) Start SQL Server, backend API, and frontend
 
 From the repository root:
 
@@ -24,11 +24,20 @@ cp .env.example .env
 docker compose up -d
 ```
 
-The backend listens on `http://localhost:8080` (Swagger at `/swagger` in Development).
+Docker Compose starts:
 
-### 2) Start the frontend
+- SQL Server on `localhost:1433` by default.
+- Backend API on `http://localhost:8080` (Swagger at `/swagger` in Development).
+- Angular frontend on `http://localhost:4200`.
 
-In a second terminal:
+`depends_on` only controls container start order. The backend also retries database
+initialization on startup, so the stack can tolerate SQL Server taking a little
+longer to accept connections.
+
+### 2) Optional: run the frontend locally
+
+For local frontend development outside Docker, keep the backend container running
+and start Angular in a second terminal:
 
 ```bash
 cd frontend
@@ -38,9 +47,18 @@ npm start
 
 The Angular dev server runs on `http://localhost:4200` and proxies `/api` requests to `http://localhost:8080` using `frontend/proxy.conf.json`.
 
-## Backend migrations and seeded demo users
+## Backend migrations and seed data
 
-The backend uses EF Core migrations. The initial migration creates schema + seed data for demo users, task types, field definitions, and sample tasks.
+The backend uses EF Core migrations. On application startup,
+`Program.InitializeDatabase` checks for migrations and runs `Database.Migrate()`;
+if no migrations exist, it falls back to `EnsureCreated()`.
+
+The initial migration creates schema and seeds demo users, task types, field
+definitions, and sample tasks. The seed rows are authored in
+`backend/Data/ApplicationDbContext.SeedData`, while the initial migration applies
+them with explicit SQL Server literals (`datetime2`, `bit`, Unicode strings, and
+`decimal(18,2)` numeric bounds). Keep those two places aligned when changing
+baseline seed data for a fresh database.
 
 Seeded demo users:
 
@@ -51,12 +69,16 @@ Seeded demo users:
 - `eitan@example.com`
 - `michal@example.com`
 
-To apply migrations manually (optional, usually auto-applied on startup):
+To apply migrations manually:
 
 ```bash
 cd backend
 dotnet ef database update
 ```
+
+If startup fails while applying migrations, inspect the backend logs first. Common
+causes are a SQL Server password that fails the container policy, an occupied
+host port, or a stale `sqlserver-data` Docker volume from an earlier schema.
 
 ## Extensibility approach (adding a new task type)
 
@@ -69,4 +91,6 @@ This lets new task types be introduced without editing existing task-type handle
 
 ## More details
 
+- Backend setup and database runbook: `backend/docs/QUICKSTART.md`
+- Workflow and metadata rules: `backend/docs/WORKFLOW.md`
 - Extension deep dive: `backend/docs/EXTENSION_GUIDE.md`

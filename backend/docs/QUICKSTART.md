@@ -1,161 +1,103 @@
-# 🚀 מדריך התחלה מהיר - DanTaskManager
+# Backend quickstart
 
-## ✅ מה נוצר
+This guide covers the backend database and startup path used by both Docker
+Compose and local development.
 
-### 📦 מחלקות Domain
-- [Domain/AppUser.cs](Domain/AppUser.cs) - מחלקת המשתמש עם ID, Name, Email
-- [Domain/BaseTask.cs](Domain/BaseTask.cs) - מחלקת המשימה עם CustomDataJson
+## Source map
 
-### 💾 DbContext  
-- [Data/ApplicationDbContext.cs](Data/ApplicationDbContext.cs) - EF Core context עם:
-  - הגדרת JSON columns ל-CustomDataJson
-  - Seed data של 3 משתמשים
-  - 3 משימות לדוגמה
-  - Relationships וindexes
+| Area | File |
+|------|------|
+| EF model and seed data | `backend/Data/ApplicationDbContext.cs` |
+| Initial SQL Server migration | `backend/Migrations/20260527184500_InitialSchema.cs` |
+| Startup migration/retry loop | `backend/Program.cs` |
+| Docker database wiring | `docker-compose.yml`, `.env.example` |
+| Workflow rules using seeded task metadata | `backend/docs/WORKFLOW.md` |
 
-### 🔧 קונפיגורציה
-- [DanTaskManager.csproj](DanTaskManager.csproj) - .NET 8 עם NuGet packages
-- [Program.cs](Program.cs) - Dependency Injection ו-DbContext registration
-- [appsettings.json](appsettings.json) - Connection string לSQL Server
+## Run with Docker Compose
 
-### 🎮 Controllers (Bonus)
-- [Controllers/TasksController.cs](Controllers/TasksController.cs) - REST API for Tasks
-- [Controllers/UsersController.cs](Controllers/UsersController.cs) - REST API for Users
+From the repository root:
 
-### 📚 דוקומנטציה
-- [README.md](README.md) - תיעוד מלא בעברית
-
----
-
-## 🏃 שלבי התחלה
-
-### 1️⃣ התקנת Packages
-```bash
-dotnet restore
-```
-
-### 2️⃣ הגדרת בסיס הנתונים
-
-**אפשרות א' - Docker (מומלץ):**
 ```bash
 cp .env.example .env
-# אופציונלי: ערוך את DANTASKMANAGER_DB_PASSWORD ב-.env
-# SQL Server דורש לפחות 8 תווים ושילוב סוגי תווים
+# Optional before first run: edit DANTASKMANAGER_DB_PASSWORD in .env.
+# SQL Server requires 8+ characters with mixed character types.
 docker compose up -d
 ```
 
-**אפשרות ב' - פיתוח מקומי:**
+Compose starts:
 
-הגדר משתנה סביבה עם מחרוזת החיבור:
+- `db`: SQL Server 2022, persisted in the `sqlserver-data` volume.
+- `backend`: ASP.NET Core API on `http://localhost:8080`.
+- `frontend`: Angular dev server on `http://localhost:4200`.
+
+The backend connection string points at `Server=db,<port>` because containers
+talk to each other through the Compose network. For local tools running on the
+host, use `localhost,<port>` instead.
+
+## Run the backend locally
+
+Start SQL Server first (Docker Compose can run just the database):
+
 ```bash
-export ConnectionStrings__DefaultConnection="Server=YOUR_SERVER;Database=DanTaskManager;Trusted_Connection=true;Encrypt=false;TrustServerCertificate=true;"
+docker compose up -d db
 ```
 
-או צור קובץ `appsettings.Development.json`:
-```json
-{
-  "ConnectionStrings": {
-    "DefaultConnection": "Server=YOUR_SERVER;Database=DanTaskManager;Trusted_Connection=true;Encrypt=false;TrustServerCertificate=true;"
-  }
-}
-```
+Then configure a host-local connection string and run the API:
 
-### 3️⃣ יצירת Migration
 ```bash
-dotnet ef migrations add InitialCreate
-```
+export ConnectionStrings__DefaultConnection="Server=localhost,1433;Database=DanTaskManager;User Id=sa;Password=Your_strong_Password123;Encrypt=False;TrustServerCertificate=True;"
 
-### 4️⃣ עדכון בסיס הנתונים (Create DB)
-```bash
-dotnet ef database update
-```
-
-### 5️⃣ הרצת האפליקציה
-```bash
+cd backend
+dotnet restore
 dotnet run
 ```
 
----
+## Database initialization
 
-## 📋 מבנה הפרויקט
+`Program.InitializeDatabase` is the startup entry point:
 
-```
-dan-task-manager/
-├── Domain/
-│   ├── AppUser.cs           # מחלקה: משתמש
-│   └── BaseTask.cs          # מחלקה: משימה עם CustomDataJson
-├── Data/
-│   └── ApplicationDbContext.cs # DbContext עם Seed data
-├── Controllers/
-│   ├── TasksController.cs   # API endpoints for tasks
-│   └── UsersController.cs   # API endpoints for users
-├── DanTaskManager.csproj    # .NET 8 project file
-├── Program.cs               # DI Configuration
-├── appsettings.json         # Connection strings
-└── README.md                # תיעוד מלא
+1. It creates an application scope and resolves `ApplicationDbContext`.
+2. If EF migrations are present, it runs `Database.Migrate()`.
+3. If no migrations are present, it falls back to `Database.EnsureCreated()`.
+4. It retries up to 30 times with a 2 second delay, which covers SQL Server
+   container startup lag.
+
+Manual migration application is also supported:
+
+```bash
+cd backend
+dotnet ef database update
 ```
 
----
+## Seed data
 
-## 🎯 עכשיו אתה יכול:
+`ApplicationDbContext.SeedData` is the model-level source for baseline data:
 
-✅ **שאילתות בסיסיות:**
-```csharp
-// קבלת כל המשתמשים
-var users = await context.Users.ToListAsync();
+- Users: Dan, Ruth, Moshe, Noa, Eitan, and Michal.
+- Task types: `Procurement`, `Development`, and metadata-only `Marketing`.
+- Field definitions for workflow validation, including indexed fields such as
+  `branchName` and `targetAudience`.
+- Sample tasks for Procurement and Development at status `1`.
 
-// קבלת משימה לפי ID
-var task = await context.Tasks.FindAsync(1);
+The initial migration applies the same seed rows with hand-written SQL instead
+of generated `InsertData` calls. This keeps SQL Server types explicit for mixed
+nullable values:
 
-// קבלת משימות בסטטוס "בתהליך"
-var inProgress = await context.Tasks
-    .Where(t => t.CurrentStatus == 1)
-    .ToListAsync();
-```
+- `DECLARE @SeedTimestamp datetime2 = '2026-05-25T00:00:00'`
+- `CAST(1 AS bit)` / `CAST(0 AS bit)` for boolean columns
+- `N'...'` for Unicode strings
+- `decimal(18,2)` for `TaskFieldDefinition.MinValue` and `MaxValue`
 
-✅ **עבודה עם CustomDataJson:**
-```csharp
-var customData = new { priority = "high", deadline = "2026-06-15" };
-task.CustomDataJson = JsonSerializer.Serialize(customData);
-```
+When changing baseline seed data for a fresh database, update both
+`ApplicationDbContext.SeedData` and the initial migration SQL. For a database
+that may already be deployed, add a new migration rather than editing an applied
+migration in place.
 
-✅ **REST API Endpoints:**
-- `GET /api/tasks` - קבלת כל המשימות
-- `POST /api/tasks` - יצירת משימה חדשה
-- `PUT /api/tasks/{id}` - עדכון משימה
-- `DELETE /api/tasks/{id}` - מחיקת משימה
-- `GET /api/users/{id}/tasks` - משימות של משתמש
+## Troubleshooting
 
----
-
-## 📝 הערות חשובות
-
-1. **SQL Server Connection**: הגדר את מחרוזת החיבור דרך משתנה סביבה `ConnectionStrings__DefaultConnection`, קובץ `.env` (ל-Docker), או קובץ `appsettings.Development.json` (לפיתוח מקומי)
-
-2. **CustomDataJson**: 
-   - מאוחסן כ-`nvarchar(max)` בבסיס הנתונים
-   - ברירת מחדל: `"{}"`
-   - ניתן להכניס כל JSON שהוא
-
-3. **Status Values**:
-   - `0` = לא התחילה
-   - `1` = בתהליך
-   - `2` = הושלמה
-   - `3` = ביוטלה
-
-4. **Seed Data**: 
-   - 3 משתמשים נטועים באופן אוטומטי
-   - 3 משימות לדוגמה
-   - רץ בעת `database update`
-
----
-
-## 🔗 לקריאה נוספת
-
-- [Entity Framework Core 8 Documentation](https://learn.microsoft.com/en-us/ef/core/)
-- [JSON columns in EF Core](https://learn.microsoft.com/en-us/ef/core/modeling/value-conversions#json-columns)
-- [SQL Server and JSON](https://learn.microsoft.com/en-us/sql/relational-databases/json/json-data-sql-server)
-
----
-
-**Enjoy! 🎉**
+| Symptom | Check |
+|---------|-------|
+| SQL Server container exits quickly | `DANTASKMANAGER_DB_PASSWORD` must satisfy SQL Server policy. Update `.env`, then recreate the container/volume if it was initialized with the old value. |
+| Backend logs repeated database initialization failures | Confirm the `db` container is healthy enough to accept TCP connections and that the connection string uses `Server=db,...` inside Compose or `Server=localhost,...` from the host. |
+| Migration fails on a fresh database | Inspect `20260527184500_InitialSchema.cs`; seed inserts should keep column order, explicit casts, and null positions aligned with the table definitions. |
+| Fresh data does not match seed changes | Remove the local `sqlserver-data` volume or create a new database name; existing databases are updated by migrations, not reseeded from `HasData`. |
