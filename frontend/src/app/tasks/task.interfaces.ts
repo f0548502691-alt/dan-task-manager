@@ -7,8 +7,31 @@ export const TASK_STATUS = {
 } as const;
 
 export const DEFAULT_STATUS_LABELS: Readonly<Record<number, string>> = {
-  [TASK_STATUS.CREATED]: 'CREATED',
-  [TASK_STATUS.CLOSED]: 'CLOSED'
+  [TASK_STATUS.CREATED]: 'Created',
+  [TASK_STATUS.CLOSED]: 'Closed'
+};
+
+export const TASK_TYPE_STATUS_LABELS: Readonly<Record<string, Readonly<Record<number, string>>>> = {
+  Procurement: {
+    2: 'Quotes collected',
+    3: 'Receipt received'
+  },
+  Development: {
+    2: 'Specification ready',
+    3: 'Branch ready',
+    4: 'Version ready'
+  },
+  Marketing: {
+    2: 'Campaign details',
+    3: 'Launch scheduled'
+  },
+  Analysis: {
+    2: 'Analysis complete'
+  },
+  Testing: {
+    2: 'Test cases defined',
+    3: 'Testing complete'
+  }
 };
 
 export type TaskCustomData = Record<string, unknown>;
