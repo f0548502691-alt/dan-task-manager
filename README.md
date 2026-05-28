@@ -42,6 +42,22 @@ The Angular dev server runs on `http://localhost:4200` and proxies `/api` reques
 
 The backend uses EF Core migrations. The initial migration creates schema + seed data for demo users, task types, field definitions, and sample tasks.
 
+On application startup, `backend/Program.cs` initializes the database before the
+HTTP pipeline starts:
+
+- if EF migrations exist, it runs `Database.Migrate()`;
+- otherwise, it falls back to `Database.EnsureCreated()`;
+- it tries initialization up to 30 times with a 2-second delay between failures,
+  which gives the SQL Server container time to finish accepting connections after
+  `docker compose up`.
+
+Compose uses `DANTASKMANAGER_DB_PASSWORD` from `.env` for both the SQL Server
+container and the backend connection string. The value must satisfy SQL Server's
+password policy. `depends_on` only controls container start order, so check the
+backend logs if startup still fails after the retry window. If you change the
+password after the `sqlserver-data` volume already exists, keep using the
+existing password or recreate the volume.
+
 Seeded demo users:
 
 - `dan@example.com`

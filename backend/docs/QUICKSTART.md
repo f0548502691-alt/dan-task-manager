@@ -75,6 +75,20 @@ dotnet ef database update
 dotnet run
 ```
 
+### אתחול בסיס הנתונים בזמן Startup
+
+`Program.cs` מאתחל את בסיס הנתונים לפני פתיחת ה-HTTP pipeline:
+
+- אם קיימות EF migrations, האפליקציה מריצה `Database.Migrate()`.
+- אם אין migrations בפרויקט, היא משתמשת ב-`Database.EnsureCreated()`.
+- כשלי התחברות זמניים נרשמים כ-warning והאתחול מנוסה עד 30 פעמים בסך הכל, עם
+  השהיה של 2 שניות בין ניסיונות. זה מיועד במיוחד ל-`docker compose up`, שבו `depends_on`
+  מפעיל את הקונטיינרים לפי סדר אבל לא מבטיח ש-SQL Server כבר מקבל חיבורים.
+
+ב-Docker Compose המשתנה `DANTASKMANAGER_DB_PASSWORD` משמש גם את קונטיינר SQL
+Server וגם את מחרוזת החיבור של ה-backend. אם משנים אותו אחרי שכבר נוצר volume
+בשם `sqlserver-data`, יש להשתמש באותה סיסמה קיימת או ליצור volume חדש.
+
 ---
 
 ## 📋 מבנה הפרויקט
