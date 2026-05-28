@@ -7,8 +7,8 @@ export const TASK_STATUS = {
 } as const;
 
 export const DEFAULT_STATUS_LABELS: Readonly<Record<number, string>> = {
-  [TASK_STATUS.CREATED]: 'Created',
-  [TASK_STATUS.CLOSED]: 'Closed'
+  [TASK_STATUS.CREATED]: 'CREATED',
+  [TASK_STATUS.CLOSED]: 'CLOSED'
 };
 
 export type TaskCustomData = Record<string, unknown>;
