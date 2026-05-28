@@ -9,7 +9,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: ${ASPNETCORE_URLS:-http://+:8080}
-      ConnectionStrings__DefaultConnection: Server=db,${DB_PORT:-1433};Database=${DB_NAME:-DanTaskManager};User Id=${DB_USER:-sa};Password=${DB_PASSWORD:?Set DB_PASSWORD in .env};Encrypt=False;TrustServerCertificate=True;
+      ConnectionStrings__DefaultConnection: Server=db,${DB_PORT:-1433};Database=${DB_NAME:-DanTaskManager};User Id=${DB_USER:-sa};Password=${DANTASKMANAGER_DB_PASSWORD:-Your_strong_Password123};Encrypt=False;TrustServerCertificate=True;
     depends_on:
       - db
 
@@ -28,7 +28,7 @@ services:
     container_name: dantaskmanager-db
     environment:
       ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      MSSQL_SA_PASSWORD: ${DANTASKMANAGER_DB_PASSWORD:-Your_strong_Password123}
     ports:
       - "${DB_PORT:-1433}:1433"
     volumes:

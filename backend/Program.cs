@@ -5,6 +5,7 @@ using DanTaskManager.Services;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,7 +31,9 @@ builder.Services.AddScoped<ITaskTypeCatalog, TaskTypeCatalogService>();
 
 builder.Services.AddMemoryCache();
 
-builder.Services.AddScoped<TaskTypeValidationService>();
+builder.Services.AddScoped(sp => new TaskTypeValidationService(
+    sp.GetRequiredService<ApplicationDbContext>(),
+    sp.GetRequiredService<IMemoryCache>()));
 builder.Services.AddScoped<ITaskTypeValidationService>(sp => sp.GetRequiredService<TaskTypeValidationService>());
 builder.Services.AddScoped<ITaskTypeMetadataService>(sp => sp.GetRequiredService<TaskTypeValidationService>());
 
